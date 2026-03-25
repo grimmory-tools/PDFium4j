@@ -46,7 +46,8 @@ public final class PdfDocument implements AutoCloseable {
     private static final System.Logger LOG = System.getLogger(PdfDocument.class.getName());
     private final MemorySegment handle;
     private final Arena docArena;
-    private final byte[] rawBytes;
+    private final Path sourcePath;   // non-null when opened from a file path
+    private final byte[] sourceBytes; // non-null when opened from byte[]
     private final PdfProcessingPolicy policy;
     private final Thread ownerThread;
     private final Set<PdfPage> openPages;
@@ -55,10 +56,12 @@ public final class PdfDocument implements AutoCloseable {
     private final Map<MetadataTag, String> pendingMetadata = new LinkedHashMap<>();
     private String pendingXmpMetadata = null;
 
-    private PdfDocument(MemorySegment handle, Arena docArena, byte[] rawBytes, PdfProcessingPolicy policy, Thread ownerThread) {
+    private PdfDocument(MemorySegment handle, Arena docArena, Path sourcePath, byte[] sourceBytes,
+                        PdfProcessingPolicy policy, Thread ownerThread) {
         this.handle = handle;
         this.docArena = docArena;
-        this.rawBytes = rawBytes;
+        this.sourcePath = sourcePath;
+        this.sourceBytes = sourceBytes;
         this.policy = policy;
         this.ownerThread = ownerThread;
         this.openPages = Collections.newSetFromMap(new IdentityHashMap<>());
@@ -250,18 +253,24 @@ public final class PdfDocument implements AutoCloseable {
         validateDocumentSize((int) fileSize, resolvedPolicy);
         checkMemoryPressure(fileSize, path);
 
+        MemorySegment doc = MemorySegment.NULL;
         try (Arena tempArena = Arena.ofConfined()) {
             MemorySegment pathSeg = tempArena.allocateFrom(path.toAbsolutePath().toString());
             MemorySegment pwdSeg = (password != null) ? tempArena.allocateFrom(password) : MemorySegment.NULL;
 
-            MemorySegment doc = (MemorySegment) ViewBindings.FPDF_LoadDocument.invokeExact(pathSeg, pwdSeg);
+            doc = (MemorySegment) ViewBindings.FPDF_LoadDocument.invokeExact(pathSeg, pwdSeg);
             if (FfmHelper.isNull(doc)) {
                 throwLastError("Failed to open: " + path);
             }
-            return new PdfDocument(doc, null, null, resolvedPolicy, Thread.currentThread());
+            PdfDocument result = new PdfDocument(doc, null, path, null, resolvedPolicy, Thread.currentThread());
+            doc = MemorySegment.NULL; // ownership transferred
+            return result;
         } catch (PdfiumException e) {
             throw e;
         } catch (Throwable t) {
+            if (!FfmHelper.isNull(doc)) {
+                try { ViewBindings.FPDF_CloseDocument.invokeExact(doc); } catch (Throwable ignored) {}
+            }
             throw new PdfiumException("Failed to open: " + path, t);
         }
     }
@@ -303,6 +312,7 @@ public final class PdfDocument implements AutoCloseable {
         // The arena must outlive the document because PDFium reads from the buffer
         // during the lifetime of the FPDF_DOCUMENT handle.
         Arena docArena = Arena.ofShared();
+        MemorySegment doc = MemorySegment.NULL;
         try {
             MemorySegment dataSeg = docArena.allocateFrom(JAVA_BYTE, data);
 
@@ -313,17 +323,21 @@ public final class PdfDocument implements AutoCloseable {
                 pwdSeg = MemorySegment.NULL;
             }
 
-            MemorySegment doc = (MemorySegment) ViewBindings.FPDF_LoadMemDocument.invokeExact(
+            doc = (MemorySegment) ViewBindings.FPDF_LoadMemDocument.invokeExact(
                     dataSeg, data.length, pwdSeg);
             if (FfmHelper.isNull(doc)) {
                 docArena.close();
                 throwLastError(errorContext);
             }
-            // Do not retain a second Java-side raw copy by default.
-            return new PdfDocument(doc, docArena, null, policy, Thread.currentThread());
+            PdfDocument result = new PdfDocument(doc, docArena, null, data, policy, Thread.currentThread());
+            doc = MemorySegment.NULL; // ownership transferred
+            return result;
         } catch (PdfiumException e) {
             throw e;
         } catch (Throwable t) {
+            if (!FfmHelper.isNull(doc)) {
+                try { ViewBindings.FPDF_CloseDocument.invokeExact(doc); } catch (Throwable ignored) {}
+            }
             docArena.close();
             throw new PdfiumException(errorContext, t);
         }
@@ -618,9 +632,11 @@ public final class PdfDocument implements AutoCloseable {
             if (FfmHelper.isNull(pageSeg)) {
                 throw new PdfiumException("FPDFPage_New failed for index " + pageIndex);
             }
-            // Generate content and close the temporary page handle
-            int _ = (int) EditBindings.FPDFPage_GenerateContent.invokeExact(pageSeg);
-            ViewBindings.FPDF_ClosePage.invokeExact(pageSeg);
+            try {
+                int _ = (int) EditBindings.FPDFPage_GenerateContent.invokeExact(pageSeg);
+            } finally {
+                ViewBindings.FPDF_ClosePage.invokeExact(pageSeg);
+            }
         } catch (PdfiumException e) {
             throw e;
         } catch (Throwable t) {
@@ -887,10 +903,13 @@ public final class PdfDocument implements AutoCloseable {
      */
     public byte[] xmpMetadata() {
         ensureOpen();
-        if (rawBytes != null) {
-            return extractXmpPacket(rawBytes);
+        if (sourceBytes != null) {
+            return extractXmpPacket(sourceBytes);
         }
-        // Fallback for path-based documents where we avoid retaining a second raw copy.
+        if (sourcePath != null) {
+            return extractXmpPacketFromFile(sourcePath);
+        }
+        // Last resort: serialize via PDFium (should not normally be reached)
         return extractXmpPacket(saveToBytes());
     }
 
@@ -903,6 +922,87 @@ public final class PdfDocument implements AutoCloseable {
         byte[] xmp = xmpMetadata();
         if (xmp.length == 0) return "";
         return new String(xmp, java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    private static byte[] extractXmpPacketFromFile(Path path) {
+        byte[] beginMarker = "<?xpacket begin=".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+        byte[] endMarker = "<?xpacket end=".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+        int chunkSize = 256 * 1024; // 256 KB chunks
+        int overlap = Math.max(beginMarker.length, endMarker.length) + 64;
+
+        try (var channel = java.nio.channels.FileChannel.open(path, java.nio.file.StandardOpenOption.READ)) {
+            long fileSize = channel.size();
+            byte[] buf = new byte[chunkSize + overlap];
+            long offset = 0;
+            int carry = 0; // bytes carried over from previous chunk for overlap
+
+            long beginFilePos = -1;
+
+            // Phase 1: find <?xpacket begin=
+            while (offset < fileSize && beginFilePos < 0) {
+                int toRead = (int) Math.min(chunkSize, fileSize - offset);
+                var bb = java.nio.ByteBuffer.wrap(buf, carry, toRead);
+                int read = 0;
+                while (read < toRead) {
+                    int n = channel.read(bb, offset + read);
+                    if (n < 0) break;
+                    read += n;
+                }
+                int available = carry + read;
+                int idx = indexOf(buf, beginMarker, 0, available);
+                if (idx >= 0) {
+                    beginFilePos = offset - carry + idx;
+                    break;
+                }
+                offset += read;
+                // Keep overlap tail for next iteration
+                carry = Math.min(available, overlap);
+                System.arraycopy(buf, available - carry, buf, 0, carry);
+            }
+
+            if (beginFilePos < 0) return new byte[0];
+
+            // Phase 2: find <?xpacket end=...?> starting from beginFilePos
+            offset = beginFilePos;
+            carry = 0;
+
+            while (offset < fileSize) {
+                int toRead = (int) Math.min(chunkSize, fileSize - offset);
+                var bb = java.nio.ByteBuffer.wrap(buf, carry, toRead);
+                int read = 0;
+                while (read < toRead) {
+                    int n = channel.read(bb, offset + read);
+                    if (n < 0) break;
+                    read += n;
+                }
+                int available = carry + read;
+                int endIdx = indexOf(buf, endMarker, 0, available);
+                if (endIdx >= 0) {
+                    // Find ?> after endMarker
+                    byte[] closeTag = "?>".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+                    int closeIdx = indexOf(buf, closeTag, endIdx, available);
+                    if (closeIdx >= 0) {
+                        long endFilePos = offset - carry + closeIdx + 2;
+                        int packetLen = (int) (endFilePos - beginFilePos);
+                        byte[] xmp = new byte[packetLen];
+                        var xmpBuf = java.nio.ByteBuffer.wrap(xmp);
+                        int totalRead = 0;
+                        while (totalRead < packetLen) {
+                            int n = channel.read(xmpBuf, beginFilePos + totalRead);
+                            if (n < 0) break;
+                            totalRead += n;
+                        }
+                        return xmp;
+                    }
+                }
+                offset += read;
+                carry = Math.min(available, overlap);
+                System.arraycopy(buf, available - carry, buf, 0, carry);
+            }
+            return new byte[0];
+        } catch (IOException e) {
+            throw new PdfiumException("Failed to read XMP from: " + path, e);
+        }
     }
 
     private static byte[] extractXmpPacket(byte[] pdf) {
@@ -927,8 +1027,12 @@ public final class PdfDocument implements AutoCloseable {
     }
 
     private static int indexOf(byte[] haystack, byte[] needle, int fromIndex) {
+        return indexOf(haystack, needle, fromIndex, haystack.length);
+    }
+
+    private static int indexOf(byte[] haystack, byte[] needle, int fromIndex, int length) {
         outer:
-        for (int i = fromIndex; i <= haystack.length - needle.length; i++) {
+        for (int i = fromIndex; i <= length - needle.length; i++) {
             for (int j = 0; j < needle.length; j++) {
                 if (haystack[i + j] != needle[j]) continue outer;
             }

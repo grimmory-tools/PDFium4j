@@ -375,6 +375,81 @@ class PdfDocumentTest {
 
     @Test
     @EnabledIf("pdfiumAvailable")
+    void xmpMetadataRoundTrip(@TempDir Path tempDir) throws IOException {
+        Path testPdf = getTestPdf();
+        if (testPdf == null) return;
+
+        Path outPdf = tempDir.resolve("xmp-roundtrip.pdf");
+
+        // Step 1: open, set XMP, save
+        String xmpContent = """
+                <?xpacket begin="\uFEFF" id="W5M0MpCehiHzreSzNTczkc9d"?>
+                <x:xmpmeta xmlns:x="adobe:ns:meta/">
+                  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+                    <rdf:Description xmlns:dc="http://purl.org/dc/elements/1.1/">
+                      <dc:title><rdf:Alt><rdf:li>RoundTripTitle</rdf:li></rdf:Alt></dc:title>
+                    </rdf:Description>
+                  </rdf:RDF>
+                </x:xmpmeta>
+                <?xpacket end="w"?>""";
+
+        try (PdfDocument doc = PdfDocument.open(testPdf)) {
+            doc.setXmpMetadata(xmpContent);
+            doc.save(outPdf);
+        }
+
+        // Step 2: re-open from path and verify XMP is readable
+        try (PdfDocument doc2 = PdfDocument.open(outPdf)) {
+            String xmpStr = doc2.xmpMetadataString();
+            assertFalse(xmpStr.isEmpty(), "XMP should be found in saved file");
+            assertTrue(xmpStr.contains("RoundTripTitle"), "XMP should contain the title we set");
+        }
+
+        // Step 3: open from bytes and verify
+        byte[] bytes = Files.readAllBytes(outPdf);
+        try (PdfDocument doc3 = PdfDocument.open(bytes)) {
+            String xmpStr = doc3.xmpMetadataString();
+            assertFalse(xmpStr.isEmpty(), "XMP should be found when opened from bytes");
+            assertTrue(xmpStr.contains("RoundTripTitle"), "XMP should contain the title from bytes");
+        }
+    }
+
+    @Test
+    @EnabledIf("pdfiumAvailable")
+    void xmpMetadataRoundTripSamePath(@TempDir Path tempDir) throws IOException {
+        Path testPdf = getTestPdf();
+        if (testPdf == null) return;
+
+        Path pdf = tempDir.resolve("same-path.pdf");
+        Files.copy(testPdf, pdf);
+
+        String xmpContent = """
+                <?xpacket begin="\uFEFF" id="W5M0MpCehiHzreSzNTczkc9d"?>
+                <x:xmpmeta xmlns:x="adobe:ns:meta/">
+                  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+                    <rdf:Description xmlns:dc="http://purl.org/dc/elements/1.1/">
+                      <dc:title><rdf:Alt><rdf:li>SamePathTitle</rdf:li></rdf:Alt></dc:title>
+                    </rdf:Description>
+                  </rdf:RDF>
+                </x:xmpmeta>
+                <?xpacket end="w"?>""";
+
+        // Open from same path, set XMP, save to same path
+        try (PdfDocument doc = PdfDocument.open(pdf)) {
+            doc.setXmpMetadata(xmpContent);
+            doc.save(pdf);
+        }
+
+        // Re-open same path
+        try (PdfDocument doc2 = PdfDocument.open(pdf)) {
+            String xmpStr = doc2.xmpMetadataString();
+            assertFalse(xmpStr.isEmpty(), "XMP should be found in same-path saved file");
+            assertTrue(xmpStr.contains("SamePathTitle"), "XMP should contain the title we set");
+        }
+    }
+
+    @Test
+    @EnabledIf("pdfiumAvailable")
     void saveToBytes() throws IOException {
         Path testPdf = getTestPdf();
         if (testPdf == null) return;
