@@ -21,7 +21,7 @@ subprojects {
         repositories {
             maven {
                 name = "SonatypeCentral"
-                url = uri("https://central.sonatype.com/repository/maven-releases/")
+                url = uri("https://ossrh-staging-api.central.sonatype.com/service/local/staging/deploy/maven2/")
                 credentials {
                     username = findProperty("sonatypeUsername") as String?
                         ?: System.getenv("SONATYPE_USERNAME")
@@ -123,7 +123,7 @@ publishing {
     repositories {
         maven {
             name = "SonatypeCentral"
-            url = uri("https://central.sonatype.com/repository/maven-releases/")
+            url = uri("https://ossrh-staging-api.central.sonatype.com/service/local/staging/deploy/maven2/")
             credentials {
                 username = findProperty("sonatypeUsername") as String?
                     ?: System.getenv("SONATYPE_USERNAME")
