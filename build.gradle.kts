@@ -9,7 +9,7 @@ plugins {
 
 allprojects {
     group = "org.grimmory"
-    version = "0.3.0"
+    version = "0.4.0"
 
     repositories {
         mavenCentral()
