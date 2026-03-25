@@ -31,6 +31,8 @@ Compact Java PDF engine on top of Java 25 FFM.
 ## Quick start
 
 ```java
+import java.nio.file.Path;
+
 import org.pdfium4j.PdfDocument;
 import org.pdfium4j.PdfPage;
 import org.pdfium4j.model.PdfProcessingPolicy;
@@ -41,16 +43,16 @@ PdfProcessingPolicy policy = PdfProcessingPolicy.defaultPolicy()
     .withMaxRenderPixels(40_000_000L)
     .withMaxParallelRenderThreads(8);
 
-try (PdfDocument doc = PdfDocument.open(java.nio.file.Path.of("book.pdf"), null, policy)) {
+try (PdfDocument doc = PdfDocument.open(Path.of("book.pdf"), null, policy)) {
   try (PdfPage page = doc.page(0)) {
     RenderResult cover = page.renderThumbnail(512);
     String text = page.extractText();
   }
 
-  var diagnostics = PdfDocument.diagnose(java.nio.file.Path.of("book.pdf"));
-  var checksum = PdfDocument.koReaderPartialMd5(java.nio.file.Path.of("book.pdf"));
+  var diagnostics = PdfDocument.diagnose(Path.of("book.pdf"));
+  var checksum = PdfDocument.koReaderPartialMd5(Path.of("book.pdf"));
   var xmp = doc.xmpMetadataString();
-  doc.save(java.nio.file.Path.of("output.pdf"));
+  doc.save(Path.of("output.pdf"));
 }
 ```
 
