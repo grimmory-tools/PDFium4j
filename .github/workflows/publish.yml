@@ -20,6 +20,12 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@39e147cb9de83bb9910b8ef8bd7fff0ee20fcd6f # v5.0.0
 
+      - name: Cache PDFium binaries
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: build/pdfium-archives
+          key: pdfium-${{ hashFiles('build.gradle.kts') }}
+
       - name: Set version from tag
         run: |
           VERSION="${GITHUB_REF_NAME#v}"

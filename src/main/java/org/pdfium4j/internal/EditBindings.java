@@ -30,6 +30,12 @@ public final class EditBindings {
                 desc, Linker.Option.critical(false));
     }
 
+    private static MethodHandle tryDowncall(String name, FunctionDescriptor desc) {
+        return LOOKUP.find(name)
+                .map(sym -> LINKER.downcallHandle(sym, desc))
+                .orElse(null);
+    }
+
     /**
      * Get page rotation.
      * Returns 0 (0°), 1 (90°), 2 (180°), or 3 (270°).
@@ -87,7 +93,10 @@ public final class EditBindings {
      * Parameters: doc (FPDF_DOCUMENT handle), tag (FPDF_BYTESTRING, e.g. "Title"),
      * value (FPDF_WIDESTRING UTF-16LE null-terminated). Returns 1 on success.
      */
-    public static final MethodHandle EPDF_SetMetaText = downcall("EPDF_SetMetaText",
+    /**
+     * Custom PDFium extension — may be {@code null} with standard builds.
+     */
+    public static final MethodHandle EPDF_SetMetaText = tryDowncall("EPDF_SetMetaText",
             FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS, ADDRESS));
 
     /**

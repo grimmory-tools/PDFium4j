@@ -16,5 +16,3 @@ nmcpSettings {
         publishingType = "AUTOMATIC"
     }
 }
-
-include("pdfium4j-natives-linux-x64")

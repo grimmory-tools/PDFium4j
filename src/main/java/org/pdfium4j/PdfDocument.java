@@ -794,6 +794,11 @@ public final class PdfDocument implements AutoCloseable {
         try (Arena arena = Arena.ofConfined()) {
             MemorySegment tagSeg = arena.allocateFrom(tag.pdfKey());
             MemorySegment valueSeg = FfmHelper.toWideString(arena, value);
+            if (EditBindings.EPDF_SetMetaText == null) {
+                throw new UnsupportedOperationException(
+                        "EPDF_SetMetaText not available in this PDFium build; "
+                                + "use setXmpMetadata() or a custom PDFium build");
+            }
             int result = (int) EditBindings.EPDF_SetMetaText.invokeExact(handle, tagSeg, valueSeg);
             if (result == 0) {
                 throw new PdfiumException("Failed to set metadata: " + tag.pdfKey());

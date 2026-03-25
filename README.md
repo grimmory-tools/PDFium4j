@@ -58,30 +58,36 @@ try (PdfDocument doc = PdfDocument.open(Path.of("book.pdf"), null, policy)) {
 
 ## Installation
 
-The library ships as a core API JAR plus per-platform native JARs.
-Adding the core JAR on Linux will pull in the native libraries automatically.
+The library ships as a core API JAR plus per-platform native classifier JARs.
+Add the core dependency and the classifier matching your target platform.
 
 ### Gradle (Kotlin DSL)
 
 ```kotlin
 dependencies {
     implementation("org.grimmory:pdfium4j:0.1.0")
+    runtimeOnly("org.grimmory:pdfium4j:0.1.0:natives-linux-x64")
 }
 ```
 
-The `pdfium4j` artifact declares `pdfium4j-natives-linux-x64` as a runtime
-dependency, so native libraries are included automatically on Linux x86_64.
-
-When additional platforms are available, add only the one you need:
+#### Auto-detect platform
 
 ```kotlin
+val osName = System.getProperty("os.name").lowercase()
+val osArch = System.getProperty("os.arch")
+
+val pdfiumNatives = when {
+    "linux" in osName && osArch == "amd64"    -> "natives-linux-x64"
+    "linux" in osName && osArch == "aarch64"  -> "natives-linux-arm64"
+    "mac" in osName   && osArch == "aarch64"  -> "natives-darwin-arm64"
+    "mac" in osName   && osArch == "x86_64"   -> "natives-darwin-x64"
+    "windows" in osName && osArch == "amd64"  -> "natives-windows-x64"
+    else -> error("Unsupported platform: $osName/$osArch")
+}
+
 dependencies {
     implementation("org.grimmory:pdfium4j:0.1.0")
-    // Pick your platform:
-    runtimeOnly("org.grimmory:pdfium4j-natives-linux-x64:0.1.0")
-    // runtimeOnly("org.grimmory:pdfium4j-natives-linux-arm64:0.1.0")
-    // runtimeOnly("org.grimmory:pdfium4j-natives-darwin-arm64:0.1.0")
-    // runtimeOnly("org.grimmory:pdfium4j-natives-windows-x64:0.1.0")
+    runtimeOnly("org.grimmory:pdfium4j:0.1.0:$pdfiumNatives")
 }
 ```
 
@@ -90,6 +96,7 @@ dependencies {
 ```groovy
 dependencies {
     implementation 'org.grimmory:pdfium4j:0.1.0'
+    runtimeOnly 'org.grimmory:pdfium4j:0.1.0:natives-linux-x64'
 }
 ```
 
@@ -101,7 +108,23 @@ dependencies {
     <artifactId>pdfium4j</artifactId>
     <version>0.1.0</version>
 </dependency>
+<dependency>
+    <groupId>org.grimmory</groupId>
+    <artifactId>pdfium4j</artifactId>
+    <version>0.1.0</version>
+    <classifier>natives-linux-x64</classifier>
+</dependency>
 ```
+
+### Available classifiers
+
+| Platform | Classifier |
+|---|---|
+| Linux x86_64 | `natives-linux-x64` |
+| Linux aarch64 | `natives-linux-arm64` |
+| macOS aarch64 | `natives-darwin-arm64` |
+| macOS x86_64 | `natives-darwin-x64` |
+| Windows x86_64 | `natives-windows-x64` |
 
 ## Runtime requirements
 
@@ -114,31 +137,30 @@ dependencies {
 
 ## Native libraries
 
-PDFium4j bundles prebuilt PDFium binaries inside per-platform native JARs.
-When the native JAR is on the classpath, the library extracts the shared
-libraries to a temp directory at startup and loads them automatically.
+PDFium4j ships prebuilt PDFium binaries as classified JAR artifacts.
+When the correct native classifier JAR is on the classpath, the library
+extracts the shared library to a temp directory at startup and loads it
+automatically.
 
 If classpath loading is unavailable, PDFium4j falls back to `System.loadLibrary("pdfium")`.
 
 ### Supported platforms
 
-| Platform | Artifact |
+| Platform | Classifier |
 |---|---|
-| Linux x86_64 | `pdfium4j-natives-linux-x64` |
-| Linux aarch64 | `pdfium4j-natives-linux-arm64` (planned) |
-| macOS aarch64 | `pdfium4j-natives-darwin-arm64` (planned) |
-| macOS x86_64 | `pdfium4j-natives-darwin-x64` (planned) |
-| Windows x86_64 | `pdfium4j-natives-windows-x64` (planned) |
+| Linux x86_64 | `natives-linux-x64` |
+| Linux aarch64 | `natives-linux-arm64` |
+| macOS aarch64 | `natives-darwin-arm64` |
+| macOS x86_64 | `natives-darwin-x64` |
+| Windows x86_64 | `natives-windows-x64` |
 
 ## Project structure
 
 ```text
-pdfium4j/                     Root (core Java module)
+pdfium4j/                     Root (Java module)
   src/main/java/              FFM bindings and public API
   src/test/java/              Tests
-pdfium4j-natives-linux-x64/   Native module for Linux x86_64
-  src/main/resources/
-    natives/linux-x64/        Prebuilt .so files + native-libs.txt
+  build/generated-natives/    Downloaded PDFium binaries (build-time)
 ```
 
 ## Build
