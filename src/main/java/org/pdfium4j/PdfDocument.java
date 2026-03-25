@@ -934,12 +934,12 @@ public final class PdfDocument implements AutoCloseable {
             long fileSize = channel.size();
             byte[] buf = new byte[chunkSize + overlap];
             long offset = 0;
-            int carry = 0; // bytes carried over from previous chunk for overlap
+            int carry = 0;
 
-            long beginFilePos = -1;
+            // Phase 1: scan entire file for ALL <?xpacket begin= occurrences, keep the last one
+            long lastBeginFilePos = -1;
 
-            // Phase 1: find <?xpacket begin=
-            while (offset < fileSize && beginFilePos < 0) {
+            while (offset < fileSize) {
                 int toRead = (int) Math.min(chunkSize, fileSize - offset);
                 var bb = java.nio.ByteBuffer.wrap(buf, carry, toRead);
                 int read = 0;
@@ -949,21 +949,23 @@ public final class PdfDocument implements AutoCloseable {
                     read += n;
                 }
                 int available = carry + read;
-                int idx = indexOf(buf, beginMarker, 0, available);
-                if (idx >= 0) {
-                    beginFilePos = offset - carry + idx;
-                    break;
+                // Find all occurrences in this chunk
+                int searchFrom = 0;
+                while (searchFrom < available) {
+                    int idx = indexOf(buf, beginMarker, searchFrom, available);
+                    if (idx < 0) break;
+                    lastBeginFilePos = offset - carry + idx;
+                    searchFrom = idx + 1;
                 }
                 offset += read;
-                // Keep overlap tail for next iteration
                 carry = Math.min(available, overlap);
                 System.arraycopy(buf, available - carry, buf, 0, carry);
             }
 
-            if (beginFilePos < 0) return new byte[0];
+            if (lastBeginFilePos < 0) return new byte[0];
 
-            // Phase 2: find <?xpacket end=...?> starting from beginFilePos
-            offset = beginFilePos;
+            // Phase 2: find <?xpacket end=...?> after the last begin marker
+            offset = lastBeginFilePos;
             carry = 0;
 
             while (offset < fileSize) {
@@ -978,17 +980,16 @@ public final class PdfDocument implements AutoCloseable {
                 int available = carry + read;
                 int endIdx = indexOf(buf, endMarker, 0, available);
                 if (endIdx >= 0) {
-                    // Find ?> after endMarker
                     byte[] closeTag = "?>".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
                     int closeIdx = indexOf(buf, closeTag, endIdx, available);
                     if (closeIdx >= 0) {
                         long endFilePos = offset - carry + closeIdx + 2;
-                        int packetLen = (int) (endFilePos - beginFilePos);
+                        int packetLen = (int) (endFilePos - lastBeginFilePos);
                         byte[] xmp = new byte[packetLen];
                         var xmpBuf = java.nio.ByteBuffer.wrap(xmp);
                         int totalRead = 0;
                         while (totalRead < packetLen) {
-                            int n = channel.read(xmpBuf, beginFilePos + totalRead);
+                            int n = channel.read(xmpBuf, lastBeginFilePos + totalRead);
                             if (n < 0) break;
                             totalRead += n;
                         }
@@ -1006,23 +1007,29 @@ public final class PdfDocument implements AutoCloseable {
     }
 
     private static byte[] extractXmpPacket(byte[] pdf) {
-        // Scan for <?xpacket begin= marker
         byte[] beginMarker = "<?xpacket begin=".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
         byte[] endMarker = "<?xpacket end=".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
 
-        int beginPos = indexOf(pdf, beginMarker, 0);
-        if (beginPos < 0) return new byte[0];
+        // Find the LAST <?xpacket begin= (incremental updates append to end)
+        int lastBeginPos = -1;
+        int searchFrom = 0;
+        while (searchFrom < pdf.length) {
+            int pos = indexOf(pdf, beginMarker, searchFrom);
+            if (pos < 0) break;
+            lastBeginPos = pos;
+            searchFrom = pos + 1;
+        }
+        if (lastBeginPos < 0) return new byte[0];
 
-        int endPos = indexOf(pdf, endMarker, beginPos);
+        int endPos = indexOf(pdf, endMarker, lastBeginPos);
         if (endPos < 0) return new byte[0];
 
-        // Find the end of the end marker line (look for ?>)
         int endTagClose = indexOf(pdf, "?>".getBytes(java.nio.charset.StandardCharsets.US_ASCII), endPos);
         if (endTagClose < 0) return new byte[0];
         int packetEnd = endTagClose + 2;
 
-        byte[] xmp = new byte[packetEnd - beginPos];
-        System.arraycopy(pdf, beginPos, xmp, 0, xmp.length);
+        byte[] xmp = new byte[packetEnd - lastBeginPos];
+        System.arraycopy(pdf, lastBeginPos, xmp, 0, xmp.length);
         return xmp;
     }
 

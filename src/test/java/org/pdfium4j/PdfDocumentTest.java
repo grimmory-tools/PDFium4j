@@ -450,6 +450,49 @@ class PdfDocumentTest {
 
     @Test
     @EnabledIf("pdfiumAvailable")
+    void xmpMetadataRoundTripWithExistingXmp(@TempDir Path tempDir) throws IOException, URISyntaxException {
+        // Use a PDF that already has a 4096-byte XMP stream (like grimmory's minimal.pdf)
+        var resource = getClass().getResource("/minimal.pdf");
+        if (resource == null) return;
+        Path originalPdf = Path.of(resource.toURI());
+
+        Path pdf = tempDir.resolve("existing-xmp.pdf");
+        Files.copy(originalPdf, pdf);
+
+        String xmpContent = """
+                <?xpacket begin="\uFEFF" id="W5M0MpCehiHzreSzNTczkc9d"?>
+                <x:xmpmeta xmlns:x="adobe:ns:meta/">
+                  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+                    <rdf:Description
+                        xmlns:dc="http://purl.org/dc/elements/1.1/"
+                        xmlns:calibre="http://calibre-ebook.com/xmp-namespace">
+                      <calibre:series><rdf:value>ExistingXmpSeries</rdf:value></calibre:series>
+                    </rdf:Description>
+                  </rdf:RDF>
+                </x:xmpmeta>
+                <?xpacket end="w"?>""";
+
+        try (PdfDocument doc = PdfDocument.open(pdf)) {
+            doc.setXmpMetadata(xmpContent);
+            doc.save(pdf);
+        }
+
+        // Verify the raw file contains the xpacket marker
+        byte[] rawBytes = Files.readAllBytes(pdf);
+        String rawStr = new String(rawBytes, java.nio.charset.StandardCharsets.ISO_8859_1);
+        assertTrue(rawStr.contains("<?xpacket begin="), "Saved file should contain xpacket marker");
+        assertTrue(rawStr.contains("ExistingXmpSeries"), "Saved file should contain our XMP content");
+
+        // Re-open from path and verify XMP readable
+        try (PdfDocument doc2 = PdfDocument.open(pdf)) {
+            String xmpStr = doc2.xmpMetadataString();
+            assertFalse(xmpStr.isEmpty(), "XMP should be found in file with existing XMP");
+            assertTrue(xmpStr.contains("ExistingXmpSeries"), "XMP should contain series name");
+        }
+    }
+
+    @Test
+    @EnabledIf("pdfiumAvailable")
     void saveToBytes() throws IOException {
         Path testPdf = getTestPdf();
         if (testPdf == null) return;
