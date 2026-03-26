@@ -53,6 +53,7 @@ public final class PdfDocument implements AutoCloseable {
     private final Set<PdfPage> openPages;
     private volatile boolean closed = false;
     private boolean metadataDirty = false;
+    private boolean structurallyModified = false;
     private final Map<MetadataTag, String> pendingMetadata = new LinkedHashMap<>();
     private String pendingXmpMetadata = null;
 
@@ -612,6 +613,7 @@ public final class PdfDocument implements AutoCloseable {
         }
         try {
             EditBindings.FPDFPage_Delete.invokeExact(handle, pageIndex);
+            structurallyModified = true;
         } catch (Throwable t) {
             throw new PdfiumException("Failed to delete page " + pageIndex, t);
         }
@@ -637,6 +639,7 @@ public final class PdfDocument implements AutoCloseable {
             } finally {
                 ViewBindings.FPDF_ClosePage.invokeExact(pageSeg);
             }
+            structurallyModified = true;
         } catch (PdfiumException e) {
             throw e;
         } catch (Throwable t) {
@@ -674,6 +677,7 @@ public final class PdfDocument implements AutoCloseable {
             if (ok == 0) {
                 throw new PdfiumException("FPDF_ImportPages failed for range: " + pageRange);
             }
+            structurallyModified = true;
         } catch (PdfiumException e) {
             throw e;
         } catch (Throwable t) {
@@ -1063,13 +1067,20 @@ public final class PdfDocument implements AutoCloseable {
     /**
      * Save the document to a file.
      *
-     * <p>This saves the current state of the document, including any
-     * modifications made via the API (e.g., page rotation changes).
+     * <p>When only metadata has been modified (no page additions, deletions,
+     * or imports), this uses a fast path that reads the original PDF bytes
+     * and appends an incremental update — avoiding the expensive native
+     * {@code FPDF_SaveAsCopy} serialization entirely.
      *
      * @param path output file path
      */
     public void save(Path path) {
-        byte[] bytes = saveToBytes();
+        byte[] bytes;
+        if (!structurallyModified && metadataDirty) {
+            bytes = saveMetadataOnly();
+        } else {
+            bytes = saveToBytes();
+        }
         try {
             Files.write(path, bytes);
         } catch (IOException e) {
@@ -1088,6 +1099,29 @@ public final class PdfDocument implements AutoCloseable {
     }
 
     /**
+     * Fast metadata-only save: reads original bytes and appends an incremental
+     * update with the pending Info Dictionary and/or XMP changes.
+     * Avoids the expensive {@code FPDF_SaveAsCopy} native serialization.
+     */
+    private byte[] saveMetadataOnly() {
+        ensureOpen();
+        byte[] original;
+        if (sourceBytes != null) {
+            original = sourceBytes;
+        } else if (sourcePath != null) {
+            try {
+                original = Files.readAllBytes(sourcePath);
+            } catch (IOException e) {
+                throw new PdfiumException("Failed to read source PDF for metadata update: " + sourcePath, e);
+            }
+        } else {
+            // No original bytes available, fall back to full save
+            return saveToBytes();
+        }
+        return PdfSaver.applyIncrementalUpdate(original, pendingMetadata, pendingXmpMetadata);
+    }
+
+    /**
      * Save the document directly to an OutputStream, suitable for streaming
      * responses (e.g., HTTP responses) without intermediate byte arrays.
      *
@@ -1095,7 +1129,12 @@ public final class PdfDocument implements AutoCloseable {
      * @throws PdfiumException if saving fails
      */
     public void save(OutputStream out) {
-        byte[] bytes = saveToBytes();
+        byte[] bytes;
+        if (!structurallyModified && metadataDirty) {
+            bytes = saveMetadataOnly();
+        } else {
+            bytes = saveToBytes();
+        }
         try {
             out.write(bytes);
         } catch (IOException e) {

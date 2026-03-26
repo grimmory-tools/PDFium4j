@@ -33,6 +33,20 @@ final class PdfSaver {
 
     private PdfSaver() {}
 
+    /**
+     * Apply an incremental update to existing PDF bytes without native serialization.
+     * This is the fast path for metadata-only changes — it reads the original file
+     * and appends new Info/XMP objects + xref + trailer at the end.
+     */
+    static byte[] applyIncrementalUpdate(byte[] originalPdf, Map<MetadataTag, String> pendingMetadata, String pendingXmp) {
+        boolean hasInfoUpdate = pendingMetadata != null && !pendingMetadata.isEmpty();
+        boolean hasXmpUpdate = pendingXmp != null && !pendingXmp.isEmpty();
+        if (!hasInfoUpdate && !hasXmpUpdate) {
+            return originalPdf;
+        }
+        return appendIncrementalUpdate(originalPdf, pendingMetadata, pendingXmp);
+    }
+
     static byte[] saveToBytes(MemorySegment docHandle, Map<MetadataTag, String> pendingMetadata, String pendingXmp) {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         WRITE_BUFFER.set(baos);

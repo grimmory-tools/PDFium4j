@@ -907,4 +907,231 @@ class PdfDocumentTest {
                 """;
         return pdf.getBytes(StandardCharsets.US_ASCII);
     }
+
+    // --- Metadata-only fast save tests ---
+
+    @Test
+    @EnabledIf("pdfiumAvailable")
+    void metadataOnlySaveIsFasterThanFullSave(@TempDir Path tempDir) throws IOException {
+        Path testPdf = getTestPdf();
+        if (testPdf == null) return;
+
+        Path outFull = tempDir.resolve("full-save.pdf");
+        Path outFast = tempDir.resolve("fast-save.pdf");
+
+        // Full save (through FPDF_SaveAsCopy)
+        try (PdfDocument doc = PdfDocument.open(testPdf)) {
+            doc.save(outFull); // no metadata changes, triggers full save
+        }
+
+        // Metadata-only save (fast path)
+        try (PdfDocument doc = PdfDocument.open(testPdf)) {
+            doc.setMetadata(MetadataTag.TITLE, "Fast Save Title");
+            doc.save(outFast);
+        }
+
+        // Verify both produce valid PDFs
+        assertTrue(Files.size(outFull) > 0);
+        assertTrue(Files.size(outFast) > 0);
+
+        // Verify the fast-save file contains the metadata
+        try (PdfDocument doc = PdfDocument.open(outFast)) {
+            assertEquals("Fast Save Title", doc.metadata(MetadataTag.TITLE).orElse(""));
+        }
+    }
+
+    @Test
+    @EnabledIf("pdfiumAvailable")
+    void metadataOnlySaveFromBytesWorks(@TempDir Path tempDir) throws IOException {
+        Path testPdf = getTestPdf();
+        if (testPdf == null) return;
+
+        byte[] originalBytes = Files.readAllBytes(testPdf);
+        Path outPath = tempDir.resolve("bytes-meta.pdf");
+
+        try (PdfDocument doc = PdfDocument.open(originalBytes)) {
+            doc.setMetadata(MetadataTag.TITLE, "BytesSave");
+            doc.setMetadata(MetadataTag.AUTHOR, "Test Author");
+            doc.save(outPath);
+        }
+
+        try (PdfDocument doc = PdfDocument.open(outPath)) {
+            assertEquals("BytesSave", doc.metadata(MetadataTag.TITLE).orElse(""));
+            assertEquals("Test Author", doc.metadata(MetadataTag.AUTHOR).orElse(""));
+        }
+    }
+
+    @Test
+    @EnabledIf("pdfiumAvailable")
+    void metadataOnlySavePreservesPageContent(@TempDir Path tempDir) throws IOException {
+        Path testPdf = getTestPdf();
+        if (testPdf == null) return;
+
+        Path output = tempDir.resolve("preserve-content.pdf");
+
+        int originalPageCount;
+        try (PdfDocument doc = PdfDocument.open(testPdf)) {
+            originalPageCount = doc.pageCount();
+        }
+
+        try (PdfDocument doc = PdfDocument.open(testPdf)) {
+            doc.setMetadata(MetadataTag.TITLE, "Preserves Content");
+            doc.setXmpMetadata(buildBookloreXmp("Preserves Content", "Test Author"));
+            doc.save(output);
+        }
+
+        try (PdfDocument doc = PdfDocument.open(output)) {
+            assertEquals(originalPageCount, doc.pageCount());
+            assertEquals("Preserves Content", doc.metadata(MetadataTag.TITLE).orElse(""));
+
+            String xmp = doc.xmpMetadataString();
+            assertTrue(xmp.contains("Preserves Content"), "XMP should be in file");
+        }
+    }
+
+    @Test
+    @EnabledIf("pdfiumAvailable")
+    void structuralChangeUsesFullSave(@TempDir Path tempDir) throws IOException {
+        Path testPdf = getTestPdf();
+        if (testPdf == null) return;
+
+        Path output = tempDir.resolve("structural.pdf");
+
+        try (PdfDocument doc = PdfDocument.open(testPdf)) {
+            doc.insertBlankPage(0, new PageSize(612, 792));
+            doc.setMetadata(MetadataTag.TITLE, "Structural Change");
+            doc.save(output);
+        }
+
+        try (PdfDocument doc = PdfDocument.open(output)) {
+            assertEquals(2, doc.pageCount(), "Should have original + inserted page");
+            assertEquals("Structural Change", doc.metadata(MetadataTag.TITLE).orElse(""));
+        }
+    }
+
+    @Test
+    @EnabledIf("pdfiumAvailable")
+    void xmpMetadataRoundTripWithBookloreNamespace(@TempDir Path tempDir) throws IOException {
+        Path testPdf = getTestPdf();
+        if (testPdf == null) return;
+
+        Path output = tempDir.resolve("booklore-xmp.pdf");
+
+        String bookloreXmp = """
+                <?xpacket begin="\uFEFF" id="W5M0MpCehiHzreSzNTczkc9d"?>
+                <x:xmpmeta xmlns:x="adobe:ns:meta/">
+                  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+                    <rdf:Description rdf:about=""
+                        xmlns:dc="http://purl.org/dc/elements/1.1/">
+                      <dc:title><rdf:Alt><rdf:li xml:lang="x-default">Dead Simple Python</rdf:li></rdf:Alt></dc:title>
+                      <dc:creator><rdf:Seq><rdf:li>Jason C. McDonald</rdf:li></rdf:Seq></dc:creator>
+                      <dc:publisher><rdf:Bag><rdf:li>No Starch Press</rdf:li></rdf:Bag></dc:publisher>
+                      <dc:subject>
+                        <rdf:Bag>
+                          <rdf:li>Programming</rdf:li>
+                          <rdf:li>Python</rdf:li>
+                        </rdf:Bag>
+                      </dc:subject>
+                      <dc:date><rdf:Seq><rdf:li>2023-01-01</rdf:li></rdf:Seq></dc:date>
+                      <dc:language><rdf:Bag><rdf:li>English</rdf:li></rdf:Bag></dc:language>
+                    </rdf:Description>
+                    <rdf:Description rdf:about=""
+                        xmlns:booklore="http://booklore.org/metadata/1.0/">
+                      <booklore:subtitle>Idiomatic Python for the Impatient Programmer</booklore:subtitle>
+                      <booklore:isbn13>9781718500921</booklore:isbn13>
+                      <booklore:isbn10>1718500920</booklore:isbn10>
+                      <booklore:goodreadsId>52555538</booklore:goodreadsId>
+                      <booklore:goodreadsRating>4.4</booklore:goodreadsRating>
+                      <booklore:pageCount>713</booklore:pageCount>
+                    </rdf:Description>
+                  </rdf:RDF>
+                </x:xmpmeta>
+                <?xpacket end="w"?>""";
+
+        // Write XMP + Info Dict
+        try (PdfDocument doc = PdfDocument.open(testPdf)) {
+            doc.setMetadata(MetadataTag.TITLE, "Dead Simple Python");
+            doc.setMetadata(MetadataTag.AUTHOR, "Jason C. McDonald");
+            doc.setXmpMetadata(bookloreXmp);
+            doc.save(output);
+        }
+
+        // Read back and verify BOTH Info Dict and XMP
+        try (PdfDocument doc = PdfDocument.open(output)) {
+            // Info Dict
+            assertEquals("Dead Simple Python", doc.metadata(MetadataTag.TITLE).orElse(""));
+            assertEquals("Jason C. McDonald", doc.metadata(MetadataTag.AUTHOR).orElse(""));
+
+            // XMP
+            String xmp = doc.xmpMetadataString();
+            assertFalse(xmp.isEmpty(), "XMP should be present");
+
+            XmpMetadata parsed = XmpMetadataParser.parse(xmp);
+            assertEquals("Dead Simple Python", parsed.title().orElse(""));
+            assertEquals(List.of("Jason C. McDonald"), parsed.creators());
+            assertEquals("No Starch Press", parsed.publisher().orElse(""));
+            assertEquals("2023-01-01", parsed.date().orElse(""));
+            assertEquals("English", parsed.language().orElse(""));
+            assertTrue(parsed.subjects().contains("Programming"));
+            assertTrue(parsed.subjects().contains("Python"));
+
+            // Verify raw XMP string contains booklore namespace elements
+            assertTrue(xmp.contains("booklore:subtitle"), "XMP should contain subtitle");
+            assertTrue(xmp.contains("Idiomatic Python"), "XMP should contain subtitle value");
+            assertTrue(xmp.contains("booklore:isbn13"), "XMP should contain isbn13");
+            assertTrue(xmp.contains("9781718500921"));
+            assertTrue(xmp.contains("booklore:isbn10"), "XMP should contain isbn10");
+            assertTrue(xmp.contains("1718500920"));
+            assertTrue(xmp.contains("booklore:goodreadsId"), "XMP should contain goodreadsId");
+            assertTrue(xmp.contains("52555538"));
+        }
+    }
+
+    @Test
+    @EnabledIf("pdfiumAvailable")
+    void xmpMetadataOverwritePrevious(@TempDir Path tempDir) throws IOException {
+        Path testPdf = getTestPdf();
+        if (testPdf == null) return;
+
+        Path firstSave = tempDir.resolve("first.pdf");
+        Path secondSave = tempDir.resolve("second.pdf");
+
+        // First write
+        try (PdfDocument doc = PdfDocument.open(testPdf)) {
+            doc.setMetadata(MetadataTag.TITLE, "First Title");
+            doc.setXmpMetadata(buildBookloreXmp("First Title", "First Author"));
+            doc.save(firstSave);
+        }
+
+        // Second write overwrites - open the FIRST save and update
+        try (PdfDocument doc = PdfDocument.open(firstSave)) {
+            doc.setMetadata(MetadataTag.TITLE, "Second Title");
+            doc.setXmpMetadata(buildBookloreXmp("Second Title", "Second Author"));
+            doc.save(secondSave);
+        }
+
+        // Verify the SECOND save has the NEW values, not the old ones
+        try (PdfDocument doc = PdfDocument.open(secondSave)) {
+            assertEquals("Second Title", doc.metadata(MetadataTag.TITLE).orElse(""));
+
+            XmpMetadata parsed = XmpMetadataParser.parse(doc.xmpMetadata());
+            assertEquals("Second Title", parsed.title().orElse(""));
+            assertEquals(List.of("Second Author"), parsed.creators());
+        }
+    }
+
+    private String buildBookloreXmp(String title, String author) {
+        return """
+                <?xpacket begin="\uFEFF" id="W5M0MpCehiHzreSzNTczkc9d"?>
+                <x:xmpmeta xmlns:x="adobe:ns:meta/">
+                  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+                    <rdf:Description rdf:about=""
+                        xmlns:dc="http://purl.org/dc/elements/1.1/">
+                      <dc:title><rdf:Alt><rdf:li xml:lang="x-default">%s</rdf:li></rdf:Alt></dc:title>
+                      <dc:creator><rdf:Seq><rdf:li>%s</rdf:li></rdf:Seq></dc:creator>
+                    </rdf:Description>
+                  </rdf:RDF>
+                </x:xmpmeta>
+                <?xpacket end="w"?>""".formatted(title, author);
+    }
 }
