@@ -29,7 +29,7 @@ public record RenderResult(int width, int height, byte[] rgba) {
    * @throws IllegalStateException if the rgba array length doesn't match dimensions
    */
   public BufferedImage toBufferedImage() {
-    int expectedBytes = width * height * 4;
+    long expectedBytes = (long) width * height * 4;
     if (rgba.length < expectedBytes) {
       throw new IllegalStateException(
           "RGBA buffer too small: expected "

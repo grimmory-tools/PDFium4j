@@ -199,9 +199,15 @@ public final class XmpMetadataWriter {
       sb.append("<rdf:Description rdf:about=\"\"\n");
       sb.append("    xmlns:xmp=\"").append(NS_XAP).append("\">\n");
       for (Map.Entry<String, String> entry : unprefixed.entrySet()) {
-        sb.append("  <xmp:").append(escapeXml(entry.getKey())).append(">");
+        // Strip unregistered prefix to avoid invalid XML (multiple colons in tag name)
+        String key = entry.getKey();
+        int colonIdx = key.indexOf(':');
+        if (colonIdx >= 0) {
+          key = key.substring(colonIdx + 1);
+        }
+        sb.append("  <xmp:").append(escapeXml(key)).append(">");
         sb.append(escapeXml(entry.getValue()));
-        sb.append("</xmp:").append(escapeXml(entry.getKey())).append(">\n");
+        sb.append("</xmp:").append(escapeXml(key)).append(">\n");
       }
       sb.append("</rdf:Description>\n");
     }

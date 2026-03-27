@@ -79,7 +79,6 @@ final class BookmarkReader {
             return (int) DocBindings.FPDFDest_GetDestPageIndex.invokeExact(docHandle, dest);
           }
         }
-        return -1;
       }
 
       MemorySegment dest =

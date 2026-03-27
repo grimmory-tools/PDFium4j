@@ -313,7 +313,7 @@ public record PdfBookMetadata(
       char c = isbn.charAt(i);
       int digit = (c == 'X') ? 10 : (c - '0');
       if (digit < 0 || (digit > 9 && i < 9)) return false;
-      sum += digit * (i + 1);
+      sum += digit * (10 - i);
     }
     return sum % 11 == 0;
   }

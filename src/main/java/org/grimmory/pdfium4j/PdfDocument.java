@@ -136,7 +136,12 @@ public final class PdfDocument implements AutoCloseable {
     }
 
     // Quick header check: PDF must start with %PDF-
-    if (data.length < 5 || data[0] != '%' || data[1] != 'P' || data[2] != 'D' || data[3] != 'F') {
+    if (data.length < 5
+        || data[0] != '%'
+        || data[1] != 'P'
+        || data[2] != 'D'
+        || data[3] != 'F'
+        || data[4] != '-') {
       return PdfProbeResult.error(
           PdfProbeResult.Status.CORRUPT,
           PdfErrorCode.FORMAT,

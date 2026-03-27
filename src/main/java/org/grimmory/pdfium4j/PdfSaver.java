@@ -161,7 +161,7 @@ final class PdfSaver {
     // Write one subsection per object (or contiguous ranges)
     for (Map.Entry<Integer, Integer> entry : objOffsets.entrySet()) {
       update.append(entry.getKey()).append(" 1\n");
-      update.append(String.format("%010d 00000 n \r%n", entry.getValue()));
+      update.append(String.format("%010d 00000 n \r\n", entry.getValue()));
     }
 
     // Write new trailer
