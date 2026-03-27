@@ -161,7 +161,8 @@ final class PdfSaver {
     // Write one subsection per object (or contiguous ranges)
     for (Map.Entry<Integer, Integer> entry : objOffsets.entrySet()) {
       update.append(entry.getKey()).append(" 1\n");
-      update.append(String.format("%010d 00000 n \r\n", entry.getValue()));
+      // PDF spec requires literal \r\n in xref entries, not platform line separator
+      update.append(String.format("%010d", entry.getValue())).append(" 00000 n \r\n");
     }
 
     // Write new trailer
@@ -237,7 +238,8 @@ final class PdfSaver {
     int xrefOffset = baseOffset + update.length();
     update.append("xref\n");
     update.append(catalogObjNum).append(" 1\n");
-    update.append(String.format("%010d 00000 n \r%n", catalogOffset));
+    // PDF spec requires literal \r\n in xref entries, not platform line separator
+    update.append(String.format("%010d", catalogOffset)).append(" 00000 n \r\n");
 
     update.append("trailer\n");
     update.append("<< /Size ").append(sizeBase);

@@ -182,6 +182,8 @@ val extractPdfiumBinaries by tasks.registering {
     description = "Extracts PDFium native libraries for bundling into the JAR"
     dependsOn(downloadPdfiumBinaries)
     outputs.dir(pdfiumNativesDir)
+    // Capture project reference at configuration time to avoid deprecated Task.project at execution time
+    val proj = project
     doLast {
         val nativesRoot = pdfiumNativesDir.get().asFile.resolve("natives")
         nativesRoot.deleteRecursively()
@@ -195,8 +197,8 @@ val extractPdfiumBinaries by tasks.registering {
                 localName.startsWith("windows") -> "pdfium.dll"
                 else -> error("Unknown platform: $localName")
             }
-            project.copy {
-                from(tarTree(resources.gzip(archive))) {
+            proj.copy {
+                from(proj.tarTree(proj.resources.gzip(archive))) {
                     include("lib/$libFileName", "bin/$libFileName")
                     eachFile { relativePath = RelativePath(true, name) }
                 }
