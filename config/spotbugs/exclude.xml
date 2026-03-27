@@ -2,6 +2,6 @@
 <FindBugsFilter>
     <!-- FFM bindings mirror C API names and signatures by design. -->
     <Match>
-        <Class name="~org\.pdfium4j\.internal\..*Bindings" />
+        <Class name="~org\.grimmory\.pdfium4j\.internal\..*Bindings" />
     </Match>
 </FindBugsFilter>
