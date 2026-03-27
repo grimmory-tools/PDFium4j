@@ -33,10 +33,10 @@ Compact Java PDF engine on top of Java 25 FFM.
 ```java
 import java.nio.file.Path;
 
-import org.pdfium4j.PdfDocument;
-import org.pdfium4j.PdfPage;
-import org.pdfium4j.model.PdfProcessingPolicy;
-import org.pdfium4j.model.RenderResult;
+import org.grimmory.pdfium4j.PdfDocument;
+import org.grimmory.pdfium4j.PdfPage;
+import org.grimmory.pdfium4j.model.PdfProcessingPolicy;
+import org.grimmory.pdfium4j.model.RenderResult;
 
 PdfProcessingPolicy policy = PdfProcessingPolicy.defaultPolicy()
     .withMaxDocumentBytes(512L * 1024 * 1024)

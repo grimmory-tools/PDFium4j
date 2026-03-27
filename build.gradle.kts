@@ -7,8 +7,8 @@ plugins {
     signing
     checkstyle
     pmd
-    id("com.diffplug.spotless") version "8.0.0"
-    id("com.github.spotbugs") version "6.4.4"
+    id("com.diffplug.spotless") version "8.4.0"
+    id("com.github.spotbugs") version "6.4.8"
 }
 
 allprojects {
@@ -21,13 +21,13 @@ allprojects {
 }
 
 configure<CheckstyleExtension> {
-    toolVersion = "10.21.3"
+    toolVersion = "13.3.0"
     configFile = rootProject.file("config/checkstyle/checkstyle.xml")
     isShowViolations = true
 }
 
 configure<PmdExtension> {
-    toolVersion = "7.16.0"
+    toolVersion = "7.22.0"
     isConsoleOutput = true
     rulesMinimumPriority.set(5)
     ruleSetFiles = files(rootProject.file("config/pmd/ruleset.xml"))
@@ -44,6 +44,7 @@ extensions.configure<com.diffplug.gradle.spotless.SpotlessExtension>("spotless")
     java {
         target("src/*/java/**/*.java")
         targetExclude("**/build/**")
+        googleJavaFormat("1.35.0")
         removeUnusedImports()
         trimTrailingWhitespace()
         endWithNewline()
@@ -96,7 +97,7 @@ tasks.withType<Test> {
         "--enable-native-access=ALL-UNNAMED"
     )
     filter {
-        excludeTestsMatching("org.pdfium4j.PathologicalPdfTest")
+        excludeTestsMatching("org.grimmory.pdfium4j.PathologicalPdfTest")
     }
 }
 

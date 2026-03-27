@@ -22,18 +22,30 @@
 *.jar
 !gradle/wrapper/gradle-wrapper.jar
 
-# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
+# Virtual machine crash logs
 hs_err_pid*
 replay_pid*
 
+# Core dump files (native library crashes)
+core
+core.*
+
 # Gradle
 build/
+**/build/
+build_*/
+**/build_*/
 .gradle/
-bin/
+**/.gradle/
+!**/gradle-wrapper.jar
 
 # IDE
 .idea/
 *.iml
+**/bin/
+
+# macOS
+.DS_Store
 
 # Native binaries (download separately)
 src/main/resources/natives/
