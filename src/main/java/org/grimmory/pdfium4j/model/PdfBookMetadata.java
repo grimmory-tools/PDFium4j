@@ -42,9 +42,9 @@ public record PdfBookMetadata(
     implements BookMetadata {
 
   private static final System.Logger LOG = System.getLogger(PdfBookMetadata.class.getName());
-  private static final Pattern PATTERN = Pattern.compile("^(\\d)\\1{9,12}$");
-  private static final Pattern REGEX = Pattern.compile("[^0-9Xx]");
-  private static final Pattern REGEXP = Pattern.compile("[,;]");
+  private static final Pattern UNIFORM_DIGIT_PATTERN = Pattern.compile("^(\\d)\\1{9,12}$");
+  private static final Pattern NON_ISBN_CHARS_PATTERN = Pattern.compile("[^0-9Xx]");
+  private static final Pattern SEPARATOR_PATTERN = Pattern.compile("[,;]");
 
   public PdfBookMetadata {
     authors = Collections.unmodifiableList(authors);
@@ -100,7 +100,7 @@ public record PdfBookMetadata(
     List<String> subjects = new ArrayList<>(xmp.subjects());
     Optional<String> keywordsOpt = document.metadata(MetadataTag.KEYWORDS);
     if (keywordsOpt.isPresent()) {
-      for (String part : REGEXP.split(keywordsOpt.get())) {
+      for (String part : SEPARATOR_PATTERN.split(keywordsOpt.get())) {
         String trimmed = part.trim();
         if (!trimmed.isBlank() && !subjects.contains(trimmed)) {
           subjects.add(trimmed);
@@ -155,7 +155,7 @@ public record PdfBookMetadata(
           .metadata(MetadataTag.AUTHOR)
           .ifPresent(
               author -> {
-                String[] parts = REGEXP.split(author);
+                String[] parts = SEPARATOR_PATTERN.split(author);
                 for (String part : parts) {
                   String trimmed = part.trim();
                   if (!trimmed.isBlank() && !authors.contains(trimmed)) {
@@ -175,7 +175,7 @@ public record PdfBookMetadata(
     }
 
     for (String id : xmp.identifiers()) {
-      if (id.toLowerCase().contains("isbn")) {
+      if (id.toLowerCase(Locale.ROOT).contains("isbn")) {
         String cleaned = cleanIsbn(id);
         if (cleaned != null) {
           return Optional.of(cleaned);
@@ -188,6 +188,7 @@ public record PdfBookMetadata(
 
   private static final Pattern PDF_DATE_PATTERN =
       Pattern.compile("^D:(\\d{4})(\\d{2})?(\\d{2})?(\\d{2})?(\\d{2})?(\\d{2})?");
+  private static final Pattern FOUR_DIGIT_YEAR_PATTERN = Pattern.compile("\\b(\\d{4})\\b");
 
   private static final List<DateTimeFormatter> DATE_FORMATS =
       List.of(
@@ -244,7 +245,7 @@ public record PdfBookMetadata(
     }
 
     // Last resort: extract 4-digit year
-    Matcher yearMatcher = Pattern.compile("\\b(\\d{4})\\b").matcher(dateStr);
+    Matcher yearMatcher = FOUR_DIGIT_YEAR_PATTERN.matcher(dateStr);
     if (yearMatcher.find()) {
       int year = Integer.parseInt(yearMatcher.group(1));
       if (year >= 1000 && year <= 9999) {
@@ -297,10 +298,10 @@ public record PdfBookMetadata(
 
   private static String cleanIsbn(String id) {
     if (id == null) return null;
-    String cleaned = REGEX.matcher(id).replaceAll("").toUpperCase();
+    String cleaned = NON_ISBN_CHARS_PATTERN.matcher(id).replaceAll("").toUpperCase();
 
     // Reject uniform sequences like 0000000000 or 1111111111111 (fake ISBNs)
-    if (PATTERN.matcher(cleaned).matches()) return null;
+    if (UNIFORM_DIGIT_PATTERN.matcher(cleaned).matches()) return null;
 
     if (cleaned.length() == 10 && isValidIsbn10(cleaned)) return cleaned;
     if (cleaned.length() == 13 && isValidIsbn13(cleaned)) return cleaned;

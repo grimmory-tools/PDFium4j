@@ -574,6 +574,8 @@ public final class PdfPage implements AutoCloseable {
             float vdpi = meta.get(ValueLayout.JAVA_FLOAT, 12);
             int bpp = meta.get(ValueLayout.JAVA_INT, 16);
             images.add(new EmbeddedImage(imageIndex, w, h, bpp, hdpi, vdpi));
+          } else {
+            images.add(new EmbeddedImage(imageIndex, 0, 0, 0, 0f, 0f));
           }
         }
         imageIndex++;
@@ -608,6 +610,17 @@ public final class PdfPage implements AutoCloseable {
         if (type != EditBindings.FPDF_PAGEOBJ_IMAGE) continue;
 
         if (currentImageIndex == imageIndex) {
+          try (Arena arena = Arena.ofConfined()) {
+            MemorySegment meta = arena.allocate(EditBindings.IMAGE_METADATA_LAYOUT);
+            int metaOk =
+                (int) EditBindings.FPDFImageObj_GetImageMetadata.invokeExact(obj, handle, meta);
+            if (metaOk != 0) {
+              int metaW = meta.get(ValueLayout.JAVA_INT, 0);
+              int metaH = meta.get(ValueLayout.JAVA_INT, 4);
+              ensureRenderBudget(metaW, metaH);
+            }
+          }
+
           MemorySegment bitmap = MemorySegment.NULL;
           try {
             bitmap =
@@ -634,6 +647,13 @@ public final class PdfPage implements AutoCloseable {
                     rgba, row * stride, packed, row * w * BYTES_PER_PIXEL, w * BYTES_PER_PIXEL);
               }
               rgba = packed;
+            }
+
+            // FPDFImageObj_GetRenderedBitmap returns BGRA; convert to RGBA
+            for (int px = 0; px < rgba.length; px += BYTES_PER_PIXEL) {
+              byte tmp = rgba[px];
+              rgba[px] = rgba[px + 2];
+              rgba[px + 2] = tmp;
             }
 
             return new RenderResult(w, h, rgba);

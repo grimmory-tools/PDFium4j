@@ -1,5 +1,6 @@
 package org.grimmory.pdfium4j.model;
 
+import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -78,7 +79,12 @@ public record RenderResult(int width, int height, byte[] rgba) {
     try {
       // Convert ARGB to RGB (JPEG doesn't support alpha)
       BufferedImage rgb = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
-      rgb.createGraphics().drawImage(img, 0, 0, null);
+      Graphics2D g = rgb.createGraphics();
+      try {
+        g.drawImage(img, 0, 0, null);
+      } finally {
+        g.dispose();
+      }
       img.flush();
 
       ImageWriter writer = ImageIO.getImageWritersByFormatName("JPEG").next();

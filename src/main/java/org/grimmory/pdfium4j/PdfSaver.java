@@ -29,7 +29,14 @@ import org.grimmory.pdfium4j.model.MetadataTag;
 final class PdfSaver {
 
   private static final ThreadLocal<ByteArrayOutputStream> WRITE_BUFFER = new ThreadLocal<>();
-  private static final Pattern PATTERN = Pattern.compile("/Metadata\\s+\\d+\\s+\\d+\\s+R");
+  private static final Pattern METADATA_REF_PATTERN =
+      Pattern.compile("/Metadata\\s+\\d+\\s+\\d+\\s+R");
+  private static final Pattern ROOT_REF_PATTERN =
+      Pattern.compile("/Root\\s+(\\d+\\s+\\d+\\s+R)");
+  private static final Pattern INFO_REF_PATTERN =
+      Pattern.compile("/Info\\s+(\\d+\\s+\\d+\\s+R)");
+  private static final Pattern OBJ_NUM_PATTERN = Pattern.compile("(\\d+)\\s+0\\s+obj\\b");
+  private static final Pattern FIRST_INT_PATTERN = Pattern.compile("(\\d+)");
 
   private PdfSaver() {}
 
@@ -211,7 +218,7 @@ final class PdfSaver {
 
     // Remove existing /Metadata if present, add our new one
     String dict = catalogDict;
-    dict = PATTERN.matcher(dict).replaceFirst("");
+    dict = METADATA_REF_PATTERN.matcher(dict).replaceFirst("");
     // Insert /Metadata ref before the closing >>
     int closeIdx = dict.lastIndexOf(">>");
     if (closeIdx >= 0) {
@@ -232,8 +239,7 @@ final class PdfSaver {
     int catalogOffset = baseOffset + update.length();
     update.append(newCatalog);
 
-    // Find actual previous xref from the current file end
-    int actualPrev = findLastStartxrefValue(new String(pdf, StandardCharsets.ISO_8859_1));
+    int actualPrev = findLastStartxrefValue(text);
 
     int xrefOffset = baseOffset + update.length();
     update.append("xref\n");
@@ -245,7 +251,7 @@ final class PdfSaver {
     update.append("<< /Size ").append(sizeBase);
     update.append(" /Root ").append(trailer.rootRef);
     // Carry forward /Info from previous trailer
-    String prevTrailerInfo = findTrailerEntry(new String(pdf, StandardCharsets.ISO_8859_1), "Info");
+    String prevTrailerInfo = findTrailerEntry(text, "Info");
     if (prevTrailerInfo != null) {
       update.append(" /Info ").append(prevTrailerInfo);
     }
@@ -309,15 +315,13 @@ final class PdfSaver {
 
     // For cross-reference streams, find the last xref stream object
     // which contains /Root in its dictionary
-    Pattern rootPattern = Pattern.compile("/Root\\s+(\\d+\\s+\\d+\\s+R)");
-    Matcher m = rootPattern.matcher(text);
+    Matcher m = ROOT_REF_PATTERN.matcher(text);
     String lastRoot = null;
     String lastInfo = null;
     while (m.find()) {
       lastRoot = m.group(1);
     }
-    Pattern infoPattern = Pattern.compile("/Info\\s+(\\d+\\s+\\d+\\s+R)");
-    Matcher m2 = infoPattern.matcher(text);
+    Matcher m2 = INFO_REF_PATTERN.matcher(text);
     while (m2.find()) {
       lastInfo = m2.group(1);
     }
@@ -325,6 +329,13 @@ final class PdfSaver {
   }
 
   private static String findTrailerEntry(String text, String key) {
+    Pattern p =
+        switch (key) {
+          case "Root" -> ROOT_REF_PATTERN;
+          case "Info" -> INFO_REF_PATTERN;
+          default -> Pattern.compile("/" + key + "\\s+(\\d+\\s+\\d+\\s+R)");
+        };
+
     // Search backwards from end for the latest trailer
     int searchFrom = text.length();
     while (true) {
@@ -338,7 +349,6 @@ final class PdfSaver {
       if (dictEnd < 0) break;
 
       String dict = text.substring(dictStart, dictEnd + 2);
-      Pattern p = Pattern.compile("/" + key + "\\s+(\\d+\\s+\\d+\\s+R)");
       Matcher m = p.matcher(dict);
       if (m.find()) {
         return m.group(1);
@@ -362,7 +372,7 @@ final class PdfSaver {
 
   private static int extractObjNum(String ref) {
     // "N 0 R" -> N
-    Matcher m = Pattern.compile("(\\d+)").matcher(ref);
+    Matcher m = FIRST_INT_PATTERN.matcher(ref);
     if (m.find()) return Integer.parseInt(m.group(1));
     return 1;
   }
@@ -399,8 +409,7 @@ final class PdfSaver {
   // --- Helpers ---
 
   private static int findMaxObjectNumber(String pdfText) {
-    Pattern objPattern = Pattern.compile("(\\d+)\\s+0\\s+obj\\b");
-    Matcher matcher = objPattern.matcher(pdfText);
+    Matcher matcher = OBJ_NUM_PATTERN.matcher(pdfText);
     int max = 0;
     while (matcher.find()) {
       int num = Integer.parseInt(matcher.group(1));

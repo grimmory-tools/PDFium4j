@@ -9,7 +9,6 @@ import java.lang.foreign.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.stream.IntStream;
 import org.grimmory.pdfium4j.exception.PdfCorruptException;
 import org.grimmory.pdfium4j.exception.PdfPasswordException;
 import org.grimmory.pdfium4j.exception.PdfiumException;
@@ -591,8 +590,14 @@ public final class PdfDocument implements AutoCloseable {
               + " pages");
     }
 
-    List<Integer> indices = IntStream.rangeClosed(startIndex, endIndex).boxed().toList();
-    return renderPages(indices, dpi);
+    ensureOpen();
+    Map<Integer, RenderResult> results = new LinkedHashMap<>(endIndex - startIndex + 1);
+    for (int i = startIndex; i <= endIndex; i++) {
+      try (PdfPage page = page(i)) {
+        results.put(i, page.render(dpi));
+      }
+    }
+    return Collections.unmodifiableMap(results);
   }
 
   /**
@@ -602,8 +607,7 @@ public final class PdfDocument implements AutoCloseable {
    * @return map of page index to render result, in iteration order
    */
   public Map<Integer, RenderResult> renderAllPages(int dpi) {
-    List<Integer> indices = IntStream.range(0, pageCount()).boxed().toList();
-    return renderPages(indices, dpi);
+    return renderPages(0, pageCount() - 1, dpi);
   }
 
   /**
@@ -888,12 +892,10 @@ public final class PdfDocument implements AutoCloseable {
     ensureOpen();
     Objects.requireNonNull(key, "key");
 
-    // Check if it matches a standard tag with pending value
-    for (Map.Entry<MetadataTag, String> entry : pendingMetadata.entrySet()) {
-      if (entry.getKey().pdfKey().equals(key)) {
-        String value = entry.getValue();
-        return (value == null || value.isEmpty()) ? Optional.empty() : Optional.of(value);
-      }
+    MetadataTag standardTag = MetadataTag.fromKey(key);
+    if (standardTag != null && pendingMetadata.containsKey(standardTag)) {
+      String value = pendingMetadata.get(standardTag);
+      return (value == null || value.isEmpty()) ? Optional.empty() : Optional.of(value);
     }
 
     try (Arena arena = Arena.ofConfined()) {
@@ -1092,7 +1094,19 @@ public final class PdfDocument implements AutoCloseable {
         System.arraycopy(buf, available - carry, buf, 0, carry);
       }
 
-      if (lastBeginFilePos < 0) return new byte[0];
+      if (lastBeginFilePos < 0) {
+        // Fallback: read entire file and scan for <x:xmpmeta> ... </x:xmpmeta>
+        channel.position(0);
+        byte[] allBytes = new byte[(int) fileSize];
+        var allBuf = java.nio.ByteBuffer.wrap(allBytes);
+        int totalRead = 0;
+        while (totalRead < fileSize) {
+          int n = channel.read(allBuf, totalRead);
+          if (n < 0) break;
+          totalRead += n;
+        }
+        return extractXmpmetaFallback(allBytes);
+      }
 
       // Phase 2: find <?xpacket end=...?> after the last begin marker
       offset = lastBeginFilePos;
@@ -1149,16 +1163,41 @@ public final class PdfDocument implements AutoCloseable {
       lastBeginPos = pos;
       searchFrom = pos + 1;
     }
+
+    if (lastBeginPos >= 0) {
+      int endPos = indexOf(pdf, endMarker, lastBeginPos);
+      if (endPos >= 0) {
+        int endTagClose =
+            indexOf(pdf, "?>".getBytes(java.nio.charset.StandardCharsets.US_ASCII), endPos);
+        if (endTagClose >= 0) {
+          int packetEnd = endTagClose + 2;
+          byte[] xmp = new byte[packetEnd - lastBeginPos];
+          System.arraycopy(pdf, lastBeginPos, xmp, 0, xmp.length);
+          return xmp;
+        }
+      }
+    }
+
+    // Fallback: scan for <x:xmpmeta ...> ... </x:xmpmeta> (no xpacket wrapper)
+    return extractXmpmetaFallback(pdf);
+  }
+
+  private static byte[] extractXmpmetaFallback(byte[] pdf) {
+    byte[] beginTag = "<x:xmpmeta".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+    byte[] endTag = "</x:xmpmeta>".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+    // Find LAST <x:xmpmeta occurrence
+    int lastBeginPos = -1;
+    int searchFrom = 0;
+    while (searchFrom < pdf.length) {
+      int pos = indexOf(pdf, beginTag, searchFrom);
+      if (pos < 0) break;
+      lastBeginPos = pos;
+      searchFrom = pos + 1;
+    }
     if (lastBeginPos < 0) return new byte[0];
-
-    int endPos = indexOf(pdf, endMarker, lastBeginPos);
+    int endPos = indexOf(pdf, endTag, lastBeginPos);
     if (endPos < 0) return new byte[0];
-
-    int endTagClose =
-        indexOf(pdf, "?>".getBytes(java.nio.charset.StandardCharsets.US_ASCII), endPos);
-    if (endTagClose < 0) return new byte[0];
-    int packetEnd = endTagClose + 2;
-
+    int packetEnd = endPos + endTag.length;
     byte[] xmp = new byte[packetEnd - lastBeginPos];
     System.arraycopy(pdf, lastBeginPos, xmp, 0, xmp.length);
     return xmp;
