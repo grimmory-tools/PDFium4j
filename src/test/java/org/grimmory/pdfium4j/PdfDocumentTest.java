@@ -857,6 +857,204 @@ class PdfDocumentTest {
     }
   }
 
+  // --- Tests for new APIs (metadata(String), renderPageToBytes, RenderResult encoding, image
+  // extraction, isBlank) ---
+
+  @Test
+  @EnabledIf("pdfiumAvailable")
+  void metadataByStringKeyReadsStandardTag(@TempDir Path tempDir) throws IOException {
+    Path testPdf = getTestPdf();
+    if (testPdf == null) return;
+
+    Path output = tempDir.resolve("string-key-meta.pdf");
+    try (PdfDocument doc = PdfDocument.open(testPdf)) {
+      doc.setMetadata(MetadataTag.TITLE, "StringKeyTest");
+      doc.save(output);
+    }
+
+    try (PdfDocument doc = PdfDocument.open(output)) {
+      // Read via String key (same underlying FPDF_GetMetaText call)
+      Optional<String> title = doc.metadata("Title");
+      assertTrue(title.isPresent(), "Title should be readable via string key");
+      assertEquals("StringKeyTest", title.get());
+    }
+  }
+
+  @Test
+  @EnabledIf("pdfiumAvailable")
+  void metadataByStringKeyReturnsEmptyForMissing() throws IOException {
+    Path testPdf = getTestPdf();
+    if (testPdf == null) return;
+
+    try (PdfDocument doc = PdfDocument.open(testPdf)) {
+      Optional<String> result = doc.metadata("NonExistentCustomKey");
+      assertTrue(result.isEmpty(), "Non-existent key should return empty");
+    }
+  }
+
+  @Test
+  @EnabledIf("pdfiumAvailable")
+  void renderResultToJpegBytesProducesValidJpeg() throws IOException {
+    Path testPdf = getTestPdf();
+    if (testPdf == null) return;
+
+    try (PdfDocument doc = PdfDocument.open(testPdf);
+        PdfPage page = doc.page(0)) {
+      RenderResult result = page.render(72);
+      byte[] jpeg = result.toJpegBytes();
+
+      assertTrue(jpeg.length > 0, "JPEG bytes should not be empty");
+      // JPEG magic bytes: FF D8 FF
+      assertEquals((byte) 0xFF, jpeg[0], "JPEG should start with 0xFF");
+      assertEquals((byte) 0xD8, jpeg[1], "JPEG byte 2 should be 0xD8");
+      assertEquals((byte) 0xFF, jpeg[2], "JPEG byte 3 should be 0xFF");
+    }
+  }
+
+  @Test
+  @EnabledIf("pdfiumAvailable")
+  void renderResultToJpegBytesWithQuality() throws IOException {
+    Path testPdf = getTestPdf();
+    if (testPdf == null) return;
+
+    try (PdfDocument doc = PdfDocument.open(testPdf);
+        PdfPage page = doc.page(0)) {
+      RenderResult result = page.render(72);
+      byte[] lowQuality = result.toJpegBytes(0.1f);
+      byte[] highQuality = result.toJpegBytes(0.95f);
+
+      assertTrue(lowQuality.length > 0, "Low quality JPEG should not be empty");
+      assertTrue(highQuality.length > 0, "High quality JPEG should not be empty");
+      assertTrue(
+          highQuality.length > lowQuality.length,
+          "High quality JPEG should be larger than low quality");
+    }
+  }
+
+  @Test
+  @EnabledIf("pdfiumAvailable")
+  void renderResultToPngBytesProducesValidPng() throws IOException {
+    Path testPdf = getTestPdf();
+    if (testPdf == null) return;
+
+    try (PdfDocument doc = PdfDocument.open(testPdf);
+        PdfPage page = doc.page(0)) {
+      RenderResult result = page.render(72);
+      byte[] png = result.toPngBytes();
+
+      assertTrue(png.length > 0, "PNG bytes should not be empty");
+      // PNG magic bytes: 89 50 4E 47 0D 0A 1A 0A
+      assertEquals((byte) 0x89, png[0], "PNG byte 1");
+      assertEquals((byte) 0x50, png[1], "PNG byte 2 (P)");
+      assertEquals((byte) 0x4E, png[2], "PNG byte 3 (N)");
+      assertEquals((byte) 0x47, png[3], "PNG byte 4 (G)");
+    }
+  }
+
+  @Test
+  @EnabledIf("pdfiumAvailable")
+  void renderPageToBytesJpeg() throws IOException {
+    Path testPdf = getTestPdf();
+    if (testPdf == null) return;
+
+    try (PdfDocument doc = PdfDocument.open(testPdf)) {
+      byte[] jpeg = doc.renderPageToBytes(0, 150, "jpeg");
+
+      assertTrue(jpeg.length > 0, "Rendered JPEG should not be empty");
+      assertEquals((byte) 0xFF, jpeg[0], "Should be JPEG format");
+      assertEquals((byte) 0xD8, jpeg[1], "Should be JPEG format");
+    }
+  }
+
+  @Test
+  @EnabledIf("pdfiumAvailable")
+  void renderPageToBytesPng() throws IOException {
+    Path testPdf = getTestPdf();
+    if (testPdf == null) return;
+
+    try (PdfDocument doc = PdfDocument.open(testPdf)) {
+      byte[] png = doc.renderPageToBytes(0, 150, "png");
+
+      assertTrue(png.length > 0, "Rendered PNG should not be empty");
+      assertEquals((byte) 0x89, png[0], "Should be PNG format");
+      assertEquals((byte) 0x50, png[1], "Should be PNG format");
+    }
+  }
+
+  @Test
+  @EnabledIf("pdfiumAvailable")
+  void renderPageToBytesInvalidFormat() throws IOException {
+    Path testPdf = getTestPdf();
+    if (testPdf == null) return;
+
+    try (PdfDocument doc = PdfDocument.open(testPdf)) {
+      assertThrows(
+          IllegalArgumentException.class,
+          () -> doc.renderPageToBytes(0, 150, "bmp"),
+          "Should reject unsupported format");
+    }
+  }
+
+  @Test
+  @EnabledIf("pdfiumAvailable")
+  void pageIsBlankOnTextPage() throws IOException {
+    Path testPdf = getTestPdf();
+    if (testPdf == null) return;
+
+    try (PdfDocument doc = PdfDocument.open(testPdf);
+        PdfPage page = doc.page(0)) {
+      // Our test PDF has "Hello World" text
+      assertFalse(page.isBlank(), "Page with text should not be blank");
+    }
+  }
+
+  @Test
+  @EnabledIf("pdfiumAvailable")
+  void pageIsBlankOnBlankPage(@TempDir Path tempDir) throws IOException {
+    Path testPdf = getTestPdf();
+    if (testPdf == null) return;
+
+    Path blankPdf = tempDir.resolve("blank.pdf");
+
+    try (PdfDocument doc = PdfDocument.open(testPdf)) {
+      doc.insertBlankPage(doc.pageCount(), PageSize.A4);
+      doc.save(blankPdf);
+    }
+
+    try (PdfDocument doc = PdfDocument.open(blankPdf)) {
+      // The last page is the blank one we inserted
+      try (PdfPage page = doc.page(doc.pageCount() - 1)) {
+        assertTrue(page.isBlank(), "Blank page with no text or images should be blank");
+      }
+    }
+  }
+
+  @Test
+  @EnabledIf("pdfiumAvailable")
+  void pageImageCountOnTextOnlyPage() throws IOException {
+    Path testPdf = getTestPdf();
+    if (testPdf == null) return;
+
+    try (PdfDocument doc = PdfDocument.open(testPdf);
+        PdfPage page = doc.page(0)) {
+      // Minimal text-only PDF has no images
+      assertEquals(0, page.imageCount(), "Text-only page should have 0 images");
+    }
+  }
+
+  @Test
+  @EnabledIf("pdfiumAvailable")
+  void pageEmbeddedImagesOnTextOnlyPage() throws IOException {
+    Path testPdf = getTestPdf();
+    if (testPdf == null) return;
+
+    try (PdfDocument doc = PdfDocument.open(testPdf);
+        PdfPage page = doc.page(0)) {
+      List<EmbeddedImage> images = page.embeddedImages();
+      assertTrue(images.isEmpty(), "Text-only page should have no embedded images");
+    }
+  }
+
   private Path getTestPdf() {
     var url = getClass().getResource("/test.pdf");
     if (url != null) {

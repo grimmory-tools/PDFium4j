@@ -40,6 +40,7 @@ public final class PdfPage implements AutoCloseable {
   private static final int UNICODE_INVALID = 0xFFFF;
 
   private final MemorySegment handle;
+  private final MemorySegment documentHandle;
   private final Thread ownerThread;
   private final long maxRenderPixels;
   private final Runnable onClose;
@@ -48,11 +49,13 @@ public final class PdfPage implements AutoCloseable {
 
   PdfPage(
       MemorySegment handle,
+      MemorySegment documentHandle,
       Thread ownerThread,
       long maxRenderPixels,
       Runnable onClose,
       Runnable onModified) {
     this.handle = handle;
+    this.documentHandle = documentHandle;
     this.ownerThread = ownerThread;
     this.maxRenderPixels = maxRenderPixels;
     this.onClose = onClose;
@@ -386,6 +389,16 @@ public final class PdfPage implements AutoCloseable {
   }
 
   /**
+   * Check if this page appears to be blank — no text and no embedded images. This is a lightweight
+   * heuristic useful for detecting filler pages in scanned books.
+   *
+   * @return true if the page has no extractable text and no embedded images
+   */
+  public boolean isBlank() {
+    return charCount() == 0 && imageCount() == 0;
+  }
+
+  /**
    * Get all annotations on this page.
    *
    * @return list of annotations, or empty list if none
@@ -501,6 +514,147 @@ public final class PdfPage implements AutoCloseable {
             }
           }
         });
+  }
+
+  /**
+   * Get the number of image objects embedded on this page. This counts inline images and image
+   * XObjects, not rendered visuals.
+   *
+   * @return number of embedded images, or 0 if none
+   */
+  public int imageCount() {
+    ensureOpen();
+    try {
+      int total = (int) EditBindings.FPDFPage_CountObjects.invokeExact(handle);
+      int count = 0;
+      for (int i = 0; i < total; i++) {
+        MemorySegment obj = (MemorySegment) EditBindings.FPDFPage_GetObject.invokeExact(handle, i);
+        if (!FfmHelper.isNull(obj)) {
+          int type = (int) EditBindings.FPDFPageObj_GetType.invokeExact(obj);
+          if (type == EditBindings.FPDF_PAGEOBJ_IMAGE) {
+            count++;
+          }
+        }
+      }
+      return count;
+    } catch (PdfiumException e) {
+      throw e;
+    } catch (Throwable t) {
+      throw new PdfiumException("Failed to count images", t);
+    }
+  }
+
+  /**
+   * Get metadata about all embedded images on this page. This is a lightweight method that returns
+   * image dimensions and DPI without extracting pixel data.
+   *
+   * @return list of embedded image metadata, or empty list if none
+   */
+  public List<EmbeddedImage> embeddedImages() {
+    ensureOpen();
+    try {
+      int total = (int) EditBindings.FPDFPage_CountObjects.invokeExact(handle);
+      List<EmbeddedImage> images = new ArrayList<>();
+      int imageIndex = 0;
+
+      for (int i = 0; i < total; i++) {
+        MemorySegment obj = (MemorySegment) EditBindings.FPDFPage_GetObject.invokeExact(handle, i);
+        if (FfmHelper.isNull(obj)) continue;
+
+        int type = (int) EditBindings.FPDFPageObj_GetType.invokeExact(obj);
+        if (type != EditBindings.FPDF_PAGEOBJ_IMAGE) continue;
+
+        try (Arena arena = Arena.ofConfined()) {
+          MemorySegment meta = arena.allocate(EditBindings.IMAGE_METADATA_LAYOUT);
+          int ok = (int) EditBindings.FPDFImageObj_GetImageMetadata.invokeExact(obj, handle, meta);
+          if (ok != 0) {
+            int w = meta.get(ValueLayout.JAVA_INT, 0);
+            int h = meta.get(ValueLayout.JAVA_INT, 4);
+            float hdpi = meta.get(ValueLayout.JAVA_FLOAT, 8);
+            float vdpi = meta.get(ValueLayout.JAVA_FLOAT, 12);
+            int bpp = meta.get(ValueLayout.JAVA_INT, 16);
+            images.add(new EmbeddedImage(imageIndex, w, h, bpp, hdpi, vdpi));
+          }
+        }
+        imageIndex++;
+      }
+      return List.copyOf(images);
+    } catch (PdfiumException e) {
+      throw e;
+    } catch (Throwable t) {
+      throw new PdfiumException("Failed to get embedded images", t);
+    }
+  }
+
+  /**
+   * Render a specific embedded image to pixel data. The image is rendered with its original
+   * dimensions. Use the index from {@link EmbeddedImage#index()}.
+   *
+   * @param imageIndex the image index among image objects on this page (0-based)
+   * @return rendered pixel data
+   * @throws IllegalArgumentException if imageIndex is invalid
+   */
+  public RenderResult renderEmbeddedImage(int imageIndex) {
+    ensureOpen();
+    try {
+      int total = (int) EditBindings.FPDFPage_CountObjects.invokeExact(handle);
+      int currentImageIndex = 0;
+
+      for (int i = 0; i < total; i++) {
+        MemorySegment obj = (MemorySegment) EditBindings.FPDFPage_GetObject.invokeExact(handle, i);
+        if (FfmHelper.isNull(obj)) continue;
+
+        int type = (int) EditBindings.FPDFPageObj_GetType.invokeExact(obj);
+        if (type != EditBindings.FPDF_PAGEOBJ_IMAGE) continue;
+
+        if (currentImageIndex == imageIndex) {
+          MemorySegment bitmap = MemorySegment.NULL;
+          try {
+            bitmap =
+                (MemorySegment)
+                    EditBindings.FPDFImageObj_GetRenderedBitmap.invokeExact(
+                        documentHandle, handle, obj);
+            if (FfmHelper.isNull(bitmap)) {
+              throw new PdfiumException(
+                  "FPDFImageObj_GetRenderedBitmap failed for image " + imageIndex);
+            }
+
+            int w = (int) BitmapBindings.FPDFBitmap_GetWidth.invokeExact(bitmap);
+            int h = (int) BitmapBindings.FPDFBitmap_GetHeight.invokeExact(bitmap);
+            int stride = (int) BitmapBindings.FPDFBitmap_GetStride.invokeExact(bitmap);
+            MemorySegment buffer =
+                (MemorySegment) BitmapBindings.FPDFBitmap_GetBuffer.invokeExact(bitmap);
+
+            byte[] rgba = buffer.reinterpret((long) stride * h).toArray(ValueLayout.JAVA_BYTE);
+
+            if (stride != w * BYTES_PER_PIXEL) {
+              byte[] packed = new byte[w * h * BYTES_PER_PIXEL];
+              for (int row = 0; row < h; row++) {
+                System.arraycopy(
+                    rgba, row * stride, packed, row * w * BYTES_PER_PIXEL, w * BYTES_PER_PIXEL);
+              }
+              rgba = packed;
+            }
+
+            return new RenderResult(w, h, rgba);
+          } finally {
+            if (!FfmHelper.isNull(bitmap)) {
+              try {
+                BitmapBindings.FPDFBitmap_Destroy.invokeExact(bitmap);
+              } catch (Throwable ignored) {
+              }
+            }
+          }
+        }
+        currentImageIndex++;
+      }
+      throw new IllegalArgumentException(
+          "Image index " + imageIndex + " not found, page has " + currentImageIndex + " images");
+    } catch (PdfiumException | IllegalArgumentException e) {
+      throw e;
+    } catch (Throwable t) {
+      throw new PdfiumException("Failed to render embedded image " + imageIndex, t);
+    }
   }
 
   private static String getWebLinkUrl(MemorySegment pageLink, int linkIndex) {

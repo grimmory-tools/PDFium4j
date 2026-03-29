@@ -1,6 +1,14 @@
 package org.grimmory.pdfium4j.model;
 
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import javax.imageio.IIOImage;
+import javax.imageio.ImageIO;
+import javax.imageio.ImageWriteParam;
+import javax.imageio.ImageWriter;
+import javax.imageio.stream.ImageOutputStream;
 
 /**
  * Result of rendering a PDF page: raw pixel data plus dimensions.
@@ -52,5 +60,74 @@ public record RenderResult(int width, int height, byte[] rgba) {
     }
     img.setRGB(0, 0, width, height, pixels, 0, width);
     return img;
+  }
+
+  /**
+   * Encode this render result as JPEG bytes with the specified quality.
+   *
+   * @param quality JPEG quality from 0.0 (worst) to 1.0 (best)
+   * @return JPEG-encoded bytes
+   * @throws UncheckedIOException if encoding fails
+   */
+  public byte[] toJpegBytes(float quality) {
+    if (quality < 0f || quality > 1f) {
+      throw new IllegalArgumentException(
+          "JPEG quality must be between 0.0 and 1.0, got: " + quality);
+    }
+    BufferedImage img = toBufferedImage();
+    try {
+      // Convert ARGB to RGB (JPEG doesn't support alpha)
+      BufferedImage rgb = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+      rgb.createGraphics().drawImage(img, 0, 0, null);
+      img.flush();
+
+      ImageWriter writer = ImageIO.getImageWritersByFormatName("JPEG").next();
+      try {
+        ImageWriteParam param = writer.getDefaultWriteParam();
+        param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+        param.setCompressionQuality(quality);
+
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        try (ImageOutputStream ios = ImageIO.createImageOutputStream(baos)) {
+          writer.setOutput(ios);
+          writer.write(null, new IIOImage(rgb, null, null), param);
+        }
+        return baos.toByteArray();
+      } finally {
+        writer.dispose();
+        rgb.flush();
+      }
+    } catch (IOException e) {
+      throw new UncheckedIOException("Failed to encode JPEG", e);
+    }
+  }
+
+  /**
+   * Encode this render result as JPEG bytes with default quality (0.85).
+   *
+   * @return JPEG-encoded bytes
+   * @throws UncheckedIOException if encoding fails
+   */
+  public byte[] toJpegBytes() {
+    return toJpegBytes(0.85f);
+  }
+
+  /**
+   * Encode this render result as PNG bytes (lossless, with alpha).
+   *
+   * @return PNG-encoded bytes
+   * @throws UncheckedIOException if encoding fails
+   */
+  public byte[] toPngBytes() {
+    BufferedImage img = toBufferedImage();
+    try {
+      ByteArrayOutputStream baos = new ByteArrayOutputStream();
+      ImageIO.write(img, "PNG", baos);
+      return baos.toByteArray();
+    } catch (IOException e) {
+      throw new UncheckedIOException("Failed to encode PNG", e);
+    } finally {
+      img.flush();
+    }
   }
 }

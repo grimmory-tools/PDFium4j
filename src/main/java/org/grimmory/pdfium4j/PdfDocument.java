@@ -228,6 +228,27 @@ public final class PdfDocument implements AutoCloseable {
   }
 
   /**
+   * Create a new empty PDF document.
+   *
+   * @throws PdfiumException if the document cannot be created
+   */
+  public static PdfDocument create() {
+    PdfiumLibrary.ensureInitialized();
+    try {
+      MemorySegment handle = (MemorySegment) EditBindings.FPDF_CreateNewDocument.invokeExact();
+      if (handle.equals(MemorySegment.NULL)) {
+        throw new PdfiumException("Failed to create new PDF document");
+      }
+      return new PdfDocument(
+          handle, null, null, null, PdfProcessingPolicy.defaultPolicy(), Thread.currentThread());
+    } catch (PdfiumException e) {
+      throw e;
+    } catch (Throwable t) {
+      throw new PdfiumException("Failed to create new PDF document", t);
+    }
+  }
+
+  /**
    * Open a PDF from a file path.
    *
    * @throws PdfPasswordException if the PDF is encrypted
@@ -405,6 +426,7 @@ public final class PdfDocument implements AutoCloseable {
       PdfPage page =
           new PdfPage(
               pageSeg,
+              handle,
               ownerThread,
               policy.maxRenderPixels(),
               () -> unregisterPage(holder[0]),
@@ -582,6 +604,43 @@ public final class PdfDocument implements AutoCloseable {
   public Map<Integer, RenderResult> renderAllPages(int dpi) {
     List<Integer> indices = IntStream.range(0, pageCount()).boxed().toList();
     return renderPages(indices, dpi);
+  }
+
+  /**
+   * Render a single page and return encoded image bytes. This is a convenience method that handles
+   * page opening, rendering, encoding, and resource cleanup in a single call.
+   *
+   * @param pageIndex 0-based page index
+   * @param dpi render resolution (e.g. 150 for thumbnails, 300 for high quality)
+   * @param format image format: "jpeg" or "png"
+   * @return encoded image bytes
+   * @throws IllegalArgumentException if format is not "jpeg" or "png", or pageIndex is invalid
+   */
+  public byte[] renderPageToBytes(int pageIndex, int dpi, String format) {
+    return renderPageToBytes(pageIndex, dpi, format, 0.85f);
+  }
+
+  /**
+   * Render a single page and return encoded image bytes with configurable JPEG quality.
+   *
+   * @param pageIndex 0-based page index
+   * @param dpi render resolution
+   * @param format image format: "jpeg" or "png"
+   * @param jpegQuality JPEG quality from 0.0 to 1.0 (ignored for PNG)
+   * @return encoded image bytes
+   * @throws IllegalArgumentException if format is not "jpeg" or "png", or pageIndex is invalid
+   */
+  public byte[] renderPageToBytes(int pageIndex, int dpi, String format, float jpegQuality) {
+    Objects.requireNonNull(format, "format");
+    String fmt = format.toLowerCase(java.util.Locale.ROOT);
+    if (!fmt.equals("jpeg") && !fmt.equals("png")) {
+      throw new IllegalArgumentException("Format must be 'jpeg' or 'png', got: " + format);
+    }
+
+    try (PdfPage page = page(pageIndex)) {
+      RenderResult result = page.render(dpi);
+      return fmt.equals("png") ? result.toPngBytes() : result.toJpegBytes(jpegQuality);
+    }
   }
 
   /**
@@ -815,6 +874,45 @@ public final class PdfDocument implements AutoCloseable {
       return value.isEmpty() ? Optional.empty() : Optional.of(value);
     } catch (Throwable t) {
       throw new PdfiumException("Failed to read metadata: " + tag.pdfKey(), t);
+    }
+  }
+
+  /**
+   * Get a metadata value by an arbitrary Info Dictionary key string. This allows reading
+   * non-standard keys like "EBX_PUBLISHER" that are not covered by {@link MetadataTag}.
+   *
+   * @param key the raw Info Dictionary key name (e.g. "Title", "EBX_PUBLISHER")
+   * @return the value, or empty if not present
+   */
+  public Optional<String> metadata(String key) {
+    ensureOpen();
+    Objects.requireNonNull(key, "key");
+
+    // Check if it matches a standard tag with pending value
+    for (Map.Entry<MetadataTag, String> entry : pendingMetadata.entrySet()) {
+      if (entry.getKey().pdfKey().equals(key)) {
+        String value = entry.getValue();
+        return (value == null || value.isEmpty()) ? Optional.empty() : Optional.of(value);
+      }
+    }
+
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment keySeg = arena.allocateFrom(key);
+
+      long needed =
+          (long) DocBindings.FPDF_GetMetaText.invokeExact(handle, keySeg, MemorySegment.NULL, 0L);
+      if (needed <= 2) return Optional.empty();
+
+      MemorySegment buf = arena.allocate(needed);
+      long written = (long) DocBindings.FPDF_GetMetaText.invokeExact(handle, keySeg, buf, needed);
+      if (written <= 2) {
+        return Optional.empty();
+      }
+
+      String value = FfmHelper.fromWideString(buf, needed);
+      return value.isEmpty() ? Optional.empty() : Optional.of(value);
+    } catch (Throwable t) {
+      throw new PdfiumException("Failed to read metadata: " + key, t);
     }
   }
 
