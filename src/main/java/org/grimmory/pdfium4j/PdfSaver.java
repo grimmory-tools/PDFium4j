@@ -31,10 +31,8 @@ final class PdfSaver {
   private static final ThreadLocal<ByteArrayOutputStream> WRITE_BUFFER = new ThreadLocal<>();
   private static final Pattern METADATA_REF_PATTERN =
       Pattern.compile("/Metadata\\s+\\d+\\s+\\d+\\s+R");
-  private static final Pattern ROOT_REF_PATTERN =
-      Pattern.compile("/Root\\s+(\\d+\\s+\\d+\\s+R)");
-  private static final Pattern INFO_REF_PATTERN =
-      Pattern.compile("/Info\\s+(\\d+\\s+\\d+\\s+R)");
+  private static final Pattern ROOT_REF_PATTERN = Pattern.compile("/Root\\s+(\\d+\\s+\\d+\\s+R)");
+  private static final Pattern INFO_REF_PATTERN = Pattern.compile("/Info\\s+(\\d+\\s+\\d+\\s+R)");
   private static final Pattern OBJ_NUM_PATTERN = Pattern.compile("(\\d+)\\s+0\\s+obj\\b");
   private static final Pattern FIRST_INT_PATTERN = Pattern.compile("(\\d+)");
 
