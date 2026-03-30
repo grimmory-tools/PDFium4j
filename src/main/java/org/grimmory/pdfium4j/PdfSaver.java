@@ -713,11 +713,24 @@ final class PdfSaver {
   /**
    * Find the dictionary for a specific object by number. Searches backwards from the end of the
    * file to find the latest version of the object (incremental updates append newer versions).
+   *
+   * <p>Uses word-boundary matching: the character before the marker must not be a digit. This
+   * prevents "15 0 obj" from matching inside "615 0 obj".
    */
   private static String findObjectDict(String text, int objNum) {
     String marker = objNum + " 0 obj";
-    int idx = text.lastIndexOf(marker);
-    if (idx < 0) return null;
+    int searchFrom = text.length();
+    int idx;
+    while (true) {
+      idx = text.lastIndexOf(marker, searchFrom);
+      if (idx < 0) return null;
+      // Check word boundary: character before marker must not be a digit
+      if (idx > 0 && Character.isDigit(text.charAt(idx - 1))) {
+        searchFrom = idx - 1;
+        continue;
+      }
+      break;
+    }
 
     int dictStart = text.indexOf("<<", idx);
     if (dictStart < 0) return null;
@@ -745,11 +758,23 @@ final class PdfSaver {
    * Find the dictionary for a specific object by searching byte data directly. Avoids converting
    * the entire PDF to a String (which for a 50MB PDF would allocate ~100MB for Java's UTF-16
    * chars). Only the located dictionary bytes (~100-500 bytes) are converted to a String.
+   *
+   * <p>Uses word-boundary matching: the byte before the marker must be a whitespace character or
+   * absent (start of data). This prevents "15 0 obj" from matching inside "615 0 obj".
    */
   private static String findObjectDictFromBytes(byte[] pdf, int objNum) {
     byte[] marker = (objNum + " 0 obj").getBytes(StandardCharsets.ISO_8859_1);
-    int idx = lastIndexOfBytes(pdf, marker);
-    if (idx < 0) return null;
+    int idx = pdf.length;
+    while (true) {
+      idx = lastIndexOfBytes(pdf, marker, idx - 1);
+      if (idx < 0) return null;
+      // Check word boundary: character before marker must not be a digit
+      if (idx > 0 && pdf[idx - 1] >= '0' && pdf[idx - 1] <= '9') {
+        // False match "15 0 obj" inside "615 0 obj"; keep searching
+        continue;
+      }
+      break;
+    }
 
     // Find << after the marker
     int searchStart = idx + marker.length;
@@ -777,16 +802,22 @@ final class PdfSaver {
     return null;
   }
 
-  /** Search backwards for a byte pattern in a byte array. */
-  private static int lastIndexOfBytes(byte[] data, byte[] pattern) {
+  /** Search backwards for a byte pattern in a byte array, starting from a given upper bound. */
+  private static int lastIndexOfBytes(byte[] data, byte[] pattern, int fromIndex) {
+    int start = Math.min(fromIndex, data.length - pattern.length);
     outer:
-    for (int i = data.length - pattern.length; i >= 0; i--) {
+    for (int i = start; i >= 0; i--) {
       for (int j = 0; j < pattern.length; j++) {
         if (data[i + j] != pattern[j]) continue outer;
       }
       return i;
     }
     return -1;
+  }
+
+  /** Search backwards for a byte pattern in a byte array. */
+  private static int lastIndexOfBytes(byte[] data, byte[] pattern) {
+    return lastIndexOfBytes(data, pattern, data.length - pattern.length);
   }
 
   /** Search forwards for a byte pattern in a byte array starting from a given offset. */
