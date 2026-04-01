@@ -51,6 +51,7 @@ public final class PdfDocument implements AutoCloseable {
   private final Thread ownerThread;
   private final List<PdfPage> openPages;
   private volatile boolean closed = false;
+  private boolean structurallyModified = false;
   private final Map<MetadataTag, String> pendingMetadata = new LinkedHashMap<>();
   private String pendingXmpMetadata = null;
 
@@ -685,6 +686,7 @@ public final class PdfDocument implements AutoCloseable {
     }
     try {
       EditBindings.FPDFPage_Delete.invokeExact(handle, pageIndex);
+      structurallyModified = true;
     } catch (Throwable t) {
       throw new PdfiumException("Failed to delete page " + pageIndex, t);
     }
@@ -712,6 +714,7 @@ public final class PdfDocument implements AutoCloseable {
         if (generated == 0) {
           throw new PdfiumException("FPDFPage_GenerateContent failed for index " + pageIndex);
         }
+        structurallyModified = true;
       } finally {
         ViewBindings.FPDF_ClosePage.invokeExact(pageSeg);
       }
@@ -751,6 +754,7 @@ public final class PdfDocument implements AutoCloseable {
       if (ok == 0) {
         throw new PdfiumException("FPDF_ImportPages failed for range: " + pageRange);
       }
+      structurallyModified = true;
     } catch (PdfiumException e) {
       throw e;
     } catch (Throwable t) {
@@ -1278,8 +1282,36 @@ public final class PdfDocument implements AutoCloseable {
   public byte[] saveToBytes(SaveOptions options) {
     ensureOpen();
     Map<MetadataTag, String> mergedMetadata = buildMergedMetadata();
+    boolean hasMetadataUpdate =
+        (mergedMetadata != null && !mergedMetadata.isEmpty())
+            || (pendingXmpMetadata != null && !pendingXmpMetadata.isEmpty());
+    byte[] originalBytes = (!structurallyModified && hasMetadataUpdate) ? getOriginalBytes() : null;
     return PdfSaver.saveToBytes(
-        handle, mergedMetadata, pendingXmpMetadata, options.skipValidation());
+        handle, mergedMetadata, pendingXmpMetadata, options.skipValidation(), originalBytes);
+  }
+
+  /**
+   * Get the original PDF bytes for this document, if available. Used for metadata-only saves to
+   * avoid re-serializing through PDFium (which unpacks Object Streams and causes bloating).
+   *
+   * @return original bytes, or {@code null} if not available (e.g. document was created new)
+   */
+  private byte[] getOriginalBytes() {
+    if (sourceBytes != null) {
+      return sourceBytes;
+    }
+    if (sourcePath != null) {
+      try {
+        return Files.readAllBytes(sourcePath);
+      } catch (IOException e) {
+        LOG.log(
+            System.Logger.Level.WARNING,
+            "Could not read original bytes from {0}; falling back to native save",
+            sourcePath);
+        return null;
+      }
+    }
+    return null;
   }
 
   /**

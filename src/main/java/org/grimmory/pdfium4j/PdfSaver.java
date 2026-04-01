@@ -73,7 +73,7 @@ final class PdfSaver {
    */
   static byte[] saveToBytes(
       MemorySegment docHandle, Map<MetadataTag, String> pendingMetadata, String pendingXmp) {
-    return saveToBytes(docHandle, pendingMetadata, pendingXmp, false);
+    return saveToBytes(docHandle, pendingMetadata, pendingXmp, false, null);
   }
 
   /**
@@ -82,16 +82,29 @@ final class PdfSaver {
    * @param skipValidation when {@code true}, skip the re-parse validation step after appending an
    *     incremental update. Eliminates a full PDF re-open (~30-40% of save time). Safe for
    *     metadata-only changes.
+   * @param originalBytes when non-null, use these as the base PDF bytes instead of calling
+   *     FPDF_SaveAsCopy. This avoids re-serializing through PDFium which unpacks Object Streams
+   *     and causes massive file bloating on complex PDFs.
    */
   static byte[] saveToBytes(
       MemorySegment docHandle,
       Map<MetadataTag, String> pendingMetadata,
       String pendingXmp,
-      boolean skipValidation) {
-    byte[] baseBytes = nativeSave(docHandle);
-
+      boolean skipValidation,
+      byte[] originalBytes) {
     boolean hasInfoUpdate = pendingMetadata != null && !pendingMetadata.isEmpty();
     boolean hasXmpUpdate = pendingXmp != null && !pendingXmp.isEmpty();
+
+    // When original bytes are available and we have metadata to write,
+    // skip native save entirely — append incremental update directly to the
+    // original file bytes. This preserves Object Streams and prevents bloating.
+    byte[] baseBytes;
+    if (originalBytes != null && (hasInfoUpdate || hasXmpUpdate)) {
+      baseBytes = originalBytes;
+    } else {
+      baseBytes = nativeSave(docHandle);
+    }
+
     if (!hasInfoUpdate && !hasXmpUpdate) {
       return baseBytes;
     }

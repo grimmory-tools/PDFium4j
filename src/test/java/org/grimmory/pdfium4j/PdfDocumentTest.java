@@ -1667,4 +1667,107 @@ class PdfDocumentTest {
       assertEquals(List.of("Second Author"), parsed.creators());
     }
   }
+
+  @Test
+  @EnabledIf("pdfiumAvailable")
+  void metadataOnlySaveDoesNotBloatFile(@TempDir Path tempDir) throws IOException {
+    Path testPdf = getTestPdf();
+    if (testPdf == null) return;
+
+    long originalSize = Files.size(testPdf);
+
+    Path output = tempDir.resolve("metadata-only.pdf");
+    try (PdfDocument doc = PdfDocument.open(testPdf)) {
+      doc.setMetadata(MetadataTag.TITLE, "New Title");
+      doc.setMetadata(MetadataTag.AUTHOR, "New Author");
+      doc.setMetadata(MetadataTag.KEYWORDS, "keyword1; keyword2");
+      doc.save(output);
+    }
+
+    long savedSize = Files.size(output);
+    // Incremental update should add only a few KB for metadata objects + xref,
+    // not re-serialize the entire PDF. Allow 5% overhead.
+    assertTrue(
+        savedSize <= originalSize * 1.05 + 4096,
+        "Metadata-only save bloated file from " + originalSize + " to " + savedSize + " bytes");
+
+    // Verify the saved PDF is valid and metadata is readable
+    try (PdfDocument doc = PdfDocument.open(output)) {
+      assertEquals("New Title", doc.metadata(MetadataTag.TITLE).orElse(""));
+      assertEquals("New Author", doc.metadata(MetadataTag.AUTHOR).orElse(""));
+      assertTrue(doc.pageCount() > 0, "Saved PDF must have pages");
+    }
+  }
+
+  @Test
+  @EnabledIf("pdfiumAvailable")
+  void metadataAndXmpSaveDoesNotBloatFile(@TempDir Path tempDir) throws IOException {
+    Path testPdf = getTestPdf();
+    if (testPdf == null) return;
+
+    long originalSize = Files.size(testPdf);
+
+    Path output = tempDir.resolve("xmp-metadata.pdf");
+    try (PdfDocument doc = PdfDocument.open(testPdf)) {
+      doc.setMetadata(MetadataTag.TITLE, "XMP Title");
+      doc.setMetadata(MetadataTag.AUTHOR, "XMP Author");
+      doc.setXmpMetadata(buildBookloreXmp("XMP Title", "XMP Author"));
+      doc.save(output);
+    }
+
+    long savedSize = Files.size(output);
+    assertTrue(
+        savedSize <= originalSize * 1.05 + 8192,
+        "Metadata+XMP save bloated file from " + originalSize + " to " + savedSize + " bytes");
+
+    try (PdfDocument doc = PdfDocument.open(output)) {
+      assertEquals("XMP Title", doc.metadata(MetadataTag.TITLE).orElse(""));
+      XmpMetadata parsed = XmpMetadataParser.parse(doc.xmpMetadata());
+      assertEquals("XMP Title", parsed.title().orElse(""));
+      assertTrue(doc.pageCount() > 0, "Saved PDF must have pages");
+    }
+  }
+
+  @Test
+  @EnabledIf("pdfiumAvailable")
+  void structuralChangeStillUsesNativeSave(@TempDir Path tempDir) throws IOException {
+    Path testPdf = getTestPdf();
+    if (testPdf == null) return;
+
+    Path output = tempDir.resolve("structural.pdf");
+    try (PdfDocument doc = PdfDocument.open(testPdf)) {
+      int originalCount = doc.pageCount();
+      doc.insertBlankPage(originalCount, PageSize.A4);
+      doc.setMetadata(MetadataTag.TITLE, "Structural Change");
+      doc.save(output);
+
+      // Re-open and verify the structural change persisted
+      try (PdfDocument saved = PdfDocument.open(output)) {
+        assertEquals(originalCount + 1, saved.pageCount());
+        assertEquals("Structural Change", saved.metadata(MetadataTag.TITLE).orElse(""));
+      }
+    }
+  }
+
+  @Test
+  @EnabledIf("pdfiumAvailable")
+  void metadataOnlySaveFromBytesDoesNotBloat() {
+    byte[] pdf = minimalPdfWithText();
+    int originalSize = pdf.length;
+
+    byte[] saved;
+    try (PdfDocument doc = PdfDocument.open(pdf)) {
+      doc.setMetadata(MetadataTag.TITLE, "From Bytes Title");
+      saved = doc.saveToBytes();
+    }
+
+    // Should not be dramatically larger than original
+    assertTrue(
+        saved.length <= originalSize * 1.5 + 4096,
+        "Metadata-only save from bytes bloated from " + originalSize + " to " + saved.length);
+
+    try (PdfDocument doc = PdfDocument.open(saved)) {
+      assertEquals("From Bytes Title", doc.metadata(MetadataTag.TITLE).orElse(""));
+    }
+  }
 }
