@@ -16,6 +16,13 @@ import org.grimmory.pdfium4j.exception.NativeLoadException;
 
 public final class NativeLoader {
 
+  /**
+   * System property: absolute filesystem path to a pdfium native library. When set, {@link
+   * #ensureLoaded()} loads this path directly via {@code System.load} and skips both classpath
+   * extraction and {@code System.loadLibrary("pdfium")} lookup.
+   */
+  public static final String PROP_LIBRARY_PATH = "pdfium4j.library.path";
+
   private static volatile boolean loaded = false;
   private static volatile Throwable loadError = null;
 
@@ -32,28 +39,52 @@ public final class NativeLoader {
         throw new NativeLoadException("Native library failed to load previously", loadError);
       }
       try {
-        tryLoadFromClasspath();
+        performLoad();
         loaded = true;
-      } catch (NativeLoadException classpathMiss) {
-        try {
-          System.loadLibrary("pdfium");
-          loaded = true;
-        } catch (UnsatisfiedLinkError e) {
-          NativeLoadException ex =
-              new NativeLoadException(
-                  "PDFium native library not found for "
-                      + detectPlatform()
-                      + ". Also tried System.loadLibrary(\"pdfium\") and failed.",
-                  classpathMiss);
-          ex.addSuppressed(e);
-          loadError = ex;
-          throw ex;
-        }
+      } catch (NativeLoadException e) {
+        loadError = e;
+        throw e;
       } catch (Throwable t) {
         loadError = t;
-        throw (t instanceof NativeLoadException nativeLoadException)
-            ? nativeLoadException
-            : new NativeLoadException("Failed to load native library", t);
+        throw new NativeLoadException("Failed to load native library", t);
+      }
+    }
+  }
+
+  private static void performLoad() {
+    try {
+      String overridePath = System.getProperty(PROP_LIBRARY_PATH);
+      if (overridePath != null && !overridePath.isBlank()) {
+        try {
+          System.load(overridePath);
+          return;
+        } catch (UnsatisfiedLinkError e) {
+          throw new NativeLoadException(
+              "PDFium override path set via -D"
+                  + PROP_LIBRARY_PATH
+                  + "="
+                  + overridePath
+                  + " but loading that file failed",
+              e);
+        }
+      }
+
+      tryLoadFromClasspath();
+    } catch (NativeLoadException classpathMiss) {
+      try {
+        System.loadLibrary("pdfium");
+      } catch (UnsatisfiedLinkError e) {
+        NativeLoadException ex =
+            new NativeLoadException(
+                "PDFium native library not found for "
+                    + detectPlatform()
+                    + ". Also tried System.loadLibrary(\"pdfium\") and failed. "
+                    + "Set -D"
+                    + PROP_LIBRARY_PATH
+                    + "=/path/to/libpdfium.<ext> to load a system copy explicitly.",
+                classpathMiss);
+        ex.addSuppressed(e);
+        throw ex;
       }
     }
   }
