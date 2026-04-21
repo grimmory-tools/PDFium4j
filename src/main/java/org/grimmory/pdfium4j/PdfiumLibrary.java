@@ -15,30 +15,27 @@ import org.grimmory.pdfium4j.internal.ViewBindings;
  *
  * <h2>Concurrency model</h2>
  *
- * <p>Initialization is driven by the <b>Initialization-on-demand holder idiom</b>
- * (JLS §12.4.2): the JVM class-loader lock guarantees {@code FPDF_InitLibraryWithConfig}
- * is invoked exactly once per JVM, under the class-loader initialization lock,
- * before any thread can observe a successful state. No explicit synchronized
- * block, volatile read, or double-checked locking is needed on the hot path.
+ * <p>Initialization is driven by the <b>Initialization-on-demand holder idiom</b> (JLS §12.4.2):
+ * the JVM class-loader lock guarantees {@code FPDF_InitLibraryWithConfig} is invoked exactly once
+ * per JVM, under the class-loader initialization lock, before any thread can observe a successful
+ * state. No explicit synchronized block, volatile read, or double-checked locking is needed on the
+ * hot path.
  *
- * <p>This makes {@link #initialize()} and {@link #isAvailable()} safe to call
- * from any thread at any time, including concurrent {@code @BeforeAll} hooks
- * in a parallel JUnit test run.
+ * <p>This makes {@link #initialize()} and {@link #isAvailable()} safe to call from any thread at
+ * any time, including concurrent {@code @BeforeAll} hooks in a parallel JUnit test run.
  *
- * <p>After initialization, independent {@link PdfDocument} instances on separate
- * threads are safe. A single document or page handle must not be accessed
- * concurrently.
+ * <p>After initialization, independent {@link PdfDocument} instances on separate threads are safe.
+ * A single document or page handle must not be accessed concurrently.
  *
  * <h2>System properties</h2>
  *
  * <ul>
- *   <li><b>{@value #PROP_LIBRARY_PATH}</b>, absolute filesystem path to
- *       a {@code libpdfium} binary. When set, this path is loaded directly via
- *       {@code System.load} and classpath extraction is skipped. Useful when
- *       pdfium is installed system-wide (e.g. an Alpine Docker image).</li>
- *   <li><b>{@value #PROP_AUTOINIT}</b>, when {@code "false"}, {@link PdfDocument}
- *       operations will not auto-trigger initialization. Callers must invoke
- *       {@link #initialize()} explicitly. Default: {@code "true"}.</li>
+ *   <li><b>{@value #PROP_LIBRARY_PATH}</b>, absolute filesystem path to a {@code libpdfium} binary.
+ *       When set, this path is loaded directly via {@code System.load} and classpath extraction is
+ *       skipped. Useful when pdfium is installed system-wide (e.g. an Alpine Docker image).
+ *   <li><b>{@value #PROP_AUTOINIT}</b>, when {@code "false"}, {@link PdfDocument} operations will
+ *       not auto-trigger initialization. Callers must invoke {@link #initialize()} explicitly.
+ *       Default: {@code "true"}.
  * </ul>
  */
 public final class PdfiumLibrary {
@@ -64,10 +61,10 @@ public final class PdfiumLibrary {
   /**
    * Non-throwing availability probe.
    *
-   * <p>Returns {@code true} if the native library has been successfully loaded and
-   * {@code FPDF_InitLibraryWithConfig} has been invoked. Returns {@code false} if
-   * initialization has failed, the cause is suppressed, never re-thrown from this
-   * method. Safe to call from any thread.
+   * <p>Returns {@code true} if the native library has been successfully loaded and {@code
+   * FPDF_InitLibraryWithConfig} has been invoked. Returns {@code false} if initialization has
+   * failed, the cause is suppressed, never re-thrown from this method. Safe to call from any
+   * thread.
    *
    * <p>This is the preferred way to gate optional functionality:
    *
@@ -84,9 +81,9 @@ public final class PdfiumLibrary {
   }
 
   /**
-   * Returns the Throwable that caused initialization to fail, or {@code null}
-   * if initialization succeeded or has not yet been attempted for reasons
-   * other than failure. Useful for diagnostics/logging without forcing a throw.
+   * Returns the Throwable that caused initialization to fail, or {@code null} if initialization
+   * succeeded or has not yet been attempted for reasons other than failure. Useful for
+   * diagnostics/logging without forcing a throw.
    */
   public static Throwable loadError() {
     return Holder.STATE.loadError;
@@ -97,7 +94,9 @@ public final class PdfiumLibrary {
       // Honour the explicit opt-out; require the caller has already run initialize().
       if (!Holder.STATE.loaded) {
         throw new PdfiumException(
-            "PDFium auto-init is disabled (" + PROP_AUTOINIT + "=false); call PdfiumLibrary.initialize() explicitly");
+            "PDFium auto-init is disabled ("
+                + PROP_AUTOINIT
+                + "=false); call PdfiumLibrary.initialize() explicitly");
       }
       return;
     }

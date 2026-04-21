@@ -17,9 +17,9 @@ import org.grimmory.pdfium4j.exception.NativeLoadException;
 public final class NativeLoader {
 
   /**
-   * System property: absolute filesystem path to a pdfium native library. When set,
-   * {@link #ensureLoaded()} loads this path directly via {@code System.load} and
-   * skips both classpath extraction and {@code System.loadLibrary("pdfium")} lookup.
+   * System property: absolute filesystem path to a pdfium native library. When set, {@link
+   * #ensureLoaded()} loads this path directly via {@code System.load} and skips both classpath
+   * extraction and {@code System.loadLibrary("pdfium")} lookup.
    */
   public static final String PROP_LIBRARY_PATH = "pdfium4j.library.path";
 
