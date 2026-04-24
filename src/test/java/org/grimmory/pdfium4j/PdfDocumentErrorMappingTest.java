@@ -14,7 +14,8 @@ class PdfDocumentErrorMappingTest {
 
   @Test
   void mapOpenError_securityMapsToUnsupportedSecurityException() {
-    PdfiumException exception = PdfDocument.mapOpenError("Failed to open: /tmp/test.pdf", ViewBindings.FPDF_ERR_SECURITY);
+    PdfiumException exception =
+        PdfDocument.mapOpenError("Failed to open: /tmp/test.pdf", ViewBindings.FPDF_ERR_SECURITY);
 
     assertInstanceOf(PdfUnsupportedSecurityException.class, exception);
     assertTrue(exception.getMessage().contains("unsupported security handler"));
