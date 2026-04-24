@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import java.util.*;
 import org.grimmory.pdfium4j.exception.PdfCorruptException;
 import org.grimmory.pdfium4j.exception.PdfPasswordException;
+import org.grimmory.pdfium4j.exception.PdfUnsupportedSecurityException;
 import org.grimmory.pdfium4j.exception.PdfiumException;
 import org.grimmory.pdfium4j.internal.DocBindings;
 import org.grimmory.pdfium4j.internal.EditBindings;
@@ -1449,7 +1450,11 @@ public final class PdfDocument implements AutoCloseable {
       throw new PdfiumException(context);
     }
 
-    throw switch (err) {
+    throw mapOpenError(context, err);
+  }
+
+  static PdfiumException mapOpenError(String context, int err) {
+    return switch (err) {
       case ViewBindings.FPDF_ERR_PASSWORD ->
           new PdfPasswordException(context + " - password required or incorrect");
       case ViewBindings.FPDF_ERR_FORMAT ->
@@ -1457,7 +1462,7 @@ public final class PdfDocument implements AutoCloseable {
       case ViewBindings.FPDF_ERR_FILE ->
           new PdfiumException(context + " - file not found or cannot be opened");
       case ViewBindings.FPDF_ERR_SECURITY ->
-          new PdfiumException(context + " - unsupported security handler");
+          new PdfUnsupportedSecurityException(context + " - unsupported security handler");
       default -> new PdfiumException(context + " - error code " + err);
     };
   }
