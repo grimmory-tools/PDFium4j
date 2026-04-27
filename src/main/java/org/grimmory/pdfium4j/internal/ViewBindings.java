@@ -8,12 +8,9 @@ import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.StructLayout;
 import java.lang.foreign.SymbolLookup;
 import java.lang.invoke.MethodHandle;
+import java.util.Objects;
 
-/**
- * FFM bindings for PDFium core functions from {@code fpdfview.h}.
- *
- * <p>Covers library lifecycle, document loading, page access, and rendering.
- */
+/** FFM bindings for PDFium core functions from {@code fpdfview.h}. */
 public final class ViewBindings {
 
   private static final Linker LINKER = Linker.nativeLinker();
@@ -22,40 +19,32 @@ public final class ViewBindings {
   private ViewBindings() {}
 
   private static MethodHandle downcall(String name, FunctionDescriptor desc) {
-    return LINKER.downcallHandle(
-        LOOKUP
-            .find(name)
-            .orElseThrow(() -> new UnsatisfiedLinkError("PDFium symbol not found: " + name)),
-        desc);
+    return LOOKUP.find(name).map(addr -> LINKER.downcallHandle(addr, desc)).orElse(null);
   }
 
   private static MethodHandle downcallCritical(String name, FunctionDescriptor desc) {
-    return LINKER.downcallHandle(
-        LOOKUP
-            .find(name)
-            .orElseThrow(() -> new UnsatisfiedLinkError("PDFium symbol not found: " + name)),
-        desc,
-        Linker.Option.critical(false));
+    return LOOKUP
+        .find(name)
+        .map(addr -> LINKER.downcallHandle(addr, desc, Linker.Option.critical(false)))
+        .orElse(null);
   }
 
-  /**
-   * Layout of FPDF_LIBRARY_CONFIG struct.
-   *
-   * <pre>{@code
-   * typedef struct FPDF_LIBRARY_CONFIG_ {
-   *     int version;           // must be 2
-   *     const char** m_pUserFontPaths;  // NULL-terminated array (can be NULL)
-   *     void* m_pIsolate;      // V8 isolate (NULL)
-   *     unsigned int m_v8EmbedderSlot; // V8 embedder slot (0)
-   *     const char* m_pPlatform; // platform (NULL)
-   *     void* m_pRendererType;   // renderer type (NULL for default)
-   * } FPDF_LIBRARY_CONFIG;
-   * }</pre>
-   */
+  public static void checkRequired() {
+    Objects.requireNonNull(FPDF_InitLibraryWithConfig, "FPDF_InitLibraryWithConfig");
+    Objects.requireNonNull(FPDF_DestroyLibrary, "FPDF_DestroyLibrary");
+    Objects.requireNonNull(FPDF_LoadDocument, "FPDF_LoadDocument");
+    Objects.requireNonNull(FPDF_CloseDocument, "FPDF_CloseDocument");
+    Objects.requireNonNull(FPDF_GetLastError, "FPDF_GetLastError");
+    Objects.requireNonNull(FPDF_GetPageCount, "FPDF_GetPageCount");
+    Objects.requireNonNull(FPDF_LoadPage, "FPDF_LoadPage");
+    Objects.requireNonNull(FPDF_ClosePage, "FPDF_ClosePage");
+    Objects.requireNonNull(FPDF_RenderPageBitmap, "FPDF_RenderPageBitmap");
+  }
+
   public static final StructLayout LIBRARY_CONFIG_LAYOUT =
       MemoryLayout.structLayout(
           JAVA_INT.withName("version"),
-          MemoryLayout.paddingLayout(4), // alignment padding
+          MemoryLayout.paddingLayout(4),
           ADDRESS.withName("m_pUserFontPaths"),
           ADDRESS.withName("m_pIsolate"),
           JAVA_INT.withName("m_v8EmbedderSlot"),
@@ -63,60 +52,56 @@ public final class ViewBindings {
           ADDRESS.withName("m_pPlatform"),
           ADDRESS.withName("m_pRendererType"));
 
-  /** Initialize PDFium with config. */
+  public static final StructLayout FPDF_FILEACCESS_LAYOUT =
+      MemoryLayout.structLayout(
+          JAVA_LONG.withName("m_FileLen"),
+          ADDRESS.withName("m_GetBlock"),
+          ADDRESS.withName("m_Param"));
+
+  public static final FunctionDescriptor GET_BLOCK_DESC =
+      FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_LONG, ADDRESS, JAVA_LONG);
+
   public static final MethodHandle FPDF_InitLibraryWithConfig =
       downcall("FPDF_InitLibraryWithConfig", FunctionDescriptor.ofVoid(ADDRESS));
 
-  /** Destroy PDFium library. */
   public static final MethodHandle FPDF_DestroyLibrary =
       downcall("FPDF_DestroyLibrary", FunctionDescriptor.ofVoid());
 
-  /** Load PDF from file path. Returns FPDF_DOCUMENT (NULL on failure). */
   public static final MethodHandle FPDF_LoadDocument =
       downcall("FPDF_LoadDocument", FunctionDescriptor.of(ADDRESS, ADDRESS, ADDRESS));
 
-  /** Load PDF from memory buffer. Returns FPDF_DOCUMENT (NULL on failure). */
   public static final MethodHandle FPDF_LoadMemDocument =
       downcall("FPDF_LoadMemDocument", FunctionDescriptor.of(ADDRESS, ADDRESS, JAVA_INT, ADDRESS));
 
-  /** Close a document. */
+  public static final MethodHandle FPDF_LoadCustomDocument =
+      downcall("FPDF_LoadCustomDocument", FunctionDescriptor.of(ADDRESS, ADDRESS, ADDRESS));
+
   public static final MethodHandle FPDF_CloseDocument =
       downcall("FPDF_CloseDocument", FunctionDescriptor.ofVoid(ADDRESS));
 
-  /** Get last error code. */
   public static final MethodHandle FPDF_GetLastError =
       downcallCritical("FPDF_GetLastError", FunctionDescriptor.of(JAVA_LONG));
 
-  /** Get page count. */
   public static final MethodHandle FPDF_GetPageCount =
       downcallCritical("FPDF_GetPageCount", FunctionDescriptor.of(JAVA_INT, ADDRESS));
 
-  /**
-   * Get page size by index without loading the page. Returns non-zero on success, writing
-   * width/height to out params.
-   */
   public static final MethodHandle FPDF_GetPageSizeByIndex =
       downcall(
           "FPDF_GetPageSizeByIndex",
           FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_INT, ADDRESS, ADDRESS));
 
-  /** Load a page. Returns FPDF_PAGE (NULL on failure). */
   public static final MethodHandle FPDF_LoadPage =
       downcall("FPDF_LoadPage", FunctionDescriptor.of(ADDRESS, ADDRESS, JAVA_INT));
 
-  /** Close a page. */
   public static final MethodHandle FPDF_ClosePage =
       downcall("FPDF_ClosePage", FunctionDescriptor.ofVoid(ADDRESS));
 
-  /** Get page width in points (1 pt = 1/72 inch). */
   public static final MethodHandle FPDF_GetPageWidthF =
       downcallCritical("FPDF_GetPageWidthF", FunctionDescriptor.of(JAVA_FLOAT, ADDRESS));
 
-  /** Get page height in points. */
   public static final MethodHandle FPDF_GetPageHeightF =
       downcallCritical("FPDF_GetPageHeightF", FunctionDescriptor.of(JAVA_FLOAT, ADDRESS));
 
-  /** Render page to bitmap. */
   public static final MethodHandle FPDF_RenderPageBitmap =
       downcall(
           "FPDF_RenderPageBitmap",

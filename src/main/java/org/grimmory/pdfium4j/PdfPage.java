@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import org.grimmory.pdfium4j.exception.PdfiumException;
+import org.grimmory.pdfium4j.exception.PdfiumRenderException;
 import org.grimmory.pdfium4j.internal.AnnotBindings;
 import org.grimmory.pdfium4j.internal.BitmapBindings;
 import org.grimmory.pdfium4j.internal.EditBindings;
@@ -212,7 +213,7 @@ public final class PdfPage implements AutoCloseable {
    * regardless of the page's physical dimensions.
    *
    * <p>The page aspect ratio is always preserved. The actual output dimensions will be at most
-   * {@code maxWidth × maxHeight}, but may be smaller.
+   * {@code maxWidth \u00d7 maxHeight}, but may be smaller.
    *
    * @param dpi base render resolution
    * @param maxWidth maximum output width in pixels
@@ -261,6 +262,45 @@ public final class PdfPage implements AutoCloseable {
   }
 
   /**
+   * Render this page at the given DPI, but only if the resulting memory buffer does not exceed the
+   * specified byte limit.
+   *
+   * @param dpi render resolution
+   * @param maxMemoryBytes maximum memory in bytes for the pixel buffer (w * h * 4)
+   * @return rendered pixel data
+   * @throws PdfiumRenderException if the required memory exceeds the limit
+   */
+  public RenderResult renderSafe(int dpi, long maxMemoryBytes) {
+    return renderSafe(dpi, maxMemoryBytes, RenderFlags.DEFAULT);
+  }
+
+  /**
+   * Render this page at the given DPI with custom flags, but only if the resulting memory buffer
+   * does not exceed the specified byte limit.
+   *
+   * @param dpi render resolution
+   * @param maxMemoryBytes maximum memory in bytes
+   * @param flags rendering flags
+   * @return rendered pixel data
+   * @throws PdfiumRenderException if the required memory exceeds the limit
+   */
+  public RenderResult renderSafe(int dpi, long maxMemoryBytes, RenderFlags flags) {
+    ensureOpen();
+    PageSize size = size();
+    int w = size.widthPixels(dpi);
+    int h = size.heightPixels(dpi);
+
+    long requiredBytes = 1L * w * h * BYTES_PER_PIXEL;
+    if (requiredBytes > maxMemoryBytes) {
+      throw new PdfiumRenderException(
+          "Rendering %dx%d at %d DPI requires %d bytes, which exceeds the limit of %d bytes."
+              .formatted(w, h, dpi, requiredBytes, maxMemoryBytes));
+    }
+
+    return renderAtSize(w, h, flags, OPAQUE_WHITE);
+  }
+
+  /**
    * Render a thumbnail of this page, fitting within a square of the given dimension. Uses fast
    * rendering settings optimized for small output.
    *
@@ -287,7 +327,7 @@ public final class PdfPage implements AutoCloseable {
     try {
       bitmap = (MemorySegment) BitmapBindings.FPDFBitmap_Create.invokeExact(w, h, 1);
       if (FfmHelper.isNull(bitmap)) {
-        throw new PdfiumException("FPDFBitmap_Create failed for " + w + "x" + h);
+        throw new PdfiumRenderException("FPDFBitmap_Create failed for %dx%d".formatted(w, h));
       }
 
       BitmapBindings.FPDFBitmap_FillRect.invokeExact(
@@ -299,7 +339,7 @@ public final class PdfPage implements AutoCloseable {
           (MemorySegment) BitmapBindings.FPDFBitmap_GetBuffer.invokeExact(bitmap);
       int stride = (int) BitmapBindings.FPDFBitmap_GetStride.invokeExact(bitmap);
 
-      byte[] rgba = buffer.reinterpret((long) stride * h).toArray(ValueLayout.JAVA_BYTE);
+      byte[] rgba = buffer.reinterpret(1L * stride * h).toArray(ValueLayout.JAVA_BYTE);
 
       if (stride != w * BYTES_PER_PIXEL) {
         byte[] packed = new byte[w * h * BYTES_PER_PIXEL];
@@ -314,7 +354,7 @@ public final class PdfPage implements AutoCloseable {
     } catch (PdfiumException e) {
       throw e;
     } catch (Throwable t) {
-      throw new PdfiumException("Failed to render page at " + w + "x" + h, t);
+      throw new PdfiumRenderException("Failed to render page at %dx%d".formatted(w, h), t);
     } finally {
       if (!FfmHelper.isNull(bitmap)) {
         try {
@@ -389,8 +429,8 @@ public final class PdfPage implements AutoCloseable {
   }
 
   /**
-   * Check if this page appears to be blank — no text and no embedded images. This is a lightweight
-   * heuristic useful for detecting filler pages in scanned books.
+   * Check if this page appears to be blank \u2014 no text and no embedded images. This is a
+   * lightweight heuristic useful for detecting filler pages in scanned books.
    *
    * @return true if the page has no extractable text and no embedded images
    */
@@ -610,17 +650,6 @@ public final class PdfPage implements AutoCloseable {
         if (type != EditBindings.FPDF_PAGEOBJ_IMAGE) continue;
 
         if (currentImageIndex == imageIndex) {
-          try (Arena arena = Arena.ofConfined()) {
-            MemorySegment meta = arena.allocate(EditBindings.IMAGE_METADATA_LAYOUT);
-            int metaOk =
-                (int) EditBindings.FPDFImageObj_GetImageMetadata.invokeExact(obj, handle, meta);
-            if (metaOk != 0) {
-              int metaW = meta.get(ValueLayout.JAVA_INT, 0);
-              int metaH = meta.get(ValueLayout.JAVA_INT, 4);
-              ensureRenderBudget(metaW, metaH);
-            }
-          }
-
           MemorySegment bitmap = MemorySegment.NULL;
           try {
             bitmap =
@@ -628,23 +657,31 @@ public final class PdfPage implements AutoCloseable {
                     EditBindings.FPDFImageObj_GetRenderedBitmap.invokeExact(
                         documentHandle, handle, obj);
             if (FfmHelper.isNull(bitmap)) {
-              throw new PdfiumException(
-                  "FPDFImageObj_GetRenderedBitmap failed for image " + imageIndex);
+              throw new PdfiumRenderException(
+                  "FPDFImageObj_GetRenderedBitmap failed for image %d".formatted(imageIndex));
             }
 
-            int w = (int) BitmapBindings.FPDFBitmap_GetWidth.invokeExact(bitmap);
-            int h = (int) BitmapBindings.FPDFBitmap_GetHeight.invokeExact(bitmap);
+            int bitmapW = (int) BitmapBindings.FPDFBitmap_GetWidth.invokeExact(bitmap);
+            int bitmapH = (int) BitmapBindings.FPDFBitmap_GetHeight.invokeExact(bitmap);
+
+            // Bounded memory check using actual bitmap dimensions
+            ensureRenderBudget(bitmapW, bitmapH);
+
             int stride = (int) BitmapBindings.FPDFBitmap_GetStride.invokeExact(bitmap);
             MemorySegment buffer =
                 (MemorySegment) BitmapBindings.FPDFBitmap_GetBuffer.invokeExact(bitmap);
 
-            byte[] rgba = buffer.reinterpret((long) stride * h).toArray(ValueLayout.JAVA_BYTE);
+            byte[] rgba = buffer.reinterpret(1L * stride * bitmapH).toArray(ValueLayout.JAVA_BYTE);
 
-            if (stride != w * BYTES_PER_PIXEL) {
-              byte[] packed = new byte[w * h * BYTES_PER_PIXEL];
-              for (int row = 0; row < h; row++) {
+            if (stride != bitmapW * BYTES_PER_PIXEL) {
+              byte[] packed = new byte[bitmapW * bitmapH * BYTES_PER_PIXEL];
+              for (int row = 0; row < bitmapH; row++) {
                 System.arraycopy(
-                    rgba, row * stride, packed, row * w * BYTES_PER_PIXEL, w * BYTES_PER_PIXEL);
+                    rgba,
+                    row * stride,
+                    packed,
+                    row * bitmapW * BYTES_PER_PIXEL,
+                    bitmapW * BYTES_PER_PIXEL);
               }
               rgba = packed;
             }
@@ -656,7 +693,7 @@ public final class PdfPage implements AutoCloseable {
               rgba[px + 2] = tmp;
             }
 
-            return new RenderResult(w, h, rgba);
+            return new RenderResult(bitmapW, bitmapH, rgba);
           } finally {
             if (!FfmHelper.isNull(bitmap)) {
               try {
@@ -669,11 +706,12 @@ public final class PdfPage implements AutoCloseable {
         currentImageIndex++;
       }
       throw new IllegalArgumentException(
-          "Image index " + imageIndex + " not found, page has " + currentImageIndex + " images");
+          "Image index %d not found, page has %d images".formatted(imageIndex, currentImageIndex));
     } catch (PdfiumException | IllegalArgumentException e) {
       throw e;
     } catch (Throwable t) {
-      throw new PdfiumException("Failed to render embedded image " + imageIndex, t);
+      throw new PdfiumRenderException(
+          "Failed to render embedded image %d".formatted(imageIndex), t);
     }
   }
 
@@ -772,14 +810,11 @@ public final class PdfPage implements AutoCloseable {
   }
 
   private void ensureRenderBudget(int width, int height) {
-    long pixels = (long) width * height;
+    long pixels = 1L * width * height;
     if (pixels > maxRenderPixels) {
-      throw new PdfiumException(
-          "Render exceeds policy pixel budget: "
-              + pixels
-              + " > "
-              + maxRenderPixels
-              + ". Use renderBounded() or lower DPI.");
+      throw new PdfiumRenderException(
+          "Render exceeds policy pixel budget: %d > %d. Use renderBounded() or lower DPI."
+              .formatted(pixels, maxRenderPixels));
     }
   }
 

@@ -6,6 +6,7 @@ import java.lang.foreign.FunctionDescriptor;
 import java.lang.foreign.Linker;
 import java.lang.foreign.SymbolLookup;
 import java.lang.invoke.MethodHandle;
+import java.util.Objects;
 
 /** FFM bindings for PDFium bitmap functions from {@code fpdfview.h}. */
 public final class BitmapBindings {
@@ -16,20 +17,19 @@ public final class BitmapBindings {
   private BitmapBindings() {}
 
   private static MethodHandle downcall(String name, FunctionDescriptor desc) {
-    return LINKER.downcallHandle(
-        LOOKUP
-            .find(name)
-            .orElseThrow(() -> new UnsatisfiedLinkError("PDFium symbol not found: " + name)),
-        desc);
+    return LOOKUP.find(name).map(addr -> LINKER.downcallHandle(addr, desc)).orElse(null);
   }
 
   private static MethodHandle downcallCritical(String name, FunctionDescriptor desc) {
-    return LINKER.downcallHandle(
-        LOOKUP
-            .find(name)
-            .orElseThrow(() -> new UnsatisfiedLinkError("PDFium symbol not found: " + name)),
-        desc,
-        Linker.Option.critical(false));
+    return LOOKUP
+        .find(name)
+        .map(addr -> LINKER.downcallHandle(addr, desc, Linker.Option.critical(false)))
+        .orElse(null);
+  }
+
+  public static void checkRequired() {
+    Objects.requireNonNull(FPDFBitmap_Create, "FPDFBitmap_Create");
+    Objects.requireNonNull(FPDFBitmap_Destroy, "FPDFBitmap_Destroy");
   }
 
   // Bitmap format constants

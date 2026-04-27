@@ -4,6 +4,7 @@ import static java.lang.foreign.ValueLayout.*;
 
 import java.lang.foreign.*;
 import java.lang.invoke.MethodHandle;
+import java.util.Objects;
 
 /**
  * FFM bindings for PDFium page editing and document saving functions from {@code fpdf_edit.h} and
@@ -20,7 +21,8 @@ public final class EditBindings {
     return LINKER.downcallHandle(
         LOOKUP
             .find(name)
-            .orElseThrow(() -> new UnsatisfiedLinkError("PDFium symbol not found: " + name)),
+            .orElseThrow(
+                () -> new UnsatisfiedLinkError("Required PDFium symbol not found: " + name)),
         desc);
   }
 
@@ -28,9 +30,18 @@ public final class EditBindings {
     return LINKER.downcallHandle(
         LOOKUP
             .find(name)
-            .orElseThrow(() -> new UnsatisfiedLinkError("PDFium symbol not found: " + name)),
+            .orElseThrow(
+                () -> new UnsatisfiedLinkError("Required PDFium symbol not found: " + name)),
         desc,
         Linker.Option.critical(false));
+  }
+
+  private static MethodHandle downcallOptional(String name, FunctionDescriptor desc) {
+    return LOOKUP.find(name).map(addr -> LINKER.downcallHandle(addr, desc)).orElse(null);
+  }
+
+  public static void checkRequired() {
+    Objects.requireNonNull(FPDF_SaveAsCopy, "FPDF_SaveAsCopy");
   }
 
   /** Get page rotation. Returns 0 (0°), 1 (90°), 2 (180°), or 3 (270°). */
@@ -48,6 +59,11 @@ public final class EditBindings {
   public static final MethodHandle FPDFPage_GenerateContent =
       downcall("FPDFPage_GenerateContent", FunctionDescriptor.of(JAVA_INT, ADDRESS));
 
+  /** Set document metadata value by tag name. Returns 1 on success. */
+  public static final MethodHandle FPDF_SetMetaText =
+      downcallOptional(
+          "FPDF_SetMetaText", FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS, ADDRESS));
+
   /**
    * FPDF_FILEWRITE struct layout:
    *
@@ -57,12 +73,15 @@ public final class EditBindings {
    *     int (*WriteBlock)(FPDF_FILEWRITE* pThis, const void* pData, unsigned long size);
    * } FPDF_FILEWRITE;
    * }</pre>
+   *
+   * <p>We extend this layout with a custom field to store a buffer ID for cross-thread access.
    */
   public static final StructLayout FPDF_FILEWRITE_LAYOUT =
       MemoryLayout.structLayout(
           JAVA_INT.withName("version"),
           MemoryLayout.paddingLayout(4),
-          ADDRESS.withName("WriteBlock"));
+          ADDRESS.withName("WriteBlock"),
+          JAVA_LONG.withName("bufferId"));
 
   /** WriteBlock callback signature: int (*)(FPDF_FILEWRITE*, const void*, unsigned long) */
   public static final FunctionDescriptor WRITE_BLOCK_DESC =
@@ -72,16 +91,7 @@ public final class EditBindings {
   public static final MethodHandle FPDF_CreateNewDocument =
       downcall("FPDF_CreateNewDocument", FunctionDescriptor.of(ADDRESS));
 
-  /**
-   * Save the document to an FPDF_FILEWRITE sink. Returns 1 on success.
-   *
-   * <p>Flags: 0 = full save, FPDF_INCREMENTAL (1) = incremental, FPDF_NO_INCREMENTAL (2) = full
-   * save removing old versions, FPDF_REMOVE_SECURITY (4) = remove encryption.
-   *
-   * <p><strong>Warning:</strong> FPDF_INCREMENTAL (flag 1) is non-functional in the open-source
-   * PDFium build — it does not properly append modified objects, producing corrupt output. Always
-   * use flag 0 (full save). See: https://groups.google.com/g/pdfium/c/6SklEc2lYNM
-   */
+  /** Save the document to an FPDF_FILEWRITE sink. Returns 1 on success. */
   public static final MethodHandle FPDF_SaveAsCopy =
       downcall("FPDF_SaveAsCopy", FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS, JAVA_INT));
 
@@ -139,10 +149,6 @@ public final class EditBindings {
   /**
    * Get the image metadata for an image object. Writes into an FPDF_IMAGEOBJ_METADATA struct.
    * Returns 1 on success.
-   *
-   * <p>FPDF_IMAGEOBJ_METADATA layout: { unsigned int width; unsigned int height; float
-   * horizontal_dpi; float vertical_dpi; unsigned int bits_per_pixel; int colorspace; int
-   * marked_content_id; }
    */
   public static final MethodHandle FPDFImageObj_GetImageMetadata =
       downcall(

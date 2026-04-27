@@ -5,9 +5,9 @@ import java.io.ByteArrayInputStream;
 import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
-import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import org.grimmory.pdfium4j.model.XmpMetadata;
+import org.grimmory.pdfium4j.model.XmpMetadata.QualifiedIdentifier;
 import org.w3c.dom.*;
 import org.xml.sax.InputSource;
 
@@ -24,10 +24,12 @@ public final class XmpMetadataParser {
   private static final String NS_PDFA_ID = "http://www.aiim.org/pdfa/ns/id/";
   private static final String NS_CALIBRE = "http://calibre-ebook.com/xmp-namespace";
   private static final String NS_RDF = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
+  private static final String NS_XMP = "http://ns.adobe.com/xap/1.0/";
+  private static final String NS_XMP_IDQ = "http://ns.adobe.com/xmp/Identifier/qual/1.0/";
 
   private static final String NS_CALIBRE_SI = "http://calibre-ebook.com/xmp-namespace/seriesIndex";
 
-  private static final Set<String> HANDLED_NAMESPACES =
+  private static final Set<String> CORE_NAMESPACES =
       Set.of(
           NS_DC,
           NS_PDFA_ID,
@@ -48,10 +50,7 @@ public final class XmpMetadataParser {
       value = "REC_CATCH_EXCEPTION",
       justification = "Corrupt third-party XMP requires broad fallback parsing")
   public static XmpMetadata parse(byte[] xmpBytes) {
-    if (xmpBytes == null || xmpBytes.length == 0) {
-      return XmpMetadata.empty();
-    }
-    if (xmpBytes.length > MAX_XMP_BYTES) {
+    if (xmpBytes == null || xmpBytes.length == 0 || xmpBytes.length > MAX_XMP_BYTES) {
       return XmpMetadata.empty();
     }
     // Let the XML parser detect encoding from byte stream (BOM / XML declaration)
@@ -62,8 +61,8 @@ public final class XmpMetadataParser {
       factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
       factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
 
-      DocumentBuilder builder = factory.newDocumentBuilder();
-      Document doc = builder.parse(new InputSource(new ByteArrayInputStream(xmpBytes)));
+      Document doc =
+          factory.newDocumentBuilder().parse(new InputSource(new ByteArrayInputStream(xmpBytes)));
       return extractFromDocument(doc);
     } catch (Exception _) {
       // Corrupt producers may embed null bytes, stray BOMs, or garbage before the declaration
@@ -96,13 +95,23 @@ public final class XmpMetadataParser {
       factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
       factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
 
-      DocumentBuilder builder = factory.newDocumentBuilder();
-      Document doc = builder.parse(new InputSource(new StringReader(xml)));
+      Document doc = factory.newDocumentBuilder().parse(new InputSource(new StringReader(xml)));
 
       return extractFromDocument(doc);
     } catch (Exception e) {
       return XmpMetadata.empty();
     }
+  }
+
+  /**
+   * Parse XMP metadata directly from an open PdfDocument. Convenience method that combines
+   * xmpMetadata() + parse().
+   *
+   * @param document the open PDF document
+   * @return parsed metadata
+   */
+  public static XmpMetadata parseFrom(PdfDocument document) {
+    return parse(document.xmpMetadata());
   }
 
   /**
@@ -131,17 +140,6 @@ public final class XmpMetadataParser {
     return s.replace("\uFEFF", "");
   }
 
-  /**
-   * Parse XMP metadata directly from an open PdfDocument. Convenience method that combines
-   * xmpMetadata() + parse().
-   *
-   * @param document the open PDF document
-   * @return parsed metadata
-   */
-  public static XmpMetadata parseFrom(PdfDocument document) {
-    return parse(document.xmpMetadata());
-  }
-
   private static XmpMetadata extractFromDocument(Document doc) {
     // Dublin Core fields
     Optional<String> title = getFirstDcText(doc, "title");
@@ -161,7 +159,59 @@ public final class XmpMetadataParser {
     Map<String, String> calibreFields = extractCalibreFields(doc);
 
     // Custom fields from all non-standard namespaces
-    Map<String, String> customFields = extractCustomFields(doc);
+    Map<String, String> simpleFields = new LinkedHashMap<>();
+    Map<String, List<String>> listFields = new LinkedHashMap<>();
+
+    NodeList descNodes = doc.getElementsByTagNameNS(NS_RDF, "Description");
+    for (int i = 0; i < descNodes.getLength(); i++) {
+      Element desc = (Element) descNodes.item(i);
+
+      // Check attributes on Description elements
+      NamedNodeMap attrs = desc.getAttributes();
+      for (int j = 0; j < attrs.getLength(); j++) {
+        Node attr = attrs.item(j);
+        String ns = attr.getNamespaceURI();
+        if (ns != null && !CORE_NAMESPACES.contains(ns)) {
+          String prefix = attr.getPrefix();
+          String key =
+              (prefix != null && !prefix.isEmpty())
+                  ? prefix + ":" + attr.getLocalName()
+                  : attr.getLocalName();
+          simpleFields.put(key, attr.getNodeValue());
+        }
+      }
+
+      // Check child elements
+      NodeList children = desc.getChildNodes();
+      for (int j = 0; j < children.getLength(); j++) {
+        Node child = children.item(j);
+        if (child.getNodeType() != Node.ELEMENT_NODE) continue;
+        String ns = child.getNamespaceURI();
+        if (ns == null || CORE_NAMESPACES.contains(ns)) continue;
+        if (NS_XMP.equals(ns) && "Identifier".equals(child.getLocalName()))
+          continue; // Handled separately
+
+        Element childElem = (Element) child;
+        String prefix = child.getPrefix();
+        String key =
+            (prefix != null && !prefix.isEmpty())
+                ? prefix + ":" + child.getLocalName()
+                : child.getLocalName();
+
+        List<String> rdfValues = getListFromRdfContainer(childElem);
+        if (!rdfValues.isEmpty()) {
+          listFields.put(key, rdfValues);
+        } else {
+          String text = getDirectTextContent(childElem);
+          if (text != null && !text.isBlank()) {
+            simpleFields.put(key, text.trim());
+          }
+        }
+      }
+    }
+
+    // XMP identifiers
+    List<QualifiedIdentifier> xmpIdentifiers = extractXmpIdentifiers(doc);
 
     return new XmpMetadata(
         title,
@@ -175,7 +225,9 @@ public final class XmpMetadataParser {
         identifiers,
         pdfaConformance,
         calibreFields,
-        customFields);
+        simpleFields,
+        listFields,
+        xmpIdentifiers);
   }
 
   /**
@@ -310,59 +362,38 @@ public final class XmpMetadataParser {
     return fields;
   }
 
-  /**
-   * Extract fields from all non-standard namespaces (xmp:, booklore:, etc.) into the customFields
-   * map with "prefix:localName" keys.
-   */
-  private static Map<String, String> extractCustomFields(Document doc) {
-    Map<String, String> fields = new LinkedHashMap<>();
-    NodeList descNodes = doc.getElementsByTagNameNS(NS_RDF, "Description");
-    for (int i = 0; i < descNodes.getLength(); i++) {
-      Element desc = (Element) descNodes.item(i);
+  /** Extract qualified identifiers from xmp:Identifier. */
+  private static List<QualifiedIdentifier> extractXmpIdentifiers(Document doc) {
+    List<QualifiedIdentifier> ids = new ArrayList<>();
+    NodeList idNodes = doc.getElementsByTagNameNS(NS_XMP, "Identifier");
+    for (int i = 0; i < idNodes.getLength(); i++) {
+      Element idElem = (Element) idNodes.item(i);
+      NodeList lis = idElem.getElementsByTagNameNS(NS_RDF, "li");
+      for (int j = 0; j < lis.getLength(); j++) {
+        Element li = (Element) lis.item(j);
 
-      // Check attributes on Description elements
-      NamedNodeMap attrs = desc.getAttributes();
-      for (int j = 0; j < attrs.getLength(); j++) {
-        Node attr = attrs.item(j);
-        String ns = attr.getNamespaceURI();
-        if (ns != null && !HANDLED_NAMESPACES.contains(ns)) {
-          String prefix = attr.getPrefix();
-          String key =
-              (prefix != null && !prefix.isEmpty())
-                  ? prefix + ":" + attr.getLocalName()
-                  : attr.getLocalName();
-          fields.put(key, attr.getNodeValue());
-        }
-      }
-
-      // Check child elements
-      NodeList children = desc.getChildNodes();
-      for (int j = 0; j < children.getLength(); j++) {
-        Node child = children.item(j);
-        if (child.getNodeType() != Node.ELEMENT_NODE) continue;
-        String ns = child.getNamespaceURI();
-        if (ns == null || HANDLED_NAMESPACES.contains(ns) || NS_CALIBRE.equals(ns)) continue;
-
-        Element childElem = (Element) child;
-        String prefix = child.getPrefix();
-        String key =
-            (prefix != null && !prefix.isEmpty())
-                ? prefix + ":" + child.getLocalName()
-                : child.getLocalName();
-
-        // Handle RDF containers (Bag/Seq/Alt)
-        List<String> listValues = getListFromRdfContainer(childElem);
-        if (!listValues.isEmpty()) {
-          fields.put(key, String.join(",", listValues));
-        } else {
-          String text = getDirectTextContent(childElem);
-          if (text != null && !text.isBlank()) {
-            fields.put(key, text.trim());
+        // Scheme is usually in xmpidq:Scheme attribute or nested element
+        String scheme = li.getAttributeNS(NS_XMP_IDQ, "Scheme");
+        if (scheme.isBlank()) {
+          NodeList schemeNodes = li.getElementsByTagNameNS(NS_XMP_IDQ, "Scheme");
+          if (schemeNodes.getLength() > 0) {
+            scheme = schemeNodes.item(0).getTextContent();
           }
+        }
+
+        // Value is in nested rdf:value element
+        String value = "";
+        NodeList valueNodes = li.getElementsByTagNameNS(NS_RDF, "value");
+        if (valueNodes.getLength() > 0) {
+          value = valueNodes.item(0).getTextContent();
+        }
+
+        if (!scheme.isBlank() && !value.isBlank()) {
+          ids.add(new QualifiedIdentifier(scheme.trim(), value.trim()));
         }
       }
     }
-    return fields;
+    return ids;
   }
 
   private static String getElementText(Document doc, String namespaceURI, String localName) {
