@@ -176,7 +176,8 @@ final class PdfSaver {
         catalogObjNum = extractObjNum(trailer.rootRef());
         String catalogDict = findObjectDictFromBytes(pdf, catalogObjNum);
         if (catalogDict == null) {
-          throw new IOException("Failed to find Catalog object (%d) for XMP update".formatted(catalogObjNum));
+          throw new IOException(
+              "Failed to find Catalog object (%d) for XMP update".formatted(catalogObjNum));
         }
         objOffsets.put(catalogObjNum, baseOffset + update.size());
         update.write(buildModifiedCatalog(catalogObjNum, catalogDict, xmpObjNum));

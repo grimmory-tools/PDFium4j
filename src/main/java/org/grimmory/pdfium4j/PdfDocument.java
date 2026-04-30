@@ -81,7 +81,7 @@ public final class PdfDocument implements AutoCloseable {
     this.sourceBytes = sourceBytes;
     this.policy = policy;
     this.ownerThread = ownerThread;
-    this.state = new State(channelId, sourceChannel, tempFile, docArena, handle);
+    this.state = new State(channelId, sourceChannel, tempFile, docArena);
     this.cleanable = CLEANER.register(this, state);
     PdfiumLibrary.incrementDocumentCount();
   }
@@ -92,19 +92,13 @@ public final class PdfDocument implements AutoCloseable {
     private SeekableByteChannel sourceChannel;
     private final Path tempFile;
     private final Arena docArena;
-    private final MemorySegment handle;
 
     private State(
-        long channelId,
-        SeekableByteChannel sourceChannel,
-        Path tempFile,
-        Arena docArena,
-        MemorySegment handle) {
+        long channelId, SeekableByteChannel sourceChannel, Path tempFile, Arena docArena) {
       this.channelId = channelId;
       this.sourceChannel = sourceChannel;
       this.tempFile = tempFile;
       this.docArena = docArena;
-      this.handle = handle;
     }
 
     synchronized void updateSourceChannel(SeekableByteChannel newChannel) {

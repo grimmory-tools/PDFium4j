@@ -37,7 +37,6 @@ public final class KoReaderChecksum {
 
     try (FileChannel fc = FileChannel.open(path, StandardOpenOption.READ)) {
       long fileSize = fc.size();
-      if (fileSize == 0) return Optional.empty();
 
       // Use shared arena for potential parallel access or scoped lifetime
       try (Arena arena = Arena.ofConfined()) {
@@ -56,7 +55,7 @@ public final class KoReaderChecksum {
    * @return checksum hex string, or empty for null input
    */
   public static Optional<String> calculate(byte[] data) {
-    if (data == null || data.length == 0) return Optional.empty();
+    if (data == null) return Optional.empty();
     return Optional.of(calculateFromSegment(MemorySegment.ofArray(data)));
   }
 
