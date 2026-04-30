@@ -58,10 +58,10 @@ public final class PdfiumLibrary {
         throw new PdfiumException("Failed to initialize PDFium library", t);
       }
     }
+  }
+
   private static final java.util.concurrent.atomic.AtomicInteger openDocumentCount =
       new java.util.concurrent.atomic.AtomicInteger(0);
-
-  private PdfiumLibrary() {}
 
   static void incrementDocumentCount() {
     openDocumentCount.incrementAndGet();
