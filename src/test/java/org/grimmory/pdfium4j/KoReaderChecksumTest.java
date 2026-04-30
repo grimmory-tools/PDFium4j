@@ -30,9 +30,8 @@ class KoReaderChecksumTest {
   }
 
   @Test
-  void emptyBytesMatchMd5OfEmpty() {
-    String checksum = KoReaderChecksum.calculate(new byte[0]).orElseThrow();
-    assertEquals(md5Hex(new byte[0]), checksum);
+  void returnsEmptyForEmptyBytes() {
+    assertTrue(KoReaderChecksum.calculate(new byte[0]).isEmpty());
   }
 
   @Test

@@ -55,7 +55,7 @@ public final class KoReaderChecksum {
    * @return checksum hex string, or empty for null input
    */
   public static Optional<String> calculate(byte[] data) {
-    if (data == null) return Optional.empty();
+    if (data == null || data.length == 0) return Optional.empty();
     return Optional.of(calculateFromSegment(MemorySegment.ofArray(data)));
   }
 

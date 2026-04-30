@@ -532,13 +532,15 @@ public final class PdfDocument implements AutoCloseable {
     if (pendingXmpMetadata != null) {
       return pendingXmpMetadata.getBytes(java.nio.charset.StandardCharsets.UTF_8);
     }
-    try (Arena arena = Arena.ofConfined()) {
-      long needed =
-          (long) DocBindings.FPDF_GetXMPMetadata.invokeExact(handle, MemorySegment.NULL, 0L);
-      if (needed > 0) {
-        MemorySegment buf = arena.allocate(needed);
-        DocBindings.FPDF_GetXMPMetadata.invokeExact(handle, buf, needed);
-        return buf.toArray(JAVA_BYTE);
+    try (Arena arena = Arena.ofShared()) {
+      if (DocBindings.FPDF_GetXMPMetadata != null) {
+        long needed =
+            (long) DocBindings.FPDF_GetXMPMetadata.invokeExact(handle, MemorySegment.NULL, 0L);
+        if (needed > 0) {
+          MemorySegment buf = arena.allocate(needed);
+          DocBindings.FPDF_GetXMPMetadata.invokeExact(handle, buf, needed);
+          return buf.toArray(JAVA_BYTE);
+        }
       }
     } catch (Throwable ignored) {
     }
@@ -659,11 +661,16 @@ public final class PdfDocument implements AutoCloseable {
         }
         if (sourceChannel != null) {
           sourceChannel.close();
+          sourceChannel = null;
+          CHANNELS.remove(channelId);
+          state.updateSourceChannel(null);
+        }
+        Files.move(temp, path, StandardCopyOption.REPLACE_EXISTING);
+        if (channelId > 0) {
           sourceChannel = Files.newByteChannel(path, StandardOpenOption.READ);
           CHANNELS.put(channelId, sourceChannel);
           state.updateSourceChannel(sourceChannel);
         }
-        Files.move(temp, path, StandardCopyOption.REPLACE_EXISTING);
       } catch (IOException e) {
         throw new PdfiumException("Failed to save to source path: " + path, e);
       }
