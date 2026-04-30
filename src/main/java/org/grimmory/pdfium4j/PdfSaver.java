@@ -36,6 +36,7 @@ final class PdfSaver {
 
   private static final Map<Long, ByteArrayOutputStream> BUFFERS = new ConcurrentHashMap<>();
   private static final AtomicLong BUFFER_ID_SEQ = new AtomicLong();
+
   private record ObjectRef(int num, int gen) {
     static ObjectRef parse(String ref) {
       if (ref == null) return null;
@@ -54,10 +55,8 @@ final class PdfSaver {
 
   private static final Pattern METADATA_REF_PATTERN =
       Pattern.compile("/Metadata\\s+\\d+\\s+\\d+\\s+R\\b");
-  private static final Pattern ROOT_REF_PATTERN =
-      Pattern.compile("/Root\\s+(\\d+)\\s+(\\d+)\\s+R");
-  private static final Pattern INFO_REF_PATTERN =
-      Pattern.compile("/Info\\s+(\\d+)\\s+(\\d+)\\s+R");
+  private static final Pattern ROOT_REF_PATTERN = Pattern.compile("/Root\\s+(\\d+)\\s+(\\d+)\\s+R");
+  private static final Pattern INFO_REF_PATTERN = Pattern.compile("/Info\\s+(\\d+)\\s+(\\d+)\\s+R");
   private static final Pattern SIZE_PATTERN = Pattern.compile("/Size\\s+(\\d+)");
 
   private static final byte[] DICT_START = "<<".getBytes(StandardCharsets.ISO_8859_1);
@@ -270,7 +269,8 @@ final class PdfSaver {
     return res;
   }
 
-  private static byte[] buildModifiedCatalog(int objNum, int genNum, String oldDict, int xmpObjNum) {
+  private static byte[] buildModifiedCatalog(
+      int objNum, int genNum, String oldDict, int xmpObjNum) {
     StringBuilder sb = new StringBuilder();
     sb.append(objNum).append(" ").append(genNum).append(" obj\n");
     String dict = METADATA_REF_PATTERN.matcher(oldDict).replaceFirst("");

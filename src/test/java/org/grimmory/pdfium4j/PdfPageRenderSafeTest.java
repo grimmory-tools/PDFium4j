@@ -35,9 +35,7 @@ class PdfPageRenderSafeTest {
       try (PdfPage page = doc.page(0)) {
         // A standard render should be around 1-2 MB.
         // Set an extremely low limit (1 KB) to trigger the exception.
-        assertThrows(
-            PdfiumRenderException.class,
-            () -> page.renderSafe(150, 1024));
+        assertThrows(PdfiumRenderException.class, () -> page.renderSafe(150, 1024));
       }
     }
   }

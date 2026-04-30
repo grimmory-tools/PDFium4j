@@ -168,7 +168,8 @@ public final class XmpMetadataWriter {
     w.write("</rdf:Description>\n");
   }
 
-  private static void writePdfAConformance(java.io.Writer w, XmpMetadata metadata) throws IOException {
+  private static void writePdfAConformance(java.io.Writer w, XmpMetadata metadata)
+      throws IOException {
     if (metadata.pdfaConformance().isEmpty()) return;
     String conf = metadata.pdfaConformance().get();
     if (conf.isBlank()) return;
@@ -194,7 +195,8 @@ public final class XmpMetadataWriter {
     w.write("</rdf:Description>\n");
   }
 
-  private static void writeCalibreFields(java.io.Writer w, XmpMetadata metadata) throws IOException {
+  private static void writeCalibreFields(java.io.Writer w, XmpMetadata metadata)
+      throws IOException {
     if (metadata.calibreFields().isEmpty()) return;
 
     w.write("<rdf:Description rdf:about=\"\"\n");
@@ -300,8 +302,8 @@ public final class XmpMetadataWriter {
     return colonIdx >= 0 ? key.substring(colonIdx + 1) : key;
   }
 
-  private static void writeSimpleField(java.io.Writer w, String prefix, String localName, String value)
-      throws IOException {
+  private static void writeSimpleField(
+      java.io.Writer w, String prefix, String localName, String value) throws IOException {
     w.write("  <");
     w.write(prefix);
     w.write(":");
@@ -316,12 +318,13 @@ public final class XmpMetadataWriter {
   }
 
   private static void writeListField(
-          java.io.Writer w, String prefix, String localName, List<String> values) throws IOException {
+      java.io.Writer w, String prefix, String localName, List<String> values) throws IOException {
     String tag = prefix + ":" + escapeXml(localName);
     writeBag(w, tag, values);
   }
 
-  private static void writeXmpIdentifiers(java.io.Writer w, XmpMetadata metadata) throws IOException {
+  private static void writeXmpIdentifiers(java.io.Writer w, XmpMetadata metadata)
+      throws IOException {
     if (metadata.xmpIdentifiers().isEmpty()) return;
 
     w.write("<rdf:Description rdf:about=\"\"\n");
