@@ -1,5 +1,6 @@
 package org.grimmory.pdfium4j.model;
 
+import edu.umd.cs.findbugs.annotations.CheckForNull;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -294,6 +295,7 @@ public record PdfBookMetadata(
     return Collections.unmodifiableMap(custom);
   }
 
+  @CheckForNull
   private static String cleanIsbn(String id) {
     if (id == null) return null;
     String cleaned = NON_ISBN_CHARS_PATTERN.matcher(id).replaceAll("").toUpperCase();
@@ -327,6 +329,7 @@ public record PdfBookMetadata(
     return sum % 10 == 0;
   }
 
+  @CheckForNull
   private static String normalizeLanguage(String language) {
     if (language == null || language.isBlank()) return null;
     String lower = language.trim().toLowerCase();

@@ -1,5 +1,6 @@
 package org.grimmory.pdfium4j.internal;
 
+import edu.umd.cs.findbugs.annotations.CheckForNull;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -156,6 +157,7 @@ public final class NativeLoader {
     return extractResource(resource, dir, filename, true);
   }
 
+  @CheckForNull
   private static Path extractResource(String resource, Path dir, String filename, boolean required)
       throws IOException {
     try (InputStream is = NativeLoader.class.getResourceAsStream(resource)) {

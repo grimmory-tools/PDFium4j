@@ -56,7 +56,12 @@ public class PdfiumException extends RuntimeException {
 
   private static String formatMessage(
       String message, PdfErrorCode errorCode, String operation, String filePath) {
-    StringBuilder sb = new StringBuilder();
+    int capacity =
+        (message != null ? message.length() : 0)
+            + (operation != null ? operation.length() + 20 : 0)
+            + (filePath != null ? filePath.length() + 20 : 0)
+            + 64;
+    StringBuilder sb = new StringBuilder(capacity);
     if (message != null && !message.isEmpty()) sb.append(message);
     if (errorCode != null
         && errorCode != PdfErrorCode.UNKNOWN

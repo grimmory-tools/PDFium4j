@@ -2,6 +2,7 @@ package org.grimmory.pdfium4j;
 
 import static java.lang.foreign.ValueLayout.*;
 
+import edu.umd.cs.findbugs.annotations.CheckForNull;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -144,6 +145,7 @@ public final class PdfDocument implements AutoCloseable {
     return open(path, password, resolvePolicy(null));
   }
 
+  @SuppressWarnings("resource")
   public static PdfDocument open(Path path, String password, PdfProcessingPolicy policy) {
     PdfProcessingPolicy resolvedPolicy = resolvePolicy(policy);
     PdfiumLibrary.ensureInitialized();
@@ -189,6 +191,7 @@ public final class PdfDocument implements AutoCloseable {
     }
   }
 
+  @SuppressWarnings("resource")
   public static PdfDocument open(InputStream in) throws IOException {
     Path temp = Files.createTempFile("pdfium4j-stream-", ".pdf");
     try (OutputStream out = Files.newOutputStream(temp)) {
@@ -467,6 +470,7 @@ public final class PdfDocument implements AutoCloseable {
     return Optional.empty();
   }
 
+  @CheckForNull
   private static String extractDict(byte[] pdf, int objNum, int genNum) {
     String s = new String(pdf, java.nio.charset.StandardCharsets.ISO_8859_1);
     // Use regex to find latest object definition
@@ -652,6 +656,7 @@ public final class PdfDocument implements AutoCloseable {
     save(path, SaveOptions.DEFAULT);
   }
 
+  @SuppressWarnings("resource")
   public void save(Path path, SaveOptions options) {
     if (path.equals(sourcePath)) {
       try {

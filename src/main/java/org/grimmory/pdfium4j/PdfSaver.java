@@ -2,6 +2,7 @@ package org.grimmory.pdfium4j;
 
 import static java.lang.foreign.ValueLayout.*;
 
+import edu.umd.cs.findbugs.annotations.CheckForNull;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -36,8 +37,10 @@ final class PdfSaver {
 
   private static final Map<Long, ByteArrayOutputStream> BUFFERS = new ConcurrentHashMap<>();
   private static final AtomicLong BUFFER_ID_SEQ = new AtomicLong();
+  private static final Pattern XREF = Pattern.compile("\\s+");
 
   private record ObjectRef(int num, int gen) {
+    @CheckForNull
     static ObjectRef parse(String ref) {
       if (ref == null) return null;
       Pattern p = Pattern.compile("(\\d+)\\s+(\\d+)\\s+R");
@@ -214,7 +217,7 @@ final class PdfSaver {
         i += count;
       }
 
-      StringBuilder trailerSb = new StringBuilder();
+      StringBuilder trailerSb = new StringBuilder(256);
       trailerSb.append("trailer\n<< /Size ").append(nextObj);
       trailerSb.append(" /Root ").append(trailer.rootRef());
       if (infoObjNum > 0) {
@@ -239,7 +242,7 @@ final class PdfSaver {
   }
 
   private static byte[] buildInfoObject(int num, Map<MetadataTag, String> metadata) {
-    StringBuilder sb = new StringBuilder();
+    StringBuilder sb = new StringBuilder(metadata.size() * 64 + 64);
     sb.append(num).append(" 0 obj\n<<\n");
     for (Map.Entry<MetadataTag, String> entry : metadata.entrySet()) {
       if (entry.getValue() != null && !entry.getValue().isEmpty()) {
@@ -271,7 +274,7 @@ final class PdfSaver {
 
   private static byte[] buildModifiedCatalog(
       int objNum, int genNum, String oldDict, int xmpObjNum) {
-    StringBuilder sb = new StringBuilder();
+    StringBuilder sb = new StringBuilder(oldDict.length() + 128);
     sb.append(objNum).append(" ").append(genNum).append(" obj\n");
     String dict = METADATA_REF_PATTERN.matcher(oldDict).replaceFirst("");
     int closeIdx = dict.lastIndexOf(">>");
@@ -321,6 +324,7 @@ final class PdfSaver {
     return new TrailerInfo(rootRef, infoRef, size);
   }
 
+  @CheckForNull
   private static String findTrailerEntryFromTail(String tail, String key) {
     int searchFrom = tail.length();
     while (true) {
@@ -363,12 +367,13 @@ final class PdfSaver {
     if (idx < 0) return 0;
     String after = tail.substring(idx + 9).trim();
     try {
-      return Integer.parseInt(after.split("\\s+")[0]);
+      return Integer.parseInt(XREF.split(after)[0]);
     } catch (Exception e) {
       return 0;
     }
   }
 
+  @CheckForNull
   private static String findObjectDictFromBytes(byte[] pdf, int objNum, int genNum) {
     byte[] marker = (objNum + " " + genNum + " obj").getBytes(StandardCharsets.ISO_8859_1);
     int searchFrom = pdf.length;

@@ -1,5 +1,6 @@
 package org.grimmory.pdfium4j;
 
+import edu.umd.cs.findbugs.annotations.CheckForNull;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.io.ByteArrayInputStream;
 import java.io.StringReader;
@@ -243,7 +244,10 @@ public final class XmpMetadataParser {
     if (text == null || text.isBlank()) {
       text = elem.getTextContent();
     }
-    return (text != null && !text.isBlank()) ? Optional.of(text.trim()) : Optional.empty();
+    if (text == null || text.isBlank()) {
+      return Optional.empty();
+    }
+    return Optional.of(text.trim());
   }
 
   /** Get all values from a Dublin Core element (handles RDF Bag/Seq). */
@@ -268,6 +272,7 @@ public final class XmpMetadataParser {
   }
 
   /** Extract text from RDF Alt container (used for localized values like title). */
+  @CheckForNull
   private static String getTextFromRdfContainer(Element parent) {
     NodeList lis = parent.getElementsByTagNameNS(NS_RDF, "li");
     if (lis.getLength() == 0) {
@@ -396,6 +401,7 @@ public final class XmpMetadataParser {
     return ids;
   }
 
+  @CheckForNull
   private static String getElementText(Document doc, String namespaceURI, String localName) {
     NodeList nodes = doc.getElementsByTagNameNS(namespaceURI, localName);
     if (nodes.getLength() > 0) {
@@ -406,7 +412,7 @@ public final class XmpMetadataParser {
 
   /** Get only direct text content of an element, ignoring text from child elements. */
   private static String getDirectTextContent(Element element) {
-    StringBuilder sb = new StringBuilder();
+    StringBuilder sb = new StringBuilder(element.getTextContent().length());
     NodeList children = element.getChildNodes();
     for (int i = 0; i < children.getLength(); i++) {
       Node child = children.item(i);
