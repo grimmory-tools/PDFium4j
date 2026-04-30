@@ -36,11 +36,28 @@ final class PdfSaver {
 
   private static final Map<Long, ByteArrayOutputStream> BUFFERS = new ConcurrentHashMap<>();
   private static final AtomicLong BUFFER_ID_SEQ = new AtomicLong();
+  private record ObjectRef(int num, int gen) {
+    static ObjectRef parse(String ref) {
+      if (ref == null) return null;
+      Pattern p = Pattern.compile("(\\d+)\\s+(\\d+)\\s+R");
+      Matcher m = p.matcher(ref);
+      return m.find()
+          ? new ObjectRef(Integer.parseInt(m.group(1)), Integer.parseInt(m.group(2)))
+          : null;
+    }
+
+    @Override
+    public String toString() {
+      return num + " " + gen + " R";
+    }
+  }
 
   private static final Pattern METADATA_REF_PATTERN =
       Pattern.compile("/Metadata\\s+\\d+\\s+\\d+\\s+R\\b");
-  private static final Pattern ROOT_REF_PATTERN = Pattern.compile("/Root\\s+(\\d+\\s+(\\d+)\\s+R)");
-  private static final Pattern INFO_REF_PATTERN = Pattern.compile("/Info\\s+(\\d+\\s+(\\d+)\\s+R)");
+  private static final Pattern ROOT_REF_PATTERN =
+      Pattern.compile("/Root\\s+(\\d+)\\s+(\\d+)\\s+R");
+  private static final Pattern INFO_REF_PATTERN =
+      Pattern.compile("/Info\\s+(\\d+)\\s+(\\d+)\\s+R");
   private static final Pattern SIZE_PATTERN = Pattern.compile("/Size\\s+(\\d+)");
 
   private static final byte[] DICT_START = "<<".getBytes(StandardCharsets.ISO_8859_1);
@@ -49,7 +66,8 @@ final class PdfSaver {
 
   static void save(
       MemorySegment docHandle,
-      Map<MetadataTag, String> pendingMetadata,
+      Map<MetadataTag, String> allMetadata,
+      boolean hasInfoUpdate,
       String pendingXmp,
       boolean skipValidation,
       SeekableByteChannel originalSource,
@@ -59,15 +77,6 @@ final class PdfSaver {
       OutputStream out)
       throws IOException {
 
-    boolean hasInfoUpdate = false;
-    if (pendingMetadata != null) {
-      for (String v : pendingMetadata.values()) {
-        if (v != null && !v.isEmpty()) {
-          hasInfoUpdate = true;
-          break;
-        }
-      }
-    }
     boolean hasXmpUpdate = pendingXmp != null && !pendingXmp.isEmpty();
 
     byte[] baseBytes;
@@ -83,7 +92,7 @@ final class PdfSaver {
 
     byte[] result = baseBytes;
     if (hasInfoUpdate || hasXmpUpdate) {
-      result = appendIncrementalUpdate(baseBytes, pendingMetadata, pendingXmp);
+      result = appendIncrementalUpdate(baseBytes, hasInfoUpdate ? allMetadata : null, pendingXmp);
     }
     out.write(result);
   }
@@ -135,6 +144,8 @@ final class PdfSaver {
     return 1;
   }
 
+  private record TrailerInfo(ObjectRef rootRef, ObjectRef infoRef, int size) {}
+
   @SuppressFBWarnings(
       value = "VA_FORMAT_STRING_USES_NEWLINE",
       justification = "PDF xref entries must be exactly 20 bytes; %n is platform-dependent")
@@ -154,7 +165,7 @@ final class PdfSaver {
 
       int infoObjNum = 0;
       int xmpObjNum;
-      int catalogObjNum;
+      ObjectRef catalogRef;
 
       ByteArrayOutputStream update = new ByteArrayOutputStream();
       update.write('\n');
@@ -173,14 +184,14 @@ final class PdfSaver {
         objOffsets.put(xmpObjNum, baseOffset + update.size());
         update.write(buildXmpObject(xmpObjNum, xmp));
 
-        catalogObjNum = extractObjNum(trailer.rootRef());
-        String catalogDict = findObjectDictFromBytes(pdf, catalogObjNum);
+        catalogRef = trailer.rootRef();
+        String catalogDict = findObjectDictFromBytes(pdf, catalogRef.num, catalogRef.gen);
         if (catalogDict == null) {
           throw new IOException(
-              "Failed to find Catalog object (%d) for XMP update".formatted(catalogObjNum));
+              "Failed to find Catalog object (%s) for XMP update".formatted(catalogRef));
         }
-        objOffsets.put(catalogObjNum, baseOffset + update.size());
-        update.write(buildModifiedCatalog(catalogObjNum, catalogDict, xmpObjNum));
+        objOffsets.put(catalogRef.num, baseOffset + update.size());
+        update.write(buildModifiedCatalog(catalogRef.num, catalogRef.gen, catalogDict, xmpObjNum));
       }
 
       int xrefOffset = baseOffset + update.size();
@@ -259,9 +270,9 @@ final class PdfSaver {
     return res;
   }
 
-  private static byte[] buildModifiedCatalog(int objNum, String oldDict, int xmpObjNum) {
+  private static byte[] buildModifiedCatalog(int objNum, int genNum, String oldDict, int xmpObjNum) {
     StringBuilder sb = new StringBuilder();
-    sb.append(objNum).append(" 0 obj\n");
+    sb.append(objNum).append(" ").append(genNum).append(" obj\n");
     String dict = METADATA_REF_PATTERN.matcher(oldDict).replaceFirst("");
     int closeIdx = dict.lastIndexOf(">>");
     if (closeIdx >= 0) {
@@ -276,30 +287,38 @@ final class PdfSaver {
     return sb.toString().getBytes(StandardCharsets.ISO_8859_1);
   }
 
-  private record TrailerInfo(String rootRef, String infoRef, int size) {}
-
-  private static TrailerInfo parseTrailer(String tail) {
-    String rootRef = findTrailerEntryFromTail(tail, "Root");
-    String infoRef = findTrailerEntryFromTail(tail, "Info");
+  private static TrailerInfo parseTrailer(String tail) throws IOException {
+    String rootStr = findTrailerEntryFromTail(tail, "Root");
+    String infoStr = findTrailerEntryFromTail(tail, "Info");
     int size = findTrailerSizeFromTail(tail);
-    if (rootRef != null) return new TrailerInfo(rootRef, infoRef, size);
 
-    Matcher m = ROOT_REF_PATTERN.matcher(tail);
-    String lastRoot = null;
-    while (m.find()) {
-      lastRoot = m.group(1);
+    ObjectRef rootRef = ObjectRef.parse(rootStr);
+    ObjectRef infoRef = ObjectRef.parse(infoStr);
+
+    if (rootRef == null) {
+      Matcher m = ROOT_REF_PATTERN.matcher(tail);
+      while (m.find()) {
+        rootRef = new ObjectRef(Integer.parseInt(m.group(1)), Integer.parseInt(m.group(2)));
+      }
     }
-    Matcher m2 = INFO_REF_PATTERN.matcher(tail);
-    String lastInfo = null;
-    while (m2.find()) {
-      lastInfo = m2.group(1);
+    if (infoRef == null) {
+      Matcher m = INFO_REF_PATTERN.matcher(tail);
+      while (m.find()) {
+        infoRef = new ObjectRef(Integer.parseInt(m.group(1)), Integer.parseInt(m.group(2)));
+      }
     }
-    Matcher m3 = SIZE_PATTERN.matcher(tail);
-    int lastSize = size;
-    while (m3.find()) {
-      lastSize = Integer.parseInt(m3.group(1));
+    if (size == 0) {
+      Matcher m = SIZE_PATTERN.matcher(tail);
+      while (m.find()) {
+        size = Integer.parseInt(m.group(1));
+      }
     }
-    return new TrailerInfo(lastRoot != null ? lastRoot : "1 0 R", lastInfo, lastSize);
+
+    if (rootRef == null) {
+      throw new IOException("Failed to find PDF Root (Catalog) reference");
+    }
+
+    return new TrailerInfo(rootRef, infoRef, size);
   }
 
   private static String findTrailerEntryFromTail(String tail, String key) {
@@ -350,14 +369,8 @@ final class PdfSaver {
     }
   }
 
-  private static int extractObjNum(String ref) {
-    Pattern p = Pattern.compile("(\\d+)");
-    Matcher m = p.matcher(ref);
-    return m.find() ? Integer.parseInt(m.group(1)) : 1;
-  }
-
-  private static String findObjectDictFromBytes(byte[] pdf, int objNum) {
-    byte[] marker = (objNum + " 0 obj").getBytes(StandardCharsets.ISO_8859_1);
+  private static String findObjectDictFromBytes(byte[] pdf, int objNum, int genNum) {
+    byte[] marker = (objNum + " " + genNum + " obj").getBytes(StandardCharsets.ISO_8859_1);
     int searchFrom = pdf.length;
     int idx;
     while (true) {

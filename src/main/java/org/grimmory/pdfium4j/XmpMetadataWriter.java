@@ -134,7 +134,7 @@ public final class XmpMetadataWriter {
     writeXmpIdentifiers(w, metadata);
   }
 
-  private void writeDublinCore(java.io.Writer w, XmpMetadata metadata) throws IOException {
+  private static void writeDublinCore(java.io.Writer w, XmpMetadata metadata) throws IOException {
     boolean hasDc =
         metadata.title().isPresent()
             || !metadata.creators().isEmpty()
@@ -168,7 +168,7 @@ public final class XmpMetadataWriter {
     w.write("</rdf:Description>\n");
   }
 
-  private void writePdfAConformance(java.io.Writer w, XmpMetadata metadata) throws IOException {
+  private static void writePdfAConformance(java.io.Writer w, XmpMetadata metadata) throws IOException {
     if (metadata.pdfaConformance().isEmpty()) return;
     String conf = metadata.pdfaConformance().get();
     if (conf.isBlank()) return;
@@ -194,7 +194,7 @@ public final class XmpMetadataWriter {
     w.write("</rdf:Description>\n");
   }
 
-  private void writeCalibreFields(java.io.Writer w, XmpMetadata metadata) throws IOException {
+  private static void writeCalibreFields(java.io.Writer w, XmpMetadata metadata) throws IOException {
     if (metadata.calibreFields().isEmpty()) return;
 
     w.write("<rdf:Description rdf:about=\"\"\n");
@@ -283,23 +283,24 @@ public final class XmpMetadataWriter {
     if (colonIdx > 0) {
       String prefix = key.substring(0, colonIdx);
       String localName = key.substring(colonIdx + 1);
-      String nsUri = customNamespaces.get(prefix);
-      if (nsUri != null) {
+      if ("xmp".equals(prefix)) {
+        unprefixed.put(key, value);
+      } else if (customNamespaces.containsKey(prefix)) {
         grouped.computeIfAbsent(prefix, _ -> new LinkedHashMap<>()).put(localName, value);
       } else {
-        unprefixed.put(key, value);
+        throw new IllegalArgumentException("Namespace prefix '" + prefix + "' is not registered");
       }
     } else {
       unprefixed.put(key, value);
     }
   }
 
-  private String stripPrefix(String key) {
+  private static String stripPrefix(String key) {
     int colonIdx = key.indexOf(':');
     return colonIdx >= 0 ? key.substring(colonIdx + 1) : key;
   }
 
-  private void writeSimpleField(java.io.Writer w, String prefix, String localName, String value)
+  private static void writeSimpleField(java.io.Writer w, String prefix, String localName, String value)
       throws IOException {
     w.write("  <");
     w.write(prefix);
@@ -314,13 +315,13 @@ public final class XmpMetadataWriter {
     w.write(">\n");
   }
 
-  private void writeListField(
-      java.io.Writer w, String prefix, String localName, List<String> values) throws IOException {
+  private static void writeListField(
+          java.io.Writer w, String prefix, String localName, List<String> values) throws IOException {
     String tag = prefix + ":" + escapeXml(localName);
     writeBag(w, tag, values);
   }
 
-  private void writeXmpIdentifiers(java.io.Writer w, XmpMetadata metadata) throws IOException {
+  private static void writeXmpIdentifiers(java.io.Writer w, XmpMetadata metadata) throws IOException {
     if (metadata.xmpIdentifiers().isEmpty()) return;
 
     w.write("<rdf:Description rdf:about=\"\"\n");

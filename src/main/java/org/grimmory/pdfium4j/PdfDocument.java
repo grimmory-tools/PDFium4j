@@ -250,10 +250,30 @@ public final class PdfDocument implements AutoCloseable {
           Thread.currentThread());
     } catch (PdfiumException e) {
       if (channelId > 0) CHANNELS.remove(channelId);
+      try {
+        channel.close();
+      } catch (IOException ignored) {
+      }
+      if (tempFile != null) {
+        try {
+          Files.deleteIfExists(tempFile);
+        } catch (IOException ignored) {
+        }
+      }
       docArena.close();
       throw e;
     } catch (Throwable t) {
       if (channelId > 0) CHANNELS.remove(channelId);
+      try {
+        channel.close();
+      } catch (IOException ignored) {
+      }
+      if (tempFile != null) {
+        try {
+          Files.deleteIfExists(tempFile);
+        } catch (IOException ignored) {
+        }
+      }
       docArena.close();
       throw new PdfiumException("Failed to open channel: " + label, t);
     }
@@ -406,7 +426,7 @@ public final class PdfDocument implements AutoCloseable {
     return Optional.empty();
   }
 
-  private Optional<String> extractMetadataFromBytes(byte[] pdf, MetadataTag tag) {
+  private static Optional<String> extractMetadataFromBytes(byte[] pdf, MetadataTag tag) {
     String tail =
         new String(
             pdf,
@@ -417,13 +437,15 @@ public final class PdfDocument implements AutoCloseable {
     Pattern infoP = Pattern.compile("/Info\\s+(\\d+)\\s+(\\d+)\\s+R");
     Matcher m = infoP.matcher(tail);
     int objNum = -1;
+    int genNum = 0;
     while (m.find()) {
       objNum = Integer.parseInt(m.group(1));
+      genNum = Integer.parseInt(m.group(2));
     }
     if (objNum < 0) return Optional.empty();
 
     // Find the object
-    String dict = extractDict(pdf, objNum);
+    String dict = extractDict(pdf, objNum, genNum);
     if (dict == null) return Optional.empty();
 
     // Find the tag in dict
@@ -445,10 +467,10 @@ public final class PdfDocument implements AutoCloseable {
     return Optional.empty();
   }
 
-  private String extractDict(byte[] pdf, int objNum) {
+  private static String extractDict(byte[] pdf, int objNum, int genNum) {
     String s = new String(pdf, java.nio.charset.StandardCharsets.ISO_8859_1);
     // Use regex to find latest object definition
-    Pattern p = Pattern.compile("\\b" + objNum + "\\s+0\\s+obj\\b");
+    Pattern p = Pattern.compile("\\b" + objNum + "\\s+" + genNum + "\\s+obj\\b");
     Matcher m = p.matcher(s);
     int startIdx = -1;
     while (m.find()) {
@@ -476,7 +498,7 @@ public final class PdfDocument implements AutoCloseable {
     return null;
   }
 
-  private String decodeHexPdfString(String hex) {
+  private static String decodeHexPdfString(String hex) {
     if (hex.startsWith("FEFF")) {
       // UTF-16BE
       try {
@@ -531,7 +553,7 @@ public final class PdfDocument implements AutoCloseable {
     return new byte[0];
   }
 
-  private byte[] extractXmpFromBytes(byte[] pdf) {
+  private static byte[] extractXmpFromBytes(byte[] pdf) {
     String s = new String(pdf, java.nio.charset.StandardCharsets.ISO_8859_1);
     int start = s.lastIndexOf("<?xpacket begin");
     if (start < 0) return new byte[0];
@@ -664,6 +686,7 @@ public final class PdfDocument implements AutoCloseable {
       PdfSaver.save(
           handle,
           buildMergedMetadata(),
+          !pendingMetadata.isEmpty(),
           pendingXmpMetadata,
           options.skipValidation(),
           sourceChannel,

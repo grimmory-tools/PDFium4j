@@ -72,18 +72,13 @@ class XmpMetadataRoundtripTest {
   }
 
   @Test
-  void testUnregisteredPrefixFallsBackToXmpNamespace() {
+  void testUnregisteredPrefixThrowsException() {
     XmpMetadataWriter writer = new XmpMetadataWriter();
     // booklore is not registered
     Map<String, String> customFields = Map.of("booklore:subtitle", "Test Subtitle");
 
     XmpMetadata metaWithCustom = XmpMetadata.builder().customFields(customFields).build();
 
-    String xmp = writer.write(metaWithCustom);
-    XmpMetadata parsed = XmpMetadataParser.parse(xmp);
-
-    // Unregistered prefix should be stripped and stored as xmp:subtitle
-    assertTrue(parsed.customFields().containsKey("xmp:subtitle"));
-    assertEquals("Test Subtitle", parsed.customFields().get("xmp:subtitle"));
+    assertThrows(IllegalArgumentException.class, () -> writer.write(metaWithCustom));
   }
 }

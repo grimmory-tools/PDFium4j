@@ -146,9 +146,8 @@ public record PdfBookMetadata(
   }
 
   private static List<String> extractAuthors(XmpMetadata xmp, PdfDocument document) {
-    List<String> authors = new ArrayList<>();
 
-    authors.addAll(xmp.creators());
+      List<String> authors = new ArrayList<>(xmp.creators());
 
     if (authors.isEmpty()) {
       document
@@ -257,9 +256,8 @@ public record PdfBookMetadata(
   }
 
   private static Map<String, String> extractCustomFields(XmpMetadata xmp, PdfDocument document) {
-    Map<String, String> custom = new LinkedHashMap<>();
 
-    custom.putAll(xmp.customFields());
+      Map<String, String> custom = new LinkedHashMap<>(xmp.customFields());
 
     for (Map.Entry<String, String> entry : xmp.calibreFields().entrySet()) {
       if (!"series".equalsIgnoreCase(entry.getKey())

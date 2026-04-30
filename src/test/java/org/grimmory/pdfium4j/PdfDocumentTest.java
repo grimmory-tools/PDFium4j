@@ -1363,7 +1363,7 @@ class PdfDocumentTest {
     }
   }
 
-  private String buildBookloreXmp(String title, String author) {
+  private static String buildBookloreXmp(String title, String author) {
     return """
                 <?xpacket begin="\uFEFF" id="W5M0MpCehiHzreSzNTczkc9d"?>
                 <x:xmpmeta xmlns:x="adobe:ns:meta/">

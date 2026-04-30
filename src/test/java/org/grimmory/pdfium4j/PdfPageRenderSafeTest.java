@@ -37,9 +37,7 @@ class PdfPageRenderSafeTest {
         // Set an extremely low limit (1 KB) to trigger the exception.
         assertThrows(
             PdfiumRenderException.class,
-            () -> {
-              page.renderSafe(150, 1024);
-            });
+            () -> page.renderSafe(150, 1024));
       }
     }
   }

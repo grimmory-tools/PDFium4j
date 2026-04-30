@@ -64,11 +64,18 @@ public final class PdfiumLibrary {
       new java.util.concurrent.atomic.AtomicInteger(0);
 
   static void incrementDocumentCount() {
-    openDocumentCount.incrementAndGet();
+    synchronized (LOCK) {
+      if (!initialized) {
+        throw new IllegalStateException("PDFium library is not initialized");
+      }
+      openDocumentCount.incrementAndGet();
+    }
   }
 
   static void decrementDocumentCount() {
-    openDocumentCount.decrementAndGet();
+    synchronized (LOCK) {
+      openDocumentCount.decrementAndGet();
+    }
   }
 
   /**
@@ -87,10 +94,10 @@ public final class PdfiumLibrary {
       }
       try {
         ViewBindings.FPDF_DestroyLibrary.invokeExact();
-      } catch (Throwable ignored) {
-      } finally {
         initialized = false;
         initError = null;
+      } catch (Throwable t) {
+        throw new PdfiumException("Failed to shut down PDFium library", t);
       }
     }
   }
