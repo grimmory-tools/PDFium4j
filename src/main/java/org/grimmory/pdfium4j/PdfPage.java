@@ -44,7 +44,7 @@ public final class PdfPage implements AutoCloseable {
   private final MemorySegment documentHandle;
   private final Thread ownerThread;
   private final long maxRenderPixels;
-  private final Runnable onClose;
+  private final java.util.function.Consumer<PdfPage> onClose;
   private final Runnable onModified;
   private volatile boolean closed = false;
 
@@ -53,7 +53,7 @@ public final class PdfPage implements AutoCloseable {
       MemorySegment documentHandle,
       Thread ownerThread,
       long maxRenderPixels,
-      Runnable onClose,
+      java.util.function.Consumer<PdfPage> onClose,
       Runnable onModified) {
     this.handle = handle;
     this.documentHandle = documentHandle;
@@ -289,6 +289,10 @@ public final class PdfPage implements AutoCloseable {
     PageSize size = size();
     int w = size.widthPixels(dpi);
     int h = size.heightPixels(dpi);
+
+    if (w <= 0 || h <= 0) {
+      return new RenderResult(1, 1, new byte[4]);
+    }
 
     long requiredBytes = 1L * w * h * BYTES_PER_PIXEL;
     if (requiredBytes > maxMemoryBytes) {
@@ -832,7 +836,7 @@ public final class PdfPage implements AutoCloseable {
     if (closed) return;
     closed = true;
     if (onClose != null) {
-      onClose.run();
+      onClose.accept(this);
     }
     try {
       ViewBindings.FPDF_ClosePage.invokeExact(handle);

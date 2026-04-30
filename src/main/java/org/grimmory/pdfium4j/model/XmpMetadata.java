@@ -64,7 +64,10 @@ public record XmpMetadata(
     Objects.requireNonNull(pdfaConformance, "pdfaConformance");
     calibreFields = Map.copyOf(Objects.requireNonNull(calibreFields, "calibreFields"));
     customFields = Map.copyOf(Objects.requireNonNull(customFields, "customFields"));
-    customListFields = Map.copyOf(Objects.requireNonNull(customListFields, "customListFields"));
+    Map<String, List<String>> listCopy = new LinkedHashMap<>();
+    Objects.requireNonNull(customListFields, "customListFields")
+        .forEach((k, v) -> listCopy.put(k, List.copyOf(v)));
+    customListFields = Collections.unmodifiableMap(listCopy);
     xmpIdentifiers = List.copyOf(Objects.requireNonNull(xmpIdentifiers, "xmpIdentifiers"));
   }
 
@@ -226,7 +229,8 @@ public record XmpMetadata(
     }
 
     public Builder customListFields(Map<String, List<String>> val) {
-      this.customListFields = new LinkedHashMap<>(val);
+      this.customListFields = new LinkedHashMap<>();
+      val.forEach((k, v) -> this.customListFields.put(k, new ArrayList<>(v)));
       return this;
     }
 

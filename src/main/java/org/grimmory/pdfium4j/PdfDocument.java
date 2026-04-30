@@ -2,7 +2,6 @@ package org.grimmory.pdfium4j;
 
 import static java.lang.foreign.ValueLayout.*;
 
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -50,7 +49,7 @@ public final class PdfDocument implements AutoCloseable {
 
   private final MemorySegment handle;
   private final Arena docArena;
-  private final SeekableByteChannel sourceChannel;
+  private SeekableByteChannel sourceChannel;
   private final Path sourcePath;
   private final byte[] sourceBytes;
   private final long channelId;
@@ -61,6 +60,7 @@ public final class PdfDocument implements AutoCloseable {
   private volatile boolean structurallyModified = false;
   private final Map<MetadataTag, String> pendingMetadata = new LinkedHashMap<>();
   private String pendingXmpMetadata = null;
+  private final State state;
   private final Cleaner.Cleanable cleanable;
 
   private PdfDocument(
@@ -81,40 +81,61 @@ public final class PdfDocument implements AutoCloseable {
     this.sourceBytes = sourceBytes;
     this.policy = policy;
     this.ownerThread = ownerThread;
-    this.cleanable =
-        CLEANER.register(this, new State(channelId, sourceChannel, tempFile, docArena, handle));
+    this.state = new State(channelId, sourceChannel, tempFile, docArena, handle);
+    this.cleanable = CLEANER.register(this, state);
+    PdfiumLibrary.incrementDocumentCount();
   }
 
   /** Represents the cleanup state to be executed by the {@link Cleaner}. */
-  private record State(
-      long channelId,
-      SeekableByteChannel sourceChannel,
-      Path tempFile,
-      Arena docArena,
-      MemorySegment handle)
-      implements Runnable {
+  private static final class State implements Runnable {
+    private final long channelId;
+    private SeekableByteChannel sourceChannel;
+    private final Path tempFile;
+    private final Arena docArena;
+    private final MemorySegment handle;
+
+    private State(
+        long channelId,
+        SeekableByteChannel sourceChannel,
+        Path tempFile,
+        Arena docArena,
+        MemorySegment handle) {
+      this.channelId = channelId;
+      this.sourceChannel = sourceChannel;
+      this.tempFile = tempFile;
+      this.docArena = docArena;
+      this.handle = handle;
+    }
+
+    synchronized void updateSourceChannel(SeekableByteChannel newChannel) {
+      this.sourceChannel = newChannel;
+    }
+
     @Override
-    @SuppressFBWarnings(
-        value = "ST_WRITE_TO_STATIC_FROM_INSTANCE_METHOD",
-        justification = "Required for native callback lifecycle")
     public void run() {
-      if (channelId > 0) {
-        CHANNELS.remove(channelId);
-      }
-      if (sourceChannel != null) {
-        try {
-          sourceChannel.close();
-        } catch (IOException ignored) {
+      try {
+        if (channelId > 0) {
+          CHANNELS.remove(channelId);
         }
-      }
-      if (tempFile != null) {
-        try {
-          Files.deleteIfExists(tempFile);
-        } catch (IOException ignored) {
+        synchronized (this) {
+          if (sourceChannel != null) {
+            try {
+              sourceChannel.close();
+            } catch (IOException ignored) {
+            }
+          }
         }
-      }
-      if (docArena != null) {
-        docArena.close();
+        if (tempFile != null) {
+          try {
+            Files.deleteIfExists(tempFile);
+          } catch (IOException ignored) {
+          }
+        }
+        if (docArena != null) {
+          docArena.close();
+        }
+      } finally {
+        PdfiumLibrary.decrementDocumentCount();
       }
     }
   }
@@ -160,11 +181,14 @@ public final class PdfDocument implements AutoCloseable {
       MemorySegment doc =
           (MemorySegment) ViewBindings.FPDF_LoadMemDocument.invokeExact(seg, data.length, pwdSeg);
       if (FfmHelper.isNull(doc)) {
+        int err = (int) (long) ViewBindings.FPDF_GetLastError.invokeExact();
         arena.close();
-        throwLastError("Failed to open document from bytes");
+        throw mapOpenError("Failed to open document from bytes", err);
       }
       return new PdfDocument(
           doc, arena, null, 0L, null, null, data, resolvedPolicy, Thread.currentThread());
+    } catch (PdfiumException e) {
+      throw e;
     } catch (Throwable t) {
       arena.close();
       throw new PdfiumException("Failed to open document from bytes", t);
@@ -181,9 +205,6 @@ public final class PdfDocument implements AutoCloseable {
     return openFromChannel(channel, temp, temp, null, "InputStream", resolvePolicy(null));
   }
 
-  @SuppressFBWarnings(
-      value = "ST_WRITE_TO_STATIC_FROM_INSTANCE_METHOD",
-      justification = "Required for native callback context")
   private static PdfDocument openFromChannel(
       SeekableByteChannel channel,
       Path sourcePath,
@@ -192,9 +213,14 @@ public final class PdfDocument implements AutoCloseable {
       String label,
       PdfProcessingPolicy policy) {
     Arena docArena = Arena.ofShared();
+    long channelId = 0;
     try {
-      long channelId = CHANNEL_ID_SEQ.incrementAndGet();
+      channelId = CHANNEL_ID_SEQ.incrementAndGet();
       CHANNELS.put(channelId, channel);
+
+      if (ViewBindings.FPDF_LoadCustomDocument == null) {
+        throw new PdfiumException("FPDF_LoadCustomDocument not available");
+      }
 
       MemorySegment fileAccess = docArena.allocate(ViewBindings.FPDF_FILEACCESS_LAYOUT);
       fileAccess.set(JAVA_LONG, 0, channel.size());
@@ -215,9 +241,8 @@ public final class PdfDocument implements AutoCloseable {
       MemorySegment doc =
           (MemorySegment) ViewBindings.FPDF_LoadCustomDocument.invokeExact(fileAccess, pwdSeg);
       if (FfmHelper.isNull(doc)) {
-        CHANNELS.remove(channelId);
-        docArena.close();
-        throwLastError("Failed to open document: " + label);
+        int err = (int) (long) ViewBindings.FPDF_GetLastError.invokeExact();
+        throw mapOpenError("Failed to open document: " + label, err);
       }
       return new PdfDocument(
           doc,
@@ -229,7 +254,12 @@ public final class PdfDocument implements AutoCloseable {
           null,
           policy,
           Thread.currentThread());
+    } catch (PdfiumException e) {
+      if (channelId > 0) CHANNELS.remove(channelId);
+      docArena.close();
+      throw e;
     } catch (Throwable t) {
+      if (channelId > 0) CHANNELS.remove(channelId);
       docArena.close();
       throw new PdfiumException("Failed to open channel: " + label, t);
     }
@@ -280,7 +310,7 @@ public final class PdfDocument implements AutoCloseable {
               handle,
               ownerThread,
               policy.maxRenderPixels(),
-              () -> unregisterPage(null),
+              this::unregisterPage,
               () -> structurallyModified = true);
       registerPage(page);
       return page;
@@ -604,9 +634,6 @@ public final class PdfDocument implements AutoCloseable {
     save(path, SaveOptions.DEFAULT);
   }
 
-  @SuppressFBWarnings(
-      value = "ST_WRITE_TO_STATIC_FROM_INSTANCE_METHOD",
-      justification = "Required for native callback context")
   public void save(Path path, SaveOptions options) {
     if (path.equals(sourcePath)) {
       try {
@@ -615,8 +642,10 @@ public final class PdfDocument implements AutoCloseable {
           save(out, options);
         }
         if (sourceChannel != null) {
-          CHANNELS.remove(channelId);
           sourceChannel.close();
+          sourceChannel = Files.newByteChannel(path, StandardOpenOption.READ);
+          CHANNELS.put(channelId, sourceChannel);
+          state.updateSourceChannel(sourceChannel);
         }
         Files.move(temp, path, StandardCopyOption.REPLACE_EXISTING);
       } catch (IOException e) {
@@ -669,9 +698,13 @@ public final class PdfDocument implements AutoCloseable {
     if (closed) return;
     closed = true;
     try {
+      List<PdfPage> snapshot;
       synchronized (openPages) {
-        for (PdfPage page : openPages) page.closeFromDocument();
+        snapshot = new ArrayList<>(openPages);
         openPages.clear();
+      }
+      for (PdfPage page : snapshot) {
+        page.closeFromDocument();
       }
       ViewBindings.FPDF_CloseDocument.invokeExact(handle);
     } catch (Throwable ignored) {

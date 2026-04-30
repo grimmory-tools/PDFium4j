@@ -48,8 +48,8 @@ public final class PdfiumLibrary {
 
         try (Arena arena = Arena.ofConfined()) {
           MemorySegment config = arena.allocate(ViewBindings.LIBRARY_CONFIG_LAYOUT);
-          // Use version 1 for maximum compatibility with older builds
-          config.set(ValueLayout.JAVA_INT, 0, 1);
+          // Version 2 is required by modern PDFium builds
+          config.set(ValueLayout.JAVA_INT, 0, 2);
           ViewBindings.FPDF_InitLibraryWithConfig.invokeExact(config);
         }
         initialized = true;
@@ -58,15 +58,33 @@ public final class PdfiumLibrary {
         throw new PdfiumException("Failed to initialize PDFium library", t);
       }
     }
+  private static final java.util.concurrent.atomic.AtomicInteger openDocumentCount =
+      new java.util.concurrent.atomic.AtomicInteger(0);
+
+  private PdfiumLibrary() {}
+
+  static void incrementDocumentCount() {
+    openDocumentCount.incrementAndGet();
+  }
+
+  static void decrementDocumentCount() {
+    openDocumentCount.decrementAndGet();
   }
 
   /**
    * Shuts down the PDFium library and releases all global native resources. Subsequent operations
    * will fail until re-initialized.
+   *
+   * @throws IllegalStateException if there are still open documents
    */
   public static void shutdown() {
     synchronized (LOCK) {
       if (!initialized) return;
+      int open = openDocumentCount.get();
+      if (open > 0) {
+        throw new IllegalStateException(
+            "Cannot shutdown PDFium: %d documents are still open".formatted(open));
+      }
       try {
         ViewBindings.FPDF_DestroyLibrary.invokeExact();
       } catch (Throwable ignored) {

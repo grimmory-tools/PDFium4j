@@ -57,7 +57,7 @@ tasks.withType<com.github.spotbugs.snom.SpotBugsTask>().configureEach {
         required.set(true)
     }
     reports.create("xml") {
-        required.set(true)
+        required.set(false)
     }
 }
 

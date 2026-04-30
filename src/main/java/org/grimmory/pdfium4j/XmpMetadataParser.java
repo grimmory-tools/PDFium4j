@@ -35,6 +35,8 @@ public final class XmpMetadataParser {
           NS_PDFA_ID,
           NS_CALIBRE,
           NS_RDF,
+          NS_XMP,
+          NS_XMP_IDQ,
           "http://www.w3.org/2000/xmlns/", // xmlns declarations
           "http://www.w3.org/XML/1998/namespace", // xml:lang etc.
           "adobe:ns:meta/" // x:xmpmeta wrapper

@@ -81,11 +81,23 @@ public final class PdfDateUtils {
 
       ZoneOffset offset = ZoneOffset.UTC;
       String offsetSign = m.group("offset");
-      if (offsetSign != null && !"Z".equalsIgnoreCase(offsetSign)) {
-        int offsetHour =
-            m.group("offsetHour") != null ? Integer.parseInt(m.group("offsetHour")) : 0;
-        int offsetMinute =
-            m.group("offsetMinute") != null ? Integer.parseInt(m.group("offsetMinute")) : 0;
+      String offsetHourRaw = m.group("offsetHour");
+      String offsetMinuteRaw = m.group("offsetMinute");
+
+      if (offsetSign == null) {
+        if (offsetHourRaw != null || offsetMinuteRaw != null) {
+          return Optional.empty();
+        }
+      } else if ("Z".equalsIgnoreCase(offsetSign)) {
+        if (offsetHourRaw != null || offsetMinuteRaw != null) {
+          return Optional.empty();
+        }
+      } else {
+        if (offsetHourRaw == null) {
+          return Optional.empty();
+        }
+        int offsetHour = Integer.parseInt(offsetHourRaw);
+        int offsetMinute = offsetMinuteRaw != null ? Integer.parseInt(offsetMinuteRaw) : 0;
         int totalOffsetMinutes = offsetHour * 60 + offsetMinute;
         if ("-".equals(offsetSign)) {
           totalOffsetMinutes = -totalOffsetMinutes;

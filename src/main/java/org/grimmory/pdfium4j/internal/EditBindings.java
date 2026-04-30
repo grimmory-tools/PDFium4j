@@ -93,11 +93,11 @@ public final class EditBindings {
 
   /** Save the document to an FPDF_FILEWRITE sink. Returns 1 on success. */
   public static final MethodHandle FPDF_SaveAsCopy =
-      downcall("FPDF_SaveAsCopy", FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS, JAVA_INT));
+      downcallOptional("FPDF_SaveAsCopy", FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS, JAVA_INT));
 
   /** Save the document with a specific PDF version number. Returns 1 on success. */
   public static final MethodHandle FPDF_SaveWithVersion =
-      downcall(
+      downcallOptional(
           "FPDF_SaveWithVersion",
           FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS, JAVA_INT, JAVA_INT));
 

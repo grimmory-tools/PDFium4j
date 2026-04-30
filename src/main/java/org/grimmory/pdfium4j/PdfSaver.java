@@ -32,9 +32,6 @@ import org.grimmory.pdfium4j.model.MetadataTag;
  *
  * <p>Uses byte-level scanning to avoid OOM issues with large files.
  */
-@SuppressFBWarnings(
-    value = {"ST_WRITE_TO_STATIC_FROM_INSTANCE_METHOD", "NP_NULL_ON_SOME_PATH"},
-    justification = "Required for native callback and byte-level scanning")
 final class PdfSaver {
 
   private static final Map<Long, ByteArrayOutputStream> BUFFERS = new ConcurrentHashMap<>();
@@ -138,6 +135,9 @@ final class PdfSaver {
     return 1;
   }
 
+  @SuppressFBWarnings(
+      value = "VA_FORMAT_STRING_USES_NEWLINE",
+      justification = "PDF xref entries must be exactly 20 bytes; %n is platform-dependent")
   private static byte[] appendIncrementalUpdate(
       byte[] pdf, Map<MetadataTag, String> metadata, String xmp) {
     try {
@@ -175,10 +175,11 @@ final class PdfSaver {
 
         catalogObjNum = extractObjNum(trailer.rootRef());
         String catalogDict = findObjectDictFromBytes(pdf, catalogObjNum);
-        if (catalogDict != null) {
-          objOffsets.put(catalogObjNum, baseOffset + update.size());
-          update.write(buildModifiedCatalog(catalogObjNum, catalogDict, xmpObjNum));
+        if (catalogDict == null) {
+          throw new IOException("Failed to find Catalog object (%d) for XMP update".formatted(catalogObjNum));
         }
+        objOffsets.put(catalogObjNum, baseOffset + update.size());
+        update.write(buildModifiedCatalog(catalogObjNum, catalogDict, xmpObjNum));
       }
 
       int xrefOffset = baseOffset + update.size();
@@ -391,8 +392,7 @@ final class PdfSaver {
   }
 
   private static int findMaxObjectNumber(byte[] pdf) {
-    int scanLen = Math.min(pdf.length, 1024 * 1024);
-    String text = new String(pdf, pdf.length - scanLen, scanLen, StandardCharsets.ISO_8859_1);
+    String text = new String(pdf, StandardCharsets.ISO_8859_1);
     Pattern p = Pattern.compile("(\\d+)\\s+0\\s+obj\\b");
     Matcher matcher = p.matcher(text);
     int max = 0;
