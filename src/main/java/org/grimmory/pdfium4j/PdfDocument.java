@@ -12,6 +12,7 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.ref.Cleaner;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.channels.SeekableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -418,24 +419,26 @@ public final class PdfDocument implements AutoCloseable {
   }
 
   private Optional<String> metadataFallback(MetadataTag tag) {
-    if (sourceBytes != null) return extractMetadataFromBytes(sourceBytes, tag);
+    if (sourceBytes != null) {
+      return extractMetadataFromSegment(MemorySegment.ofArray(sourceBytes), tag);
+    }
     if (sourcePath != null) {
-      try {
-        byte[] bytes = Files.readAllBytes(sourcePath);
-        return extractMetadataFromBytes(bytes, tag);
+      try (FileChannel fc = FileChannel.open(sourcePath, StandardOpenOption.READ);
+          Arena arena = Arena.ofConfined()) {
+        MemorySegment segment = fc.map(FileChannel.MapMode.READ_ONLY, 0, fc.size(), arena);
+        return extractMetadataFromSegment(segment, tag);
       } catch (IOException ignored) {
       }
     }
     return Optional.empty();
   }
 
-  private static Optional<String> extractMetadataFromBytes(byte[] pdf, MetadataTag tag) {
-    String tail =
-        new String(
-            pdf,
-            Math.max(0, pdf.length - 4096),
-            Math.min(pdf.length, 4096),
-            java.nio.charset.StandardCharsets.ISO_8859_1);
+  private static Optional<String> extractMetadataFromSegment(MemorySegment pdf, MetadataTag tag) {
+    long size = pdf.byteSize();
+    long tailLen = Math.min(size, 4096);
+    byte[] tailBytes = pdf.asSlice(size - tailLen, tailLen).toArray(JAVA_BYTE);
+    String tail = new String(tailBytes, java.nio.charset.StandardCharsets.ISO_8859_1);
+
     // Find latest /Info reference in tail
     Pattern infoP = Pattern.compile("/Info\\s+(\\d+)\\s+(\\d+)\\s+R");
     Matcher m = infoP.matcher(tail);
@@ -448,7 +451,7 @@ public final class PdfDocument implements AutoCloseable {
     if (objNum < 0) return Optional.empty();
 
     // Find the object
-    String dict = extractDict(pdf, objNum, genNum);
+    String dict = extractDictFromSegment(pdf, objNum, genNum);
     if (dict == null) return Optional.empty();
 
     // Find the tag in dict
@@ -471,35 +474,61 @@ public final class PdfDocument implements AutoCloseable {
   }
 
   @CheckForNull
-  private static String extractDict(byte[] pdf, int objNum, int genNum) {
-    String s = new String(pdf, java.nio.charset.StandardCharsets.ISO_8859_1);
-    // Use regex to find latest object definition
-    Pattern p = Pattern.compile("\\b" + objNum + "\\s+" + genNum + "\\s+obj\\b");
-    Matcher m = p.matcher(s);
-    int startIdx = -1;
-    while (m.find()) {
-      startIdx = m.start();
-    }
-    if (startIdx < 0) return null;
+  private static String extractDictFromSegment(MemorySegment pdf, int objNum, int genNum) {
+    byte[] marker =
+        (objNum + " " + genNum + " obj").getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+    long pos = lastIndexOf(pdf, marker);
+    if (pos < 0) return null;
 
-    int dictStart = s.indexOf("<<", startIdx);
+    byte[] dictStartMarker = "<<".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+    long dictStart = indexOf(pdf, dictStartMarker, pos);
     if (dictStart < 0) return null;
 
     int depth = 0;
-    int pos = dictStart;
-    while (pos < s.length() - 1) {
-      if (s.charAt(pos) == '<' && s.charAt(pos + 1) == '<') {
+    long curr = dictStart;
+    long size = pdf.byteSize();
+    while (curr < size - 1) {
+      byte b1 = pdf.get(JAVA_BYTE, curr);
+      byte b2 = pdf.get(JAVA_BYTE, curr + 1);
+      if (b1 == '<' && b2 == '<') {
         depth++;
-        pos += 2;
-      } else if (s.charAt(pos) == '>' && s.charAt(pos + 1) == '>') {
+        curr += 2;
+      } else if (b1 == '>' && b2 == '>') {
         depth--;
-        if (depth == 0) return s.substring(dictStart, pos + 2);
-        pos += 2;
+        if (depth == 0) {
+          byte[] dictBytes = pdf.asSlice(dictStart, curr + 2 - dictStart).toArray(JAVA_BYTE);
+          return new String(dictBytes, java.nio.charset.StandardCharsets.ISO_8859_1);
+        }
+        curr += 2;
       } else {
-        pos++;
+        curr++;
       }
     }
     return null;
+  }
+
+  private static long lastIndexOf(MemorySegment segment, byte[] needle) {
+    long size = segment.byteSize();
+    outer:
+    for (long i = size - needle.length; i >= 0; i--) {
+      for (int j = 0; j < needle.length; j++) {
+        if (segment.get(JAVA_BYTE, i + j) != needle[j]) continue outer;
+      }
+      return i;
+    }
+    return -1;
+  }
+
+  private static long indexOf(MemorySegment segment, byte[] needle, long fromIndex) {
+    long size = segment.byteSize();
+    outer:
+    for (long i = fromIndex; i <= size - needle.length; i++) {
+      for (int j = 0; j < needle.length; j++) {
+        if (segment.get(JAVA_BYTE, i + j) != needle[j]) continue outer;
+      }
+      return i;
+    }
+    return -1;
   }
 
   private static String decodeHexPdfString(String hex) {
@@ -548,26 +577,34 @@ public final class PdfDocument implements AutoCloseable {
       }
     } catch (Throwable ignored) {
     }
-    if (sourceBytes != null) return extractXmpFromBytes(sourceBytes);
+    if (sourceBytes != null) {
+      return extractXmpFromSegment(MemorySegment.ofArray(sourceBytes));
+    }
     if (sourcePath != null) {
-      try {
-        byte[] bytes = Files.readAllBytes(sourcePath);
-        return extractXmpFromBytes(bytes);
+      try (FileChannel fc = FileChannel.open(sourcePath, StandardOpenOption.READ);
+          Arena arena = Arena.ofConfined()) {
+        MemorySegment segment = fc.map(FileChannel.MapMode.READ_ONLY, 0, fc.size(), arena);
+        return extractXmpFromSegment(segment);
       } catch (IOException ignored) {
       }
     }
     return new byte[0];
   }
 
-  private static byte[] extractXmpFromBytes(byte[] pdf) {
-    String s = new String(pdf, java.nio.charset.StandardCharsets.ISO_8859_1);
-    int start = s.lastIndexOf("<?xpacket begin");
+  private static byte[] extractXmpFromSegment(MemorySegment pdf) {
+    byte[] startMarker = "<?xpacket begin".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+    long start = lastIndexOf(pdf, startMarker);
     if (start < 0) return new byte[0];
-    int end = s.indexOf("<?xpacket end", start);
+
+    byte[] endMarker = "<?xpacket end".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+    long end = indexOf(pdf, endMarker, start);
     if (end < 0) return new byte[0];
-    int term = s.indexOf("?>", end);
+
+    byte[] termMarker = "?>".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+    long term = indexOf(pdf, termMarker, end);
     if (term < 0) return new byte[0];
-    return Arrays.copyOfRange(pdf, start, term + 2);
+
+    return pdf.asSlice(start, term + 2 - start).toArray(JAVA_BYTE);
   }
 
   public String xmpMetadataString() {
@@ -659,8 +696,9 @@ public final class PdfDocument implements AutoCloseable {
   @SuppressWarnings("resource")
   public void save(Path path, SaveOptions options) {
     if (path.equals(sourcePath)) {
+      Path temp = null;
       try {
-        Path temp = Files.createTempFile("pdfium4j-save-", ".pdf");
+        temp = Files.createTempFile("pdfium4j-save-", ".pdf");
         try (OutputStream out = Files.newOutputStream(temp)) {
           save(out, options);
         }
@@ -671,6 +709,7 @@ public final class PdfDocument implements AutoCloseable {
           state.updateSourceChannel(null);
         }
         Files.move(temp, path, StandardCopyOption.REPLACE_EXISTING);
+        temp = null; // Prevent deletion in finally if move succeeded
         if (channelId > 0) {
           sourceChannel = Files.newByteChannel(path, StandardOpenOption.READ);
           CHANNELS.put(channelId, sourceChannel);
@@ -678,6 +717,13 @@ public final class PdfDocument implements AutoCloseable {
         }
       } catch (IOException e) {
         throw new PdfiumException("Failed to save to source path: " + path, e);
+      } finally {
+        if (temp != null) {
+          try {
+            Files.deleteIfExists(temp);
+          } catch (IOException ignored) {
+          }
+        }
       }
     } else {
       try (OutputStream out = Files.newOutputStream(path)) {

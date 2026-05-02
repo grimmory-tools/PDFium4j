@@ -37,6 +37,7 @@ public final class KoReaderChecksum {
 
     try (FileChannel fc = FileChannel.open(path, StandardOpenOption.READ)) {
       long fileSize = fc.size();
+      if (fileSize == 0) return Optional.empty();
 
       // Use shared arena for potential parallel access or scoped lifetime
       try (Arena arena = Arena.ofConfined()) {

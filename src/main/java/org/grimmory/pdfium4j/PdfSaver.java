@@ -86,6 +86,13 @@ final class PdfSaver {
       baseBytes = nativeSaveBytes(docHandle);
     } else if (originalBytes != null) {
       baseBytes = originalBytes;
+    } else if (originalSource != null) {
+      originalSource.position(0);
+      baseBytes = new byte[(int) originalSource.size()];
+      java.nio.ByteBuffer bb = java.nio.ByteBuffer.wrap(baseBytes);
+      while (bb.hasRemaining()) {
+        if (originalSource.read(bb) == -1) break;
+      }
     } else if (sourcePath != null) {
       baseBytes = Files.readAllBytes(sourcePath);
     } else {

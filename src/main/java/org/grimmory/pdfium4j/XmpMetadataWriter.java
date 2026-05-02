@@ -55,6 +55,7 @@ public final class XmpMetadataWriter {
         .contains(prefix.toLowerCase(Locale.ROOT))) {
       throw new IllegalArgumentException("Prefix '" + prefix + "' is reserved");
     }
+    validateNcName(prefix);
     customNamespaces.put(prefix, uri);
     return this;
   }
@@ -205,7 +206,8 @@ public final class XmpMetadataWriter {
     w.write("\">\n");
 
     for (Map.Entry<String, String> entry : metadata.calibreFields().entrySet()) {
-      String key = escapeXml(entry.getKey());
+      String key = entry.getKey();
+      validateNcName(key);
       w.write("  <calibre:");
       w.write(key);
       w.write(">");
@@ -285,6 +287,8 @@ public final class XmpMetadataWriter {
     if (colonIdx > 0) {
       String prefix = key.substring(0, colonIdx);
       String localName = key.substring(colonIdx + 1);
+      validateNcName(prefix);
+      validateNcName(localName);
       if ("xmp".equals(prefix)) {
         unprefixed.put(key, value);
       } else if (customNamespaces.containsKey(prefix)) {
@@ -293,6 +297,7 @@ public final class XmpMetadataWriter {
         throw new IllegalArgumentException("Namespace prefix '" + prefix + "' is not registered");
       }
     } else {
+      validateNcName(key);
       unprefixed.put(key, value);
     }
   }
@@ -307,19 +312,19 @@ public final class XmpMetadataWriter {
     w.write("  <");
     w.write(prefix);
     w.write(":");
-    w.write(escapeXml(localName));
+    w.write(localName);
     w.write(">");
     w.write(escapeXml(value));
     w.write("</");
     w.write(prefix);
     w.write(":");
-    w.write(escapeXml(localName));
+    w.write(localName);
     w.write(">\n");
   }
 
   private static void writeListField(
       java.io.Writer w, String prefix, String localName, List<String> values) throws IOException {
-    String tag = prefix + ":" + escapeXml(localName);
+    String tag = prefix + ":" + localName;
     writeBag(w, tag, values);
   }
 
@@ -405,6 +410,28 @@ public final class XmpMetadataWriter {
     for (int i = 0; i < 20; i++) {
       w.write(padding);
     }
+  }
+
+  private static void validateNcName(String name) {
+    if (name == null || name.isEmpty()) {
+      throw new IllegalArgumentException("XML name must not be empty");
+    }
+    if (!isValidNcNameStart(name.charAt(0))) {
+      throw new IllegalArgumentException("Invalid XML name: '" + name + "'");
+    }
+    for (int i = 1; i < name.length(); i++) {
+      if (!isValidNcNameChar(name.charAt(i))) {
+        throw new IllegalArgumentException("Invalid XML name: '" + name + "'");
+      }
+    }
+  }
+
+  private static boolean isValidNcNameStart(char c) {
+    return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_';
+  }
+
+  private static boolean isValidNcNameChar(char c) {
+    return isValidNcNameStart(c) || (c >= '0' && c <= '9') || c == '-' || c == '.';
   }
 
   private static String escapeXml(String s) {

@@ -654,6 +654,17 @@ public final class PdfPage implements AutoCloseable {
         if (type != EditBindings.FPDF_PAGEOBJ_IMAGE) continue;
 
         if (currentImageIndex == imageIndex) {
+          try (Arena arena = Arena.ofConfined()) {
+            MemorySegment meta = arena.allocate(EditBindings.IMAGE_METADATA_LAYOUT);
+            int metaOk =
+                (int) EditBindings.FPDFImageObj_GetImageMetadata.invokeExact(obj, handle, meta);
+            if (metaOk != 0) {
+              int w = meta.get(java.lang.foreign.ValueLayout.JAVA_INT, 0);
+              int h = meta.get(java.lang.foreign.ValueLayout.JAVA_INT, 4);
+              ensureRenderBudget(w, h);
+            }
+          }
+
           MemorySegment bitmap = MemorySegment.NULL;
           try {
             bitmap =
@@ -668,7 +679,7 @@ public final class PdfPage implements AutoCloseable {
             int bitmapW = (int) BitmapBindings.FPDFBitmap_GetWidth.invokeExact(bitmap);
             int bitmapH = (int) BitmapBindings.FPDFBitmap_GetHeight.invokeExact(bitmap);
 
-            // Bounded memory check using actual bitmap dimensions
+            // Double check in case GetRenderedBitmap returned different dimensions
             ensureRenderBudget(bitmapW, bitmapH);
 
             int stride = (int) BitmapBindings.FPDFBitmap_GetStride.invokeExact(bitmap);

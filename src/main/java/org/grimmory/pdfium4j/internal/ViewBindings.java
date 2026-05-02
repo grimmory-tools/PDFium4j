@@ -16,6 +16,10 @@ public final class ViewBindings {
   private static final Linker LINKER = Linker.nativeLinker();
   private static final SymbolLookup LOOKUP = SymbolLookup.loaderLookup();
 
+  private static final ValueLayout NATIVE_LONG =
+      (ValueLayout) LINKER.canonicalLayouts().get("long");
+  private static final ValueLayout NATIVE_LONG_UNALIGNED = NATIVE_LONG.withByteAlignment(1);
+
   private ViewBindings() {}
 
   private static MethodHandle downcall(String name, FunctionDescriptor desc) {
@@ -54,12 +58,12 @@ public final class ViewBindings {
 
   public static final StructLayout FPDF_FILEACCESS_LAYOUT =
       MemoryLayout.structLayout(
-          JAVA_LONG.withName("m_FileLen"),
+          NATIVE_LONG_UNALIGNED.withName("m_FileLen"),
           ADDRESS.withName("m_GetBlock"),
           ADDRESS.withName("m_Param"));
 
   public static final FunctionDescriptor GET_BLOCK_DESC =
-      FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_LONG, ADDRESS, JAVA_LONG);
+      FunctionDescriptor.of(JAVA_INT, ADDRESS, NATIVE_LONG, ADDRESS, NATIVE_LONG);
 
   public static final MethodHandle FPDF_InitLibraryWithConfig =
       downcall("FPDF_InitLibraryWithConfig", FunctionDescriptor.ofVoid(ADDRESS));

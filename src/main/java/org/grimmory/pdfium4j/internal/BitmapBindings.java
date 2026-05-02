@@ -30,6 +30,10 @@ public final class BitmapBindings {
   public static void checkRequired() {
     Objects.requireNonNull(FPDFBitmap_Create, "FPDFBitmap_Create");
     Objects.requireNonNull(FPDFBitmap_Destroy, "FPDFBitmap_Destroy");
+    Objects.requireNonNull(FPDFBitmap_GetBuffer, "FPDFBitmap_GetBuffer");
+    Objects.requireNonNull(FPDFBitmap_GetWidth, "FPDFBitmap_GetWidth");
+    Objects.requireNonNull(FPDFBitmap_GetHeight, "FPDFBitmap_GetHeight");
+    Objects.requireNonNull(FPDFBitmap_GetStride, "FPDFBitmap_GetStride");
   }
 
   // Bitmap format constants

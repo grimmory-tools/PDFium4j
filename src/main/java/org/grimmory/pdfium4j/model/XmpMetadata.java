@@ -66,7 +66,11 @@ public record XmpMetadata(
     customFields = Map.copyOf(Objects.requireNonNull(customFields, "customFields"));
     Map<String, List<String>> listCopy = new LinkedHashMap<>();
     Objects.requireNonNull(customListFields, "customListFields")
-        .forEach((k, v) -> listCopy.put(k, List.copyOf(v)));
+        .forEach(
+            (k, v) ->
+                listCopy.put(
+                    Objects.requireNonNull(k, "customListFields key"),
+                    List.copyOf(Objects.requireNonNull(v, "customListFields value"))));
     customListFields = Collections.unmodifiableMap(listCopy);
     xmpIdentifiers = List.copyOf(Objects.requireNonNull(xmpIdentifiers, "xmpIdentifiers"));
   }

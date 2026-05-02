@@ -127,6 +127,9 @@ public final class PdfDateUtils {
     sb.append(String.format("%02d", dateTime.getSecond()));
 
     ZoneOffset offset = dateTime.getOffset();
+    if (offset.getTotalSeconds() % 60 != 0) {
+      throw new IllegalArgumentException("PDF dates only support minute-precision offsets");
+    }
     if (offset.getTotalSeconds() == 0) {
       sb.append("Z");
     } else {
