@@ -73,7 +73,6 @@ public final class PdfDocument implements AutoCloseable {
 
   private static final MetadataTag[] METADATA_TAGS = MetadataTag.values();
 
-  // Static compiled patterns – avoids per-call Pattern.compile() in hot metadata fallback paths.
   private static final Pattern STATIC_INFO_PATTERN =
       Pattern.compile("/Info\\s+(\\d+)\\s+(\\d+)\\s+R");
 
@@ -87,6 +86,9 @@ public final class PdfDocument implements AutoCloseable {
   /** Matches /Key <hexvalue>. */
   private static final Pattern INFO_DICT_HEX_PATTERN =
       Pattern.compile("/(\\w+)\\s+<([A-Fa-f0-9]*)>");
+
+  // Tail window for fallback file scanning (Info/XMP are typically near trailer/xref).
+  private static final long FALLBACK_TAIL_SCAN_BYTES = 256L * 1024L;
 
   private final MemorySegment handle;
   private final Arena docArena;
@@ -450,7 +452,7 @@ public final class PdfDocument implements AutoCloseable {
     int count = pageCount();
     if (count <= 0) return List.of();
     List<PageSize> sizes = new ArrayList<>(count);
-    // Reuse a single Arena and single pair of output segments for all pages – avoids
+    // Reuse a single Arena and single pair of output segments for all pages avoids
     // creating count×Arena and count×2×MemorySegment allocations in the loop.
     try (Arena arena = Arena.ofConfined()) {
       MemorySegment w = arena.allocate(JAVA_DOUBLE);
@@ -530,8 +532,20 @@ public final class PdfDocument implements AutoCloseable {
     } else if (sourcePath != null) {
       try (FileChannel fc = FileChannel.open(sourcePath, StandardOpenOption.READ);
           Arena arena = Arena.ofConfined()) {
-        MemorySegment segment = fc.map(FileChannel.MapMode.READ_ONLY, 0, fc.size(), arena);
-        result = parseAllInfoMetadata(segment);
+        long fileSize = fc.size();
+        if (fileSize <= 0) {
+          result = Map.of();
+        } else {
+          long tailSize = Math.min(fileSize, FALLBACK_TAIL_SCAN_BYTES);
+          long tailStart = fileSize - tailSize;
+          MemorySegment tail = fc.map(FileChannel.MapMode.READ_ONLY, tailStart, tailSize, arena);
+          result = parseAllInfoMetadata(tail);
+          // Keep behavior robust: if tail miss occurs, retry with full-file map once.
+          if (result.isEmpty() && tailStart > 0) {
+            MemorySegment full = fc.map(FileChannel.MapMode.READ_ONLY, 0, fileSize, arena);
+            result = parseAllInfoMetadata(full);
+          }
+        }
       } catch (IOException e) {
         PdfiumLibrary.ignore(e);
         result = Map.of();
@@ -730,8 +744,16 @@ public final class PdfDocument implements AutoCloseable {
     if (sourcePath != null) {
       try (FileChannel fc = FileChannel.open(sourcePath, StandardOpenOption.READ);
           Arena arena = Arena.ofConfined()) {
-        MemorySegment segment = fc.map(FileChannel.MapMode.READ_ONLY, 0, fc.size(), arena);
-        return extractXmpFromSegment(segment);
+        long fileSize = fc.size();
+        if (fileSize <= 0) return EMPTY_BYTE_ARRAY;
+        long tailSize = Math.min(fileSize, FALLBACK_TAIL_SCAN_BYTES);
+        long tailStart = fileSize - tailSize;
+        MemorySegment tail = fc.map(FileChannel.MapMode.READ_ONLY, tailStart, tailSize, arena);
+        byte[] xmp = extractXmpFromSegment(tail);
+        if (xmp.length > 0 || tailStart == 0) return xmp;
+        // Fallback for uncommon PDFs where the packet is not in the tail window.
+        MemorySegment full = fc.map(FileChannel.MapMode.READ_ONLY, 0, fileSize, arena);
+        return extractXmpFromSegment(full);
       } catch (IOException e) {
         PdfiumLibrary.ignore(e);
       }

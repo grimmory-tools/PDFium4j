@@ -71,8 +71,7 @@ final class PdfSaver {
     @CheckForNull
     static ObjectRef parse(String ref) {
       if (ref == null) return null;
-      Pattern p = Pattern.compile("(\\d+)\\s+(\\d+)\\s+R");
-      Matcher m = p.matcher(ref);
+      Matcher m = OBJECT_REF_PATTERN.matcher(ref);
       return m.find()
           ? new ObjectRef(Integer.parseInt(m.group(1)), Integer.parseInt(m.group(2)))
           : null;
@@ -84,6 +83,7 @@ final class PdfSaver {
     }
   }
 
+  private static final Pattern OBJECT_REF_PATTERN = Pattern.compile("(\\d+)\\s+(\\d+)\\s+R");
   private static final Pattern METADATA_REF_PATTERN =
       Pattern.compile("/Metadata\\s+\\d+\\s+\\d+\\s+R\\b");
   private static final Pattern ROOT_REF_PATTERN = Pattern.compile("/Root\\s+(\\d+)\\s+(\\d+)\\s+R");
