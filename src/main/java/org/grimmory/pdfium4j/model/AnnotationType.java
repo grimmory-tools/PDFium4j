@@ -39,11 +39,10 @@ public enum AnnotationType {
     this.pdfiumCode = pdfiumCode;
   }
 
-    public static AnnotationType fromCode(int code) {
+  public static AnnotationType fromCode(int code) {
     for (AnnotationType type : VALUES) {
       if (type.pdfiumCode == code) return type;
     }
     return UNKNOWN;
   }
-
 }

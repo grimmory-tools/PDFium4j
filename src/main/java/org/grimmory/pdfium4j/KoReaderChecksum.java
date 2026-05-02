@@ -1,8 +1,8 @@
 package org.grimmory.pdfium4j;
 
 import java.io.IOException;
-import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
+import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -38,15 +38,32 @@ public final class KoReaderChecksum {
     try (FileChannel fc = FileChannel.open(path, StandardOpenOption.READ)) {
       long fileSize = fc.size();
       if (fileSize == 0) return Optional.empty();
-
-      // Use shared arena for potential parallel access or scoped lifetime
-      try (Arena arena = Arena.ofConfined()) {
-        MemorySegment segment = fc.map(FileChannel.MapMode.READ_ONLY, 0, fileSize, arena);
-        return Optional.of(calculateFromSegment(segment));
-      }
+      // Use positional reads into a reusable 1 KB buffer; avoids mapping the entire file
+      // when only up to 11 × 1 KB sample windows are needed.
+      return Optional.of(calculateFromChannel(fc, fileSize));
     } catch (IOException _) {
       return Optional.empty();
     }
+  }
+
+  private static String calculateFromChannel(FileChannel fc, long fileSize) throws IOException {
+    MessageDigest md5 = createMd5();
+    byte[] buf = new byte[SAMPLE_SIZE];
+    ByteBuffer bb = ByteBuffer.wrap(buf);
+    for (int i = -1; i <= 10; i++) {
+      long position = samplePosition(i);
+      if (position >= fileSize) break;
+      int len = (int) Math.min(SAMPLE_SIZE, fileSize - position);
+      bb.clear().limit(len);
+      long readPos = position;
+      while (bb.hasRemaining()) {
+        int read = fc.read(bb, readPos);
+        if (read <= 0) break;
+        readPos += read;
+      }
+      md5.update(buf, 0, bb.position());
+    }
+    return HexFormat.of().formatHex(md5.digest());
   }
 
   /**

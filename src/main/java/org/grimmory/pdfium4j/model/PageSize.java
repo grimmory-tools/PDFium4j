@@ -5,7 +5,7 @@ public record PageSize(float width, float height) {
 
   public static final PageSize A4 = new PageSize(595, 842);
 
-    /** Width in pixels at the given DPI. Clamped to avoid overflow. */
+  /** Width in pixels at the given DPI. Clamped to avoid overflow. */
   public int widthPixels(int dpi) {
     return safePixels(width, dpi);
   }

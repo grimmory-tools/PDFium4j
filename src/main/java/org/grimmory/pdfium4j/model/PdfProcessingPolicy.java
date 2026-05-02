@@ -50,5 +50,4 @@ public record PdfProcessingPolicy(
         DEFAULT_MAX_PARALLEL_THREADS,
         DEFAULT_FILE_BACKED_THRESHOLD);
   }
-
 }

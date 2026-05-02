@@ -4,7 +4,6 @@ import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.util.ArrayList;
 import java.util.List;
-import org.grimmory.pdfium4j.PdfiumLibrary;
 import org.grimmory.pdfium4j.exception.PdfiumException;
 import org.grimmory.pdfium4j.internal.DocBindings;
 import org.grimmory.pdfium4j.internal.FfmHelper;
@@ -56,7 +55,8 @@ final class BookmarkReader {
 
   private static String getBookmarkTitle(Arena arena, MemorySegment bm) {
     try {
-      long needed = (long) DocBindings.FPDFBookmark_GetTitle.invokeExact(bm, MemorySegment.NULL, 0L);
+      long needed =
+          (long) DocBindings.FPDFBookmark_GetTitle.invokeExact(bm, MemorySegment.NULL, 0L);
       if (needed <= 2) return "";
 
       MemorySegment buf = arena.allocate(needed);

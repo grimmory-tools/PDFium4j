@@ -31,7 +31,14 @@ public final class TextBindings {
 
   public static void checkRequired() {
     Objects.requireNonNull(FPDFText_LoadPage, "FPDFText_LoadPage");
+    Objects.requireNonNull(FPDFText_ClosePage, "FPDFText_ClosePage");
     Objects.requireNonNull(FPDFText_CountChars, "FPDFText_CountChars");
+    Objects.requireNonNull(FPDFLink_LoadWebLinks, "FPDFLink_LoadWebLinks");
+    Objects.requireNonNull(FPDFLink_CountWebLinks, "FPDFLink_CountWebLinks");
+    Objects.requireNonNull(FPDFLink_GetURL, "FPDFLink_GetURL");
+    Objects.requireNonNull(FPDFLink_CountRects, "FPDFLink_CountRects");
+    Objects.requireNonNull(FPDFLink_GetRect, "FPDFLink_GetRect");
+    Objects.requireNonNull(FPDFLink_CloseWebLinks, "FPDFLink_CloseWebLinks");
   }
 
   /** Load a text page from a page handle. Returns FPDF_TEXTPAGE (NULL on failure). */

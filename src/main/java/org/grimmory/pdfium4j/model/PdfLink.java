@@ -10,6 +10,4 @@ import java.util.Optional;
  * @param rect the bounding rectangle
  * @param targetPage target page index for internal links (-1 if external or unknown)
  */
-public record PdfLink(Optional<String> url, PdfAnnotation.Rect rect, int targetPage) {
-
-}
+public record PdfLink(Optional<String> url, PdfAnnotation.Rect rect, int targetPage) {}

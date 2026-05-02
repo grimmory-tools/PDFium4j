@@ -7,7 +7,6 @@ import static java.lang.foreign.ValueLayout.JAVA_INT;
 import static java.lang.foreign.ValueLayout.JAVA_LONG;
 
 import edu.umd.cs.findbugs.annotations.CheckForNull;
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -28,6 +27,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -73,6 +73,21 @@ public final class PdfDocument implements AutoCloseable {
 
   private static final MetadataTag[] METADATA_TAGS = MetadataTag.values();
 
+  // Static compiled patterns – avoids per-call Pattern.compile() in hot metadata fallback paths.
+  private static final Pattern STATIC_INFO_PATTERN =
+      Pattern.compile("/Info\\s+(\\d+)\\s+(\\d+)\\s+R");
+
+  /**
+   * Matches /Key (literal value) – does not handle escaped parens in value, adequate for standard
+   * Info dict.
+   */
+  private static final Pattern INFO_DICT_LITERAL_PATTERN =
+      Pattern.compile("/(\\w+)\\s+\\(([^)\\\\]*)\\)");
+
+  /** Matches /Key <hexvalue>. */
+  private static final Pattern INFO_DICT_HEX_PATTERN =
+      Pattern.compile("/(\\w+)\\s+<([A-Fa-f0-9]*)>");
+
   private final MemorySegment handle;
   private final Arena docArena;
   private SeekableByteChannel docSourceChannel;
@@ -84,6 +99,16 @@ public final class PdfDocument implements AutoCloseable {
   private final List<PdfPage> openPages = new ArrayList<>(8);
   private volatile boolean closed = false;
   private volatile boolean structurallyModified = false;
+
+  /** Cached page count; -1 means not yet fetched or invalidated. */
+  private int cachedPageCount = -1;
+
+  /** Lazy-parsed fallback Info dict key→value map (populated at most once per document). */
+  private Map<String, String> cachedFallbackMeta;
+
+  /** Memoized XMP bytes from file-system fallback path. */
+  private byte[] cachedFallbackXmp;
+
   private final Map<MetadataTag, String> pendingMetadata = LinkedHashMap.newLinkedHashMap(8);
   private String pendingXmpMetadata = null;
   private final CleanupState state;
@@ -113,16 +138,13 @@ public final class PdfDocument implements AutoCloseable {
     PdfiumLibrary.incrementDocumentCount();
   }
 
-  @SuppressFBWarnings("IS2_INCONSISTENT_SYNC")
   private static final class CleanupState implements Runnable {
     private final long channelId;
-    private final AtomicReference<SeekableByteChannel> sourceChannelRef =
-        new AtomicReference<>();
+    private final AtomicReference<SeekableByteChannel> sourceChannelRef = new AtomicReference<>();
     private final Path tempFile;
     private final Arena docArena;
 
-    private CleanupState(
-        long channelId, SeekableByteChannel chan, Path tempFile, Arena docArena) {
+    private CleanupState(long channelId, SeekableByteChannel chan, Path tempFile, Arena docArena) {
       this.channelId = channelId;
       this.sourceChannelRef.set(chan);
       this.tempFile = tempFile;
@@ -171,8 +193,6 @@ public final class PdfDocument implements AutoCloseable {
     }
   }
 
-
-
   public static PdfDocument open(Path path) {
     return open(path, null, resolvePolicy(null));
   }
@@ -185,7 +205,12 @@ public final class PdfDocument implements AutoCloseable {
       long size = Files.size(path);
       if (size > resolvedPolicy.maxDocumentBytes()) {
         throw new PdfiumException(
-            "Document size (" + size + " bytes) exceeds policy limit (" + resolvedPolicy.maxDocumentBytes() + ")", null);
+            "Document size ("
+                + size
+                + " bytes) exceeds policy limit ("
+                + resolvedPolicy.maxDocumentBytes()
+                + ")",
+            null);
       }
       SeekableByteChannel channel = Files.newByteChannel(path, StandardOpenOption.READ);
       return openFromChannel(channel, path, null, password, path.toString(), resolvedPolicy);
@@ -204,7 +229,12 @@ public final class PdfDocument implements AutoCloseable {
       throw new IllegalArgumentException("data is null or empty");
     if (data.length > resolvedPolicy.maxDocumentBytes()) {
       throw new PdfiumException(
-          "Document size (" + data.length + " bytes) exceeds policy limit (" + resolvedPolicy.maxDocumentBytes() + ")", null);
+          "Document size ("
+              + data.length
+              + " bytes) exceeds policy limit ("
+              + resolvedPolicy.maxDocumentBytes()
+              + ")",
+          null);
     }
     PdfiumLibrary.ensureInitialized();
     Arena arena = Arena.ofShared();
@@ -319,11 +349,22 @@ public final class PdfDocument implements AutoCloseable {
     SeekableByteChannel channel = CHANNELS.get(channelId);
     if (channel == null || size <= 0 || size > Integer.MAX_VALUE) return 0;
     try {
-      synchronized (channel) {
-        channel.position(pos);
-        ByteBuffer bb = buf.reinterpret(size).asByteBuffer();
+      ByteBuffer bb = buf.reinterpret(size).asByteBuffer();
+      if (channel instanceof FileChannel fc) {
+        // Positional read: no position mutation, no synchronization needed.
+        long readPos = pos;
         while (bb.hasRemaining()) {
-          if (channel.read(bb) == -1) break;
+          int read = fc.read(bb, readPos);
+          if (read <= 0) return 0; // EOF before filling buffer – signal failure to PDFium
+          readPos += read;
+        }
+      } else {
+        synchronized (channel) {
+          channel.position(pos);
+          while (bb.hasRemaining()) {
+            int read = channel.read(bb);
+            if (read <= 0) return 0; // EOF before filling buffer
+          }
         }
       }
       return 1;
@@ -332,15 +373,21 @@ public final class PdfDocument implements AutoCloseable {
     }
   }
 
-
-
   public int pageCount() {
     ensureOpen();
+    if (cachedPageCount >= 0) return cachedPageCount;
     try {
-      return (int) ViewBindings.FPDF_GetPageCount.invokeExact(handle);
+      cachedPageCount = (int) ViewBindings.FPDF_GetPageCount.invokeExact(handle);
+      return cachedPageCount;
     } catch (Throwable t) {
       throw new PdfiumException("Failed to get page count", t);
     }
+  }
+
+  /** Marks the document as structurally modified and invalidates the cached page count. */
+  private void markStructurallyModified() {
+    cachedPageCount = -1;
+    structurallyModified = true;
   }
 
   public PdfPage page(int index) {
@@ -399,9 +446,25 @@ public final class PdfDocument implements AutoCloseable {
   }
 
   public List<PageSize> allPageSizes() {
+    ensureOpen();
     int count = pageCount();
+    if (count <= 0) return List.of();
     List<PageSize> sizes = new ArrayList<>(count);
-    for (int i = 0; i < count; i++) sizes.add(pageSize(i));
+    // Reuse a single Arena and single pair of output segments for all pages – avoids
+    // creating count×Arena and count×2×MemorySegment allocations in the loop.
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment w = arena.allocate(JAVA_DOUBLE);
+      MemorySegment h = arena.allocate(JAVA_DOUBLE);
+      for (int i = 0; i < count; i++) {
+        int ok = (int) ViewBindings.FPDF_GetPageSizeByIndex.invokeExact(handle, i, w, h);
+        if (ok == 0) throwLastError("Failed to get page size " + i);
+        sizes.add(new PageSize((float) w.get(JAVA_DOUBLE, 0), (float) h.get(JAVA_DOUBLE, 0)));
+      }
+    } catch (PdfiumException e) {
+      throw e;
+    } catch (Throwable t) {
+      throw new PdfiumException("Failed to get page sizes", t);
+    }
     return sizes;
   }
 
@@ -450,60 +513,76 @@ public final class PdfDocument implements AutoCloseable {
   }
 
   private Optional<String> metadataFallback(MetadataTag tag) {
+    Map<String, String> cache = getOrBuildFallbackMeta();
+    String val = cache.get(tag.pdfKey());
+    return (val == null || val.isEmpty()) ? Optional.empty() : Optional.of(val);
+  }
+
+  /**
+   * Returns (and lazily builds) the per-document Info-dict cache. The file is mapped at most once
+   * regardless of how many metadata tags are requested.
+   */
+  private Map<String, String> getOrBuildFallbackMeta() {
+    if (cachedFallbackMeta != null) return cachedFallbackMeta;
+    Map<String, String> result;
     if (sourceBytes != null) {
-      return extractMetadataFromSegment(MemorySegment.ofArray(sourceBytes), tag);
-    }
-    if (sourcePath != null) {
+      result = parseAllInfoMetadata(MemorySegment.ofArray(sourceBytes));
+    } else if (sourcePath != null) {
       try (FileChannel fc = FileChannel.open(sourcePath, StandardOpenOption.READ);
           Arena arena = Arena.ofConfined()) {
         MemorySegment segment = fc.map(FileChannel.MapMode.READ_ONLY, 0, fc.size(), arena);
-        return extractMetadataFromSegment(segment, tag);
+        result = parseAllInfoMetadata(segment);
       } catch (IOException e) {
         PdfiumLibrary.ignore(e);
+        result = Map.of();
       }
+    } else {
+      result = Map.of();
     }
-    return Optional.empty();
+    cachedFallbackMeta = result;
+    return result;
   }
 
-  private static Optional<String> extractMetadataFromSegment(MemorySegment pdf, MetadataTag tag) {
+  /**
+   * Parses ALL key-value entries from the PDF Info dictionary in one pass. Avoids per-tag
+   * re-mapping and repeated Pattern.compile() calls.
+   */
+  private static Map<String, String> parseAllInfoMetadata(MemorySegment pdf) {
     long size = pdf.byteSize();
     long tailLen = Math.min(size, 4096);
-    if (tailLen == 0) return Optional.empty();
+    if (tailLen == 0) return Map.of();
     byte[] tailBytes = pdf.asSlice(size - tailLen, tailLen).toArray(JAVA_BYTE);
     String tail = new String(tailBytes, StandardCharsets.ISO_8859_1);
 
-    // Find latest /Info reference in tail
-    Pattern infoP = Pattern.compile("/Info\\s+(\\d+)\\s+(\\d+)\\s+R");
-    Matcher m = infoP.matcher(tail);
+    Matcher m = STATIC_INFO_PATTERN.matcher(tail);
     int objNum = -1;
     int genNum = 0;
     while (m.find()) {
       objNum = Integer.parseInt(m.group(1));
       genNum = Integer.parseInt(m.group(2));
     }
-    if (objNum < 0) return Optional.empty();
+    if (objNum < 0) return Map.of();
 
-    // Find the object
     String dict = extractDictFromSegment(pdf, objNum, genNum);
-    if (dict == null) return Optional.empty();
+    if (dict == null) return Map.of();
+    return parseInfoDictAllFields(dict);
+  }
 
-    // Find the tag in dict
-    Pattern tagP = Pattern.compile("/" + tag.pdfKey() + "\\s+\\((.*?)\\)");
-    Matcher tagM = tagP.matcher(dict);
-    if (tagM.find()) {
-      String val = tagM.group(1);
-      return (val == null || val.isEmpty()) ? Optional.empty() : Optional.of(val);
+  /** Parses all /Key (value) and /Key &lt;hex&gt; entries from an Info dictionary string. */
+  private static Map<String, String> parseInfoDictAllFields(String dict) {
+    Map<String, String> result = LinkedHashMap.newLinkedHashMap(16);
+    Matcher m = INFO_DICT_LITERAL_PATTERN.matcher(dict);
+    while (m.find()) {
+      result.put(m.group(1), m.group(2));
     }
-
-    // Hex string fallback
-    tagP = Pattern.compile("/" + tag.pdfKey() + "\\s+<(.*?)>");
-    tagM = tagP.matcher(dict);
-    if (tagM.find()) {
-      String val = decodeHexPdfString(tagM.group(1));
-      return (val == null || val.isEmpty()) ? Optional.empty() : Optional.of(val);
+    Matcher hexM = INFO_DICT_HEX_PATTERN.matcher(dict);
+    while (hexM.find()) {
+      String key = hexM.group(1);
+      if (!result.containsKey(key)) {
+        result.put(key, decodeHexPdfString(hexM.group(2)));
+      }
     }
-
-    return Optional.empty();
+    return Collections.unmodifiableMap(result);
   }
 
   @CheckForNull
@@ -582,8 +661,32 @@ public final class PdfDocument implements AutoCloseable {
   }
 
   public Optional<String> metadata(String customKey) {
+    // Check known enum-backed tags first
     for (MetadataTag tag : METADATA_TAGS)
       if (tag.pdfKey().equalsIgnoreCase(customKey)) return metadata(tag);
+    // Support arbitrary /Info keys (e.g. /Language) via FPDF_GetMetaText
+    ensureOpen();
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment keySeg = arena.allocateFrom(customKey);
+      long needed =
+          (long) DocBindings.FPDF_GetMetaText.invokeExact(handle, keySeg, MemorySegment.NULL, 0L);
+      if (needed > 2) {
+        MemorySegment buf = arena.allocate(needed);
+        DocBindings.FPDF_GetMetaText.invokeExact(handle, keySeg, buf, needed);
+        String val = FfmHelper.fromWideString(buf, needed);
+        if (val != null && !val.isEmpty()) return Optional.of(val);
+      }
+    } catch (Throwable ignored) {
+      // fall through to fallback
+    }
+    // Fallback: check the raw parsed Info dict (case-insensitive key match)
+    Map<String, String> fallback = getOrBuildFallbackMeta();
+    for (Map.Entry<String, String> entry : fallback.entrySet()) {
+      if (entry.getKey().equalsIgnoreCase(customKey)) {
+        String v = entry.getValue();
+        return (v == null || v.isEmpty()) ? Optional.empty() : Optional.of(v);
+      }
+    }
     return Optional.empty();
   }
 
@@ -613,6 +716,14 @@ public final class PdfDocument implements AutoCloseable {
     } catch (Throwable e) {
       PdfiumLibrary.ignore(e);
     }
+    // Fallback path: memoize so repeated calls never re-map the file.
+    if (cachedFallbackXmp != null) return cachedFallbackXmp;
+    byte[] result = computeFallbackXmp();
+    cachedFallbackXmp = result;
+    return result;
+  }
+
+  private byte[] computeFallbackXmp() {
     if (sourceBytes != null) {
       return extractXmpFromSegment(MemorySegment.ofArray(sourceBytes));
     }
@@ -683,7 +794,7 @@ public final class PdfDocument implements AutoCloseable {
                   handle, index, (double) size.width(), (double) size.height());
       if (FfmHelper.isNull(p)) throwLastError("Failed to insert page");
       ViewBindings.FPDF_ClosePage.invokeExact(p);
-      structurallyModified = true;
+      markStructurallyModified();
     } catch (Throwable t) {
       throw new PdfiumException("Failed to insert page", t);
     }
@@ -695,7 +806,7 @@ public final class PdfDocument implements AutoCloseable {
       throw new IllegalArgumentException("Index out of bounds");
     try {
       DocBindings.FPDFPage_Delete.invokeExact(handle, index);
-      structurallyModified = true;
+      markStructurallyModified();
     } catch (Throwable t) {
       throw new PdfiumException("Failed to delete page", t);
     }
@@ -707,7 +818,7 @@ public final class PdfDocument implements AutoCloseable {
       MemorySegment r = (range != null) ? docArena.allocateFrom(range) : MemorySegment.NULL;
       int ok = (int) EditBindings.FPDF_ImportPages.invokeExact(handle, src.handle, r, index);
       if (ok == 0) throwLastError("Failed to import pages");
-      structurallyModified = true;
+      markStructurallyModified();
     } catch (Throwable t) {
       throw new PdfiumException("Failed to import pages", t);
     }
@@ -863,9 +974,9 @@ public final class PdfDocument implements AutoCloseable {
 
   private Map<MetadataTag, String> buildMergedMetadata() {
     Map<MetadataTag, String> merged = LinkedHashMap.newLinkedHashMap(METADATA_TAGS.length);
-      for (MetadataTag tag : METADATA_TAGS) {
-          if (!pendingMetadata.containsKey(tag)) metadata(tag).ifPresent(v -> merged.put(tag, v));
-      }
+    for (MetadataTag tag : METADATA_TAGS) {
+      if (!pendingMetadata.containsKey(tag)) metadata(tag).ifPresent(v -> merged.put(tag, v));
+    }
     merged.putAll(pendingMetadata);
     return merged;
   }

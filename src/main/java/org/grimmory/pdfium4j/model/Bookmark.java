@@ -13,5 +13,4 @@ public record Bookmark(String title, int pageIndex, List<Bookmark> children) {
   public Bookmark {
     children = children != null ? List.copyOf(children) : List.of();
   }
-
 }

@@ -130,18 +130,15 @@ public final class XmpMetadataWriter {
     if (!metadata.creators().isEmpty()) writeSeq(w, "dc:creator", metadata.creators());
 
     Optional<String> description = metadata.description();
-    if (description.isPresent())
-      writeAlt(w, "dc:description", description.get());
+    if (description.isPresent()) writeAlt(w, "dc:description", description.get());
 
     if (!metadata.subjects().isEmpty()) writeBag(w, "dc:subject", metadata.subjects());
 
     Optional<String> publisher = metadata.publisher();
-    if (publisher.isPresent())
-      writeBag(w, "dc:publisher", List.of(publisher.get()));
+    if (publisher.isPresent()) writeBag(w, "dc:publisher", List.of(publisher.get()));
 
     Optional<String> language = metadata.language();
-    if (language.isPresent())
-      writeBag(w, "dc:language", List.of(language.get()));
+    if (language.isPresent()) writeBag(w, "dc:language", List.of(language.get()));
 
     Optional<String> date = metadata.date();
     if (date.isPresent()) writeSeq(w, "dc:date", List.of(date.get()));
@@ -154,8 +151,7 @@ public final class XmpMetadataWriter {
     w.write("</rdf:Description>\n");
   }
 
-  private static void writePdfAConformance(Writer w, XmpMetadata metadata)
-      throws IOException {
+  private static void writePdfAConformance(Writer w, XmpMetadata metadata) throws IOException {
     Optional<String> pdfaConformance = metadata.pdfaConformance();
     if (pdfaConformance.isEmpty()) return;
     String conf = pdfaConformance.get();
@@ -277,7 +273,9 @@ public final class XmpMetadataWriter {
       if ("xmp".equals(prefix)) {
         unprefixed.put(key, value);
       } else if (customNamespaces.containsKey(prefix)) {
-        grouped.computeIfAbsent(prefix, _ -> LinkedHashMap.newLinkedHashMap(8)).put(localName, value);
+        grouped
+            .computeIfAbsent(prefix, _ -> LinkedHashMap.newLinkedHashMap(8))
+            .put(localName, value);
       } else {
         throw new IllegalArgumentException("Namespace prefix '" + prefix + "' is not registered");
       }

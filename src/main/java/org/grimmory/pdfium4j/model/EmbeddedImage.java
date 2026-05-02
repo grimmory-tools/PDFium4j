@@ -12,6 +12,4 @@ package org.grimmory.pdfium4j.model;
  * @param verticalDpi vertical resolution in DPI
  */
 public record EmbeddedImage(
-    int index, int width, int height, int bitsPerPixel, float horizontalDpi, float verticalDpi) {
-
-}
+    int index, int width, int height, int bitsPerPixel, float horizontalDpi, float verticalDpi) {}

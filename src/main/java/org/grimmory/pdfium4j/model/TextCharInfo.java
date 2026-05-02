@@ -28,7 +28,7 @@ public record TextCharInfo(
     return Double.isFinite(value) ? value : 0.0;
   }
 
-    /** The character as a Java String. */
+  /** The character as a Java String. */
   public String character() {
     return new String(Character.toChars(charCode));
   }

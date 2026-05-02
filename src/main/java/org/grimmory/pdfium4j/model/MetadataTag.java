@@ -21,5 +21,4 @@ public enum MetadataTag {
   public String pdfKey() {
     return pdfKey;
   }
-
 }

@@ -12,5 +12,4 @@ public record SaveOptions(boolean skipValidation) {
 
   /** Default options: full validation enabled. */
   public static final SaveOptions DEFAULT = new SaveOptions(false);
-
 }

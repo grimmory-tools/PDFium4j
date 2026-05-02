@@ -19,7 +19,7 @@ public enum PdfErrorCode {
     this.description = description;
   }
 
-    public String description() {
+  public String description() {
     return description;
   }
 

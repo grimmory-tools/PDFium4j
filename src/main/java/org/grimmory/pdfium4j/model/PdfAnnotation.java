@@ -26,7 +26,7 @@ public record PdfAnnotation(
       top = sanitize(top);
     }
 
-      private static float sanitize(float value) {
+    private static float sanitize(float value) {
       return Float.isFinite(value) ? value : 0f;
     }
   }

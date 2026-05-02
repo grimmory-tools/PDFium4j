@@ -100,7 +100,9 @@ public record PdfBookMetadata(
         extractPublishedDate(xmp)
             .or(
                 () ->
-                    document.metadata(MetadataTag.CREATION_DATE).flatMap(PdfBookMetadata::parseDate)),
+                    document
+                        .metadata(MetadataTag.CREATION_DATE)
+                        .flatMap(PdfBookMetadata::parseDate)),
         extractSubjects(xmp, document),
         xmp.description().or(() -> document.metadata(MetadataTag.SUBJECT)),
         xmp.publisher().or(() -> document.metadata(MetadataTag.PRODUCER)),
@@ -322,5 +324,4 @@ public record PdfBookMetadata(
 
     return lower;
   }
-
 }

@@ -52,6 +52,10 @@ final class PdfSaver {
   private static final Map<Long, ByteArrayOutputStream> BUFFERS = new ConcurrentHashMap<>(16);
   private static final AtomicLong BUFFER_ID_SEQ = new AtomicLong();
 
+  /** Thread-local staging buffer for writeBlockCallback – avoids per-callback byte[] allocation. */
+  private static final ThreadLocal<byte[]> WRITE_BUF =
+      ThreadLocal.withInitial(() -> new byte[65536]);
+
   /** Parameters for saving a PDF document. */
   record SaveParams(
       MemorySegment docHandle,
@@ -89,7 +93,8 @@ final class PdfSaver {
 
   private static final byte[] DICT_START = "<<".getBytes(StandardCharsets.ISO_8859_1);
   private static final byte[] XREF_HEADER = "xref\n".getBytes(StandardCharsets.ISO_8859_1);
-  private static final byte[] XREF_ENTRY_TEMPLATE = "0000000000 00000 n \n".getBytes(StandardCharsets.ISO_8859_1);
+  private static final byte[] XREF_ENTRY_TEMPLATE =
+      "0000000000 00000 n \n".getBytes(StandardCharsets.ISO_8859_1);
 
   private record BasePdf(MemorySegment segment, @CheckForNull Path tempPath) {}
 
@@ -122,7 +127,8 @@ final class PdfSaver {
       try (FileChannel fc = FileChannel.open(params.sourcePath(), StandardOpenOption.READ)) {
         transferAll(fc, target);
       }
-    } else if (!params.structurallyModified() && params.originalSource() instanceof FileChannel fc) {
+    } else if (!params.structurallyModified()
+        && params.originalSource() instanceof FileChannel fc) {
       transferAll(fc, target);
     } else {
       writeSegment(baseSegment, out);
@@ -204,8 +210,19 @@ final class PdfSaver {
         pThis.reinterpret(EditBindings.FPDF_FILEWRITE_LAYOUT.byteSize()).get(JAVA_LONG, 16);
     ByteArrayOutputStream baos = BUFFERS.get(bufferId);
     if (baos == null || size <= 0) return 0;
-    byte[] data = pData.reinterpret(size).toArray(JAVA_BYTE);
-    baos.write(data, 0, data.length);
+    // Reinterpret pData to expose its full size before copying.
+    MemorySegment data = pData.reinterpret(size);
+    // Reuse a thread-local staging buffer to avoid per-callback heap allocation.
+    byte[] buf = WRITE_BUF.get();
+    long offset = 0;
+    long remaining = size;
+    while (remaining > 0) {
+      int chunk = (int) Math.min(buf.length, remaining);
+      MemorySegment.copy(data, JAVA_BYTE, offset, buf, 0, chunk);
+      baos.write(buf, 0, chunk);
+      offset += chunk;
+      remaining -= chunk;
+    }
     return 1;
   }
 
@@ -219,7 +236,7 @@ final class PdfSaver {
       byte[] tailBytes = pdf.asSlice(pdf.byteSize() - tailLen, tailLen).toArray(JAVA_BYTE);
       String tail = new String(tailBytes, StandardCharsets.ISO_8859_1);
 
-      int prevXrefOffset = findLastStartxrefValue(tail);
+      long prevXrefOffset = findLastStartxrefValue(tail);
       TrailerInfo trailer = parseTrailer(tail);
 
       performIncrementalUpdate(pdf, params, trailer, prevXrefOffset);
@@ -231,24 +248,21 @@ final class PdfSaver {
   }
 
   private static void performIncrementalUpdate(
-      MemorySegment pdf,
-      SaveParams params,
-      TrailerInfo trailer,
-      int prevXrefOffset)
+      MemorySegment pdf, SaveParams params, TrailerInfo trailer, long prevXrefOffset)
       throws IOException {
     int nextObj = trailer.size() > 0 ? trailer.size() : findMaxObjectNumber(pdf) + 1;
     ByteArrayOutputStream update = new ByteArrayOutputStream();
     update.write('\n');
 
     long baseOffset = pdf.byteSize();
-    Map<Integer, Integer> objOffsets = LinkedHashMap.newLinkedHashMap(16);
+    Map<Integer, Long> objOffsets = LinkedHashMap.newLinkedHashMap(16);
 
     int infoObjNum = 0;
     Map<MetadataTag, String> metadata = params.hasInfoUpdate() ? params.allMetadata() : null;
     if (metadata != null && !metadata.isEmpty()) {
       infoObjNum = nextObj;
       nextObj++;
-      objOffsets.put(infoObjNum, (int) (baseOffset + update.size()));
+      objOffsets.put(infoObjNum, baseOffset + update.size());
       update.write(buildInfoObject(infoObjNum, metadata));
     }
 
@@ -256,7 +270,7 @@ final class PdfSaver {
     if (xmp != null && !xmp.isEmpty()) {
       int xmpObjNum = nextObj;
       nextObj++;
-      objOffsets.put(xmpObjNum, (int) (baseOffset + update.size()));
+      objOffsets.put(xmpObjNum, baseOffset + update.size());
       update.write(buildXmpObject(xmpObjNum, xmp));
 
       ObjectRef catalogRef = trailer.rootRef();
@@ -264,11 +278,11 @@ final class PdfSaver {
       if (catalogDict == null) {
         throw new IOException("Failed to find Catalog object for XMP update");
       }
-      objOffsets.put(catalogRef.num, (int) (baseOffset + update.size()));
+      objOffsets.put(catalogRef.num, baseOffset + update.size());
       update.write(buildModifiedCatalog(catalogRef.num, catalogRef.gen, catalogDict, xmpObjNum));
     }
 
-    int xrefOffset = (int) (baseOffset + update.size());
+    long xrefOffset = baseOffset + update.size();
     writeXrefTable(update, objOffsets);
     writeTrailer(update, trailer, infoObjNum, nextObj, prevXrefOffset, xrefOffset);
 
@@ -280,7 +294,7 @@ final class PdfSaver {
   @SuppressFBWarnings(
       value = "VA_FORMAT_STRING_USES_NEWLINE",
       justification = "PDF xref entries must be exactly 20 bytes; %n is platform-dependent")
-  private static void writeXrefTable(OutputStream update, Map<Integer, Integer> objOffsets)
+  private static void writeXrefTable(OutputStream update, Map<Integer, Long> objOffsets)
       throws IOException {
     update.write(XREF_HEADER);
     List<Integer> sortedNums = new ArrayList<>(objOffsets.keySet());
@@ -304,11 +318,11 @@ final class PdfSaver {
       update.write('\n');
 
       for (int j = 0; j < count; j++) {
-        int offset = objOffsets.get(start + j);
+        long offset = objOffsets.get(start + j);
         // Manual fixed-width formatting: 10 digits zero-padded "0000000000 00000 n \n"
         // Total 20 bytes.
         System.arraycopy(XREF_ENTRY_TEMPLATE, 0, entryBuf, 0, 20);
-        int tempOffset = offset;
+        long tempOffset = offset;
         for (int k = 9; k >= 0; k--) {
           entryBuf[k] = (byte) ('0' + (tempOffset % 10));
           tempOffset /= 10;
@@ -374,8 +388,8 @@ final class PdfSaver {
       TrailerInfo trailer,
       int infoObjNum,
       int nextObj,
-      int prevXrefOffset,
-      int xrefOffset)
+      long prevXrefOffset,
+      long xrefOffset)
       throws IOException {
     StringBuilder trailerSb = new StringBuilder(256);
     trailerSb.append("trailer\n<< /Size ").append(nextObj);
@@ -495,11 +509,11 @@ final class PdfSaver {
         int n2Start = skipAsciiWhitespace(dict, n1End);
         int n2End = scanDigits(dict, n2Start);
         int rPos = skipAsciiWhitespace(dict, n2End);
-        if (n1End > n1Start && n2End > n2Start && rPos < dict.length() && dict.charAt(rPos) == 'R') {
-          return dict.substring(n1Start, n1End)
-              + " "
-              + dict.substring(n2Start, n2End)
-              + " R";
+        if (n1End > n1Start
+            && n2End > n2Start
+            && rPos < dict.length()
+            && dict.charAt(rPos) == 'R') {
+          return dict.substring(n1Start, n1End) + " " + dict.substring(n2Start, n2End) + " R";
         }
       }
       searchFrom = trailerIdx - 1;
@@ -526,14 +540,14 @@ final class PdfSaver {
     return 0;
   }
 
-  private static int findLastStartxrefValue(String tail) {
+  private static long findLastStartxrefValue(String tail) {
     int idx = tail.lastIndexOf("startxref");
     if (idx < 0) return 0;
     int pos = skipAsciiWhitespace(tail, idx + 9);
     int end = scanDigits(tail, pos);
     if (end <= pos) return 0;
     try {
-      return Integer.parseInt(tail.substring(pos, end));
+      return Long.parseLong(tail.substring(pos, end));
     } catch (Exception e) {
       return 0;
     }
@@ -596,29 +610,49 @@ final class PdfSaver {
   }
 
   private static int findMaxObjectNumber(MemorySegment pdf) {
-    byte[] marker = " 0 obj".getBytes(StandardCharsets.ISO_8859_1);
+    // Scan for " obj" and walk back through "genNum objNum" to extract the object number.
+    // Handles any generation number, not just 0.
+    byte[] marker = " obj".getBytes(StandardCharsets.ISO_8859_1);
     int max = 0;
-    long pos = 0;
+    long searchPos = 0;
     while (true) {
-      pos = indexOf(pdf, marker, pos);
+      long pos = indexOf(pdf, marker, searchPos);
       if (pos < 0) break;
-      long numStart = pos - 1;
-      while (numStart >= 0 && Character.isDigit((char) pdf.get(JAVA_BYTE, numStart))) {
-        numStart--;
+      searchPos = pos + marker.length;
+      // pos points to the space in " obj"
+      // Walk back: skip gen digits, skip whitespace, read obj number digits
+      long p = pos - 1;
+      if (p < 0 || !isAsciiDigit(pdf, p)) continue;
+      // skip gen digits
+      while (p > 0 && isAsciiDigit(pdf, p - 1)) p--;
+      // p = first digit of genNum; expect whitespace before it
+      if (p <= 0 || !isAsciiWhitespace(pdf, p - 1)) continue;
+      p--;
+      while (p > 0 && isAsciiWhitespace(pdf, p - 1)) p--;
+      // p = last digit of objNum
+      if (!isAsciiDigit(pdf, p)) continue;
+      long numEnd = p;
+      long numStart = numEnd;
+      while (numStart > 0 && isAsciiDigit(pdf, numStart - 1)) numStart--;
+      try {
+        byte[] numBytes = pdf.asSlice(numStart, numEnd - numStart + 1).toArray(JAVA_BYTE);
+        int num = Integer.parseInt(new String(numBytes, StandardCharsets.ISO_8859_1));
+        if (num > max) max = num;
+      } catch (Exception _) {
+        // ignore malformed
       }
-      numStart++;
-      if (numStart < pos) {
-        try {
-          byte[] numBytes = pdf.asSlice(numStart, pos - numStart).toArray(JAVA_BYTE);
-          int num = Integer.parseInt(new String(numBytes, StandardCharsets.ISO_8859_1));
-          if (num > max) max = num;
-        } catch (Exception _) {
-          // ignore malformed
-        }
-      }
-      pos += marker.length;
     }
     return max;
+  }
+
+  private static boolean isAsciiDigit(MemorySegment seg, long idx) {
+    byte b = seg.get(JAVA_BYTE, idx);
+    return b >= '0' && b <= '9';
+  }
+
+  private static boolean isAsciiWhitespace(MemorySegment seg, long idx) {
+    byte b = seg.get(JAVA_BYTE, idx);
+    return b == ' ' || b == '\t' || b == '\r' || b == '\n';
   }
 
   private static final char[] HEX = "0123456789ABCDEF".toCharArray();

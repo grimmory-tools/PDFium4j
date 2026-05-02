@@ -20,7 +20,7 @@ public record RenderFlags(int value) {
   /** Default flags: annotations rendered, anti-aliasing on, RGBA byte order. */
   public static final RenderFlags DEFAULT = builder().build();
 
-    public static Builder builder() {
+  public static Builder builder() {
     return new Builder();
   }
 
@@ -38,7 +38,7 @@ public record RenderFlags(int value) {
       return this;
     }
 
-      public Builder printing(boolean v) {
+    public Builder printing(boolean v) {
       this.printing = v;
       return this;
     }

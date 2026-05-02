@@ -5,6 +5,7 @@ import static java.lang.foreign.ValueLayout.JAVA_DOUBLE;
 import static java.lang.foreign.ValueLayout.JAVA_FLOAT;
 import static java.lang.foreign.ValueLayout.JAVA_INT;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.util.ArrayList;
@@ -12,7 +13,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
-import org.grimmory.pdfium4j.PdfiumLibrary;
 import org.grimmory.pdfium4j.exception.PdfiumException;
 import org.grimmory.pdfium4j.exception.PdfiumRenderException;
 import org.grimmory.pdfium4j.internal.AnnotBindings;
@@ -74,6 +74,7 @@ public final class PdfPage implements AutoCloseable {
   }
 
   /** Returns the native FFM handle for this page. */
+  @SuppressFBWarnings(value = "EI_EXPOSE_REP", justification = "Native handle must be accessible")
   public MemorySegment handle() {
     ensureOpen();
     return handle;

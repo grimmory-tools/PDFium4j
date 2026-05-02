@@ -84,7 +84,7 @@ public final class PdfiumLibrary {
     }
   }
 
-    /** Ensures the library is initialized. Internal use only. */
+  /** Ensures the library is initialized. Internal use only. */
   static void ensureInitialized() {
     if (!initialized) {
       initialize();
