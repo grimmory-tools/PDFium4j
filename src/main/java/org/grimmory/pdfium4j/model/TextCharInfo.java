@@ -28,16 +28,6 @@ public record TextCharInfo(
     return Double.isFinite(value) ? value : 0.0;
   }
 
-  /** Width of the character bounding box in points. */
-  public double width() {
-    return right - left;
-  }
-
-  /** Height of the character bounding box in points. */
-  public double height() {
-    return top - bottom;
-  }
-
   /** The character as a Java String. */
   public String character() {
     return new String(Character.toChars(charCode));

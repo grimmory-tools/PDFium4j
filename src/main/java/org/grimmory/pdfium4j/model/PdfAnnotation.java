@@ -26,14 +26,6 @@ public record PdfAnnotation(
       top = sanitize(top);
     }
 
-    public float width() {
-      return right - left;
-    }
-
-    public float height() {
-      return top - bottom;
-    }
-
     private static float sanitize(float value) {
       return Float.isFinite(value) ? value : 0f;
     }

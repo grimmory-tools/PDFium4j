@@ -2,6 +2,7 @@ package org.grimmory.pdfium4j;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import edu.umd.cs.findbugs.annotations.CheckForNull;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -1080,6 +1081,7 @@ class PdfDocumentTest {
     }
   }
 
+  @CheckForNull
   private Path getTestPdf() {
     var url = getClass().getResource("/test.pdf");
     if (url != null) {
@@ -1363,7 +1365,7 @@ class PdfDocumentTest {
     }
   }
 
-  private String buildBookloreXmp(String title, String author) {
+  private static String buildBookloreXmp(String title, String author) {
     return """
                 <?xpacket begin="\uFEFF" id="W5M0MpCehiHzreSzNTczkc9d"?>
                 <x:xmpmeta xmlns:x="adobe:ns:meta/">
@@ -1599,7 +1601,7 @@ class PdfDocumentTest {
     xrefData[di++] = (byte) ((xrefStreamOffset >> 24) & 0xFF);
     xrefData[di++] = (byte) ((xrefStreamOffset >> 16) & 0xFF);
     xrefData[di++] = (byte) ((xrefStreamOffset >> 8) & 0xFF);
-    xrefData[di++] = (byte) (xrefStreamOffset & 0xFF);
+    xrefData[di] = (byte) (xrefStreamOffset & 0xFF);
 
     writeBytes(
         out,

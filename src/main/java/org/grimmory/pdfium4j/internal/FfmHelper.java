@@ -1,8 +1,9 @@
 package org.grimmory.pdfium4j.internal;
 
+import static java.lang.foreign.ValueLayout.JAVA_BYTE;
+
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
-import java.lang.foreign.ValueLayout;
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -23,12 +24,7 @@ public final class FfmHelper {
 
   /** Encode a Java String to a null-terminated UTF-16LE MemorySegment (FPDF_WIDESTRING). */
   public static MemorySegment toWideString(Arena arena, String text) {
-    byte[] encoded = text.getBytes(StandardCharsets.UTF_16LE);
-    MemorySegment seg = arena.allocate(encoded.length + 2L);
-    MemorySegment.copy(encoded, 0, seg, ValueLayout.JAVA_BYTE, 0, encoded.length);
-    seg.set(ValueLayout.JAVA_BYTE, encoded.length, (byte) 0);
-    seg.set(ValueLayout.JAVA_BYTE, encoded.length + 1, (byte) 0);
-    return seg;
+    return arena.allocateFrom(text, StandardCharsets.UTF_16LE);
   }
 
   /**
@@ -39,20 +35,15 @@ public final class FfmHelper {
    */
   public static String fromWideString(MemorySegment seg, long byteLen) {
     if (byteLen <= 2) return "";
-    byte[] data = seg.asSlice(0, byteLen - 2).toArray(ValueLayout.JAVA_BYTE);
-    return new String(data, StandardCharsets.UTF_16LE);
-  }
-
-  /**
-   * Decode a null-terminated UTF-8 buffer into a Java String.
-   *
-   * @param seg the MemorySegment containing the string
-   * @param byteLen total bytes including the null terminator
-   */
-  public static String fromByteString(MemorySegment seg, long byteLen) {
-    if (byteLen <= 1) return "";
-    byte[] data = seg.asSlice(0, byteLen - 1).toArray(ValueLayout.JAVA_BYTE);
-    return new String(data, StandardCharsets.UTF_8);
+    long boundedByteLen = Math.min(byteLen, seg.byteSize());
+    long lenLong = boundedByteLen - 2;
+    if (lenLong <= 0) return "";
+    if (lenLong > Integer.MAX_VALUE) {
+      throw new IllegalArgumentException("Wide string length exceeds supported bounds: " + lenLong);
+    }
+    int len = (int) lenLong;
+    byte[] arr = seg.asSlice(0, len).toArray(JAVA_BYTE);
+    return new String(arr, StandardCharsets.UTF_16LE);
   }
 
   /** Convert a raw pointer (as MemorySegment) check for NULL. */

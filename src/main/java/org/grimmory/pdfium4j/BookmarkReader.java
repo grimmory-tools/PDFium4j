@@ -23,7 +23,7 @@ final class BookmarkReader {
       MemorySegment docHandle, MemorySegment parent, int depth) {
     if (depth > MAX_BOOKMARK_DEPTH) return List.of();
 
-    List<Bookmark> result = new ArrayList<>();
+    List<Bookmark> result = new ArrayList<>(16);
     MemorySegment child;
     try {
       child = (MemorySegment) DocBindings.FPDFBookmark_GetFirstChild.invokeExact(docHandle, parent);
@@ -51,18 +51,21 @@ final class BookmarkReader {
   }
 
   private static String getBookmarkTitle(MemorySegment bm) {
-    try (Arena arena = Arena.ofConfined()) {
+    try {
       long needed =
           (long) DocBindings.FPDFBookmark_GetTitle.invokeExact(bm, MemorySegment.NULL, 0L);
       if (needed <= 2) return "";
 
-      MemorySegment buf = arena.allocate(needed);
-      long copied = (long) DocBindings.FPDFBookmark_GetTitle.invokeExact(bm, buf, needed);
-      if (copied <= 2) {
-        return "";
+      try (Arena arena = Arena.ofConfined()) {
+        MemorySegment buf = arena.allocate(needed);
+        long copied = (long) DocBindings.FPDFBookmark_GetTitle.invokeExact(bm, buf, needed);
+        if (copied <= 2) {
+          return "";
+        }
+        return FfmHelper.fromWideString(buf, needed);
       }
-      return FfmHelper.fromWideString(buf, needed);
-    } catch (Throwable t) {
+    } catch (Throwable e) {
+      PdfiumLibrary.ignore(e);
       return "";
     }
   }
@@ -86,7 +89,8 @@ final class BookmarkReader {
       if (!FfmHelper.isNull(dest)) {
         return (int) DocBindings.FPDFDest_GetDestPageIndex.invokeExact(docHandle, dest);
       }
-    } catch (Throwable ignored) {
+    } catch (Throwable e) {
+      PdfiumLibrary.ignore(e);
     }
     return -1;
   }

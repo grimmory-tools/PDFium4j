@@ -1,11 +1,14 @@
 package org.grimmory.pdfium4j.internal;
 
-import static java.lang.foreign.ValueLayout.*;
+import static java.lang.foreign.ValueLayout.ADDRESS;
+import static java.lang.foreign.ValueLayout.JAVA_INT;
+import static java.lang.foreign.ValueLayout.JAVA_LONG;
 
 import java.lang.foreign.FunctionDescriptor;
 import java.lang.foreign.Linker;
 import java.lang.foreign.SymbolLookup;
 import java.lang.invoke.MethodHandle;
+import java.util.Objects;
 
 /** FFM bindings for PDFium bitmap functions from {@code fpdfview.h}. */
 public final class BitmapBindings {
@@ -16,28 +19,24 @@ public final class BitmapBindings {
   private BitmapBindings() {}
 
   private static MethodHandle downcall(String name, FunctionDescriptor desc) {
-    return LINKER.downcallHandle(
-        LOOKUP
-            .find(name)
-            .orElseThrow(() -> new UnsatisfiedLinkError("PDFium symbol not found: " + name)),
-        desc);
+    return LOOKUP.find(name).map(addr -> LINKER.downcallHandle(addr, desc)).orElse(null);
   }
 
   private static MethodHandle downcallCritical(String name, FunctionDescriptor desc) {
-    return LINKER.downcallHandle(
-        LOOKUP
-            .find(name)
-            .orElseThrow(() -> new UnsatisfiedLinkError("PDFium symbol not found: " + name)),
-        desc,
-        Linker.Option.critical(false));
+    return LOOKUP
+        .find(name)
+        .map(addr -> LINKER.downcallHandle(addr, desc, Linker.Option.critical(false)))
+        .orElse(null);
   }
 
-  // Bitmap format constants
-  public static final int FPDFBitmap_Unknown = 0;
-  public static final int FPDFBitmap_Gray = 1;
-  public static final int FPDFBitmap_BGR = 2;
-  public static final int FPDFBitmap_BGRx = 3;
-  public static final int FPDFBitmap_BGRA = 4;
+  public static void checkRequired() {
+    Objects.requireNonNull(FPDFBitmap_Create, "FPDFBitmap_Create");
+    Objects.requireNonNull(FPDFBitmap_Destroy, "FPDFBitmap_Destroy");
+    Objects.requireNonNull(FPDFBitmap_GetBuffer, "FPDFBitmap_GetBuffer");
+    Objects.requireNonNull(FPDFBitmap_GetWidth, "FPDFBitmap_GetWidth");
+    Objects.requireNonNull(FPDFBitmap_GetHeight, "FPDFBitmap_GetHeight");
+    Objects.requireNonNull(FPDFBitmap_GetStride, "FPDFBitmap_GetStride");
+  }
 
   /**
    * Create a new bitmap. Parameters: width (pixels), height (pixels), alpha (0 = no alpha/BGRx,
@@ -45,16 +44,6 @@ public final class BitmapBindings {
    */
   public static final MethodHandle FPDFBitmap_Create =
       downcall("FPDFBitmap_Create", FunctionDescriptor.of(ADDRESS, JAVA_INT, JAVA_INT, JAVA_INT));
-
-  /**
-   * Create a bitmap using an externally allocated buffer. Parameters: width, height, format
-   * (FPDFBitmap_* constant), firstScan (pointer to first scanline byte), stride (bytes per
-   * scanline). Returns FPDF_BITMAP handle.
-   */
-  public static final MethodHandle FPDFBitmap_CreateEx =
-      downcall(
-          "FPDFBitmap_CreateEx",
-          FunctionDescriptor.of(ADDRESS, JAVA_INT, JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT));
 
   /** Fill a rectangle in the bitmap. color is 0xAARRGGBB. */
   public static final MethodHandle FPDFBitmap_FillRect =
@@ -80,5 +69,5 @@ public final class BitmapBindings {
 
   /** Destroy a bitmap and free its buffer (unless externally allocated). */
   public static final MethodHandle FPDFBitmap_Destroy =
-      downcall("FPDFBitmap_Destroy", FunctionDescriptor.ofVoid(ADDRESS));
+      downcallCritical("FPDFBitmap_Destroy", FunctionDescriptor.ofVoid(ADDRESS));
 }

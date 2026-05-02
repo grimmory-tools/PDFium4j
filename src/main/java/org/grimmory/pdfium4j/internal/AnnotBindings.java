@@ -1,9 +1,17 @@
 package org.grimmory.pdfium4j.internal;
 
-import static java.lang.foreign.ValueLayout.*;
+import static java.lang.foreign.ValueLayout.ADDRESS;
+import static java.lang.foreign.ValueLayout.JAVA_FLOAT;
+import static java.lang.foreign.ValueLayout.JAVA_INT;
+import static java.lang.foreign.ValueLayout.JAVA_LONG;
 
-import java.lang.foreign.*;
+import java.lang.foreign.FunctionDescriptor;
+import java.lang.foreign.Linker;
+import java.lang.foreign.MemoryLayout;
+import java.lang.foreign.StructLayout;
+import java.lang.foreign.SymbolLookup;
 import java.lang.invoke.MethodHandle;
+import java.util.Objects;
 
 /** FFM bindings for PDFium annotation functions from {@code fpdf_annot.h}. */
 public final class AnnotBindings {
@@ -14,20 +22,24 @@ public final class AnnotBindings {
   private AnnotBindings() {}
 
   private static MethodHandle downcall(String name, FunctionDescriptor desc) {
-    return LINKER.downcallHandle(
-        LOOKUP
-            .find(name)
-            .orElseThrow(() -> new UnsatisfiedLinkError("PDFium symbol not found: " + name)),
-        desc);
+    return LOOKUP.find(name).map(addr -> LINKER.downcallHandle(addr, desc)).orElse(null);
   }
 
   private static MethodHandle downcallCritical(String name, FunctionDescriptor desc) {
-    return LINKER.downcallHandle(
-        LOOKUP
-            .find(name)
-            .orElseThrow(() -> new UnsatisfiedLinkError("PDFium symbol not found: " + name)),
-        desc,
-        Linker.Option.critical(false));
+    return LOOKUP
+        .find(name)
+        .map(addr -> LINKER.downcallHandle(addr, desc, Linker.Option.critical(false)))
+        .orElse(null);
+  }
+
+  public static void checkRequired() {
+    // Annotation support is technically optional but core to grimmory
+    Objects.requireNonNull(FPDFPage_GetAnnotCount, "FPDFPage_GetAnnotCount");
+    Objects.requireNonNull(FPDFPage_GetAnnot, "FPDFPage_GetAnnot");
+    Objects.requireNonNull(FPDFPage_CloseAnnot, "FPDFPage_CloseAnnot");
+    Objects.requireNonNull(FPDFAnnot_GetSubtype, "FPDFAnnot_GetSubtype");
+    Objects.requireNonNull(FPDFAnnot_GetStringValue, "FPDFAnnot_GetStringValue");
+    Objects.requireNonNull(FPDFAnnot_GetRect, "FPDFAnnot_GetRect");
   }
 
   /** FS_RECTF struct layout: left, bottom, right, top (all floats). */
@@ -48,7 +60,7 @@ public final class AnnotBindings {
 
   /** Close an annotation handle. */
   public static final MethodHandle FPDFPage_CloseAnnot =
-      downcall("FPDFPage_CloseAnnot", FunctionDescriptor.ofVoid(ADDRESS));
+      downcallCritical("FPDFPage_CloseAnnot", FunctionDescriptor.ofVoid(ADDRESS));
 
   /** Get annotation subtype. Returns FPDF_ANNOTATION_SUBTYPE (int). */
   public static final MethodHandle FPDFAnnot_GetSubtype =
@@ -65,5 +77,5 @@ public final class AnnotBindings {
 
   /** Get annotation bounding rectangle. Writes into FS_RECTF. Returns 1 on success. */
   public static final MethodHandle FPDFAnnot_GetRect =
-      downcall("FPDFAnnot_GetRect", FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS));
+      downcallCritical("FPDFAnnot_GetRect", FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS));
 }

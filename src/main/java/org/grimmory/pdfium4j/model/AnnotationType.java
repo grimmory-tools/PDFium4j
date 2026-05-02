@@ -32,25 +32,17 @@ public enum AnnotationType {
   XFA_WIDGET(27),
   REDACT(28);
 
+  private static final AnnotationType[] VALUES = values();
   private final int pdfiumCode;
 
   AnnotationType(int pdfiumCode) {
     this.pdfiumCode = pdfiumCode;
   }
 
-  public int pdfiumCode() {
-    return pdfiumCode;
-  }
-
   public static AnnotationType fromCode(int code) {
-    for (AnnotationType type : values()) {
+    for (AnnotationType type : VALUES) {
       if (type.pdfiumCode == code) return type;
     }
     return UNKNOWN;
-  }
-
-  /** Whether this annotation type represents a text markup (highlight, underline, etc.) */
-  public boolean isTextMarkup() {
-    return this == HIGHLIGHT || this == UNDERLINE || this == SQUIGGLY || this == STRIKEOUT;
   }
 }

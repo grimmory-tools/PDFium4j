@@ -1,9 +1,18 @@
 package org.grimmory.pdfium4j.internal;
 
-import static java.lang.foreign.ValueLayout.*;
+import static java.lang.foreign.ValueLayout.ADDRESS;
+import static java.lang.foreign.ValueLayout.JAVA_DOUBLE;
+import static java.lang.foreign.ValueLayout.JAVA_FLOAT;
+import static java.lang.foreign.ValueLayout.JAVA_INT;
+import static java.lang.foreign.ValueLayout.JAVA_LONG;
 
-import java.lang.foreign.*;
+import java.lang.foreign.FunctionDescriptor;
+import java.lang.foreign.Linker;
+import java.lang.foreign.MemoryLayout;
+import java.lang.foreign.StructLayout;
+import java.lang.foreign.SymbolLookup;
 import java.lang.invoke.MethodHandle;
+import java.util.Objects;
 
 /**
  * FFM bindings for PDFium page editing and document saving functions from {@code fpdf_edit.h} and
@@ -20,7 +29,8 @@ public final class EditBindings {
     return LINKER.downcallHandle(
         LOOKUP
             .find(name)
-            .orElseThrow(() -> new UnsatisfiedLinkError("PDFium symbol not found: " + name)),
+            .orElseThrow(
+                () -> new UnsatisfiedLinkError("Required PDFium symbol not found: " + name)),
         desc);
   }
 
@@ -28,9 +38,18 @@ public final class EditBindings {
     return LINKER.downcallHandle(
         LOOKUP
             .find(name)
-            .orElseThrow(() -> new UnsatisfiedLinkError("PDFium symbol not found: " + name)),
+            .orElseThrow(
+                () -> new UnsatisfiedLinkError("Required PDFium symbol not found: " + name)),
         desc,
         Linker.Option.critical(false));
+  }
+
+  private static MethodHandle downcallOptional(String name, FunctionDescriptor desc) {
+    return LOOKUP.find(name).map(addr -> LINKER.downcallHandle(addr, desc)).orElse(null);
+  }
+
+  public static void checkRequired() {
+    Objects.requireNonNull(FPDF_SaveAsCopy, "FPDF_SaveAsCopy");
   }
 
   /** Get page rotation. Returns 0 (0°), 1 (90°), 2 (180°), or 3 (270°). */
@@ -44,9 +63,10 @@ public final class EditBindings {
   public static final MethodHandle FPDFPage_SetRotation =
       downcall("FPDFPage_SetRotation", FunctionDescriptor.ofVoid(ADDRESS, JAVA_INT));
 
-  /** Commit page object changes (must call after modifications). Returns 1 on success. */
-  public static final MethodHandle FPDFPage_GenerateContent =
-      downcall("FPDFPage_GenerateContent", FunctionDescriptor.of(JAVA_INT, ADDRESS));
+  /** Set document metadata value by tag name. Returns 1 on success. */
+  public static final MethodHandle FPDF_SetMetaText =
+      downcallOptional(
+          "FPDF_SetMetaText", FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS, ADDRESS));
 
   /**
    * FPDF_FILEWRITE struct layout:
@@ -57,49 +77,30 @@ public final class EditBindings {
    *     int (*WriteBlock)(FPDF_FILEWRITE* pThis, const void* pData, unsigned long size);
    * } FPDF_FILEWRITE;
    * }</pre>
+   *
+   * <p>We extend this layout with a custom field to store a buffer ID for cross-thread access.
    */
   public static final StructLayout FPDF_FILEWRITE_LAYOUT =
       MemoryLayout.structLayout(
           JAVA_INT.withName("version"),
           MemoryLayout.paddingLayout(4),
-          ADDRESS.withName("WriteBlock"));
+          ADDRESS.withName("WriteBlock"),
+          JAVA_LONG.withName("bufferId"));
 
   /** WriteBlock callback signature: int (*)(FPDF_FILEWRITE*, const void*, unsigned long) */
   public static final FunctionDescriptor WRITE_BLOCK_DESC =
       FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS, JAVA_LONG);
 
-  /** Create a new empty document. Returns FPDF_DOCUMENT handle (NULL on failure). */
-  public static final MethodHandle FPDF_CreateNewDocument =
-      downcall("FPDF_CreateNewDocument", FunctionDescriptor.of(ADDRESS));
-
-  /**
-   * Save the document to an FPDF_FILEWRITE sink. Returns 1 on success.
-   *
-   * <p>Flags: 0 = full save, FPDF_INCREMENTAL (1) = incremental, FPDF_NO_INCREMENTAL (2) = full
-   * save removing old versions, FPDF_REMOVE_SECURITY (4) = remove encryption.
-   *
-   * <p><strong>Warning:</strong> FPDF_INCREMENTAL (flag 1) is non-functional in the open-source
-   * PDFium build — it does not properly append modified objects, producing corrupt output. Always
-   * use flag 0 (full save). See: https://groups.google.com/g/pdfium/c/6SklEc2lYNM
-   */
+  /** Save the document to an FPDF_FILEWRITE sink. Returns 1 on success. */
   public static final MethodHandle FPDF_SaveAsCopy =
-      downcall("FPDF_SaveAsCopy", FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS, JAVA_INT));
-
-  /** Save the document with a specific PDF version number. Returns 1 on success. */
-  public static final MethodHandle FPDF_SaveWithVersion =
-      downcall(
-          "FPDF_SaveWithVersion",
-          FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS, JAVA_INT, JAVA_INT));
+      downcallOptional(
+          "FPDF_SaveAsCopy", FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS, JAVA_INT));
 
   /** Create a new blank page at the given index. Returns FPDF_PAGE handle (NULL on failure). */
   public static final MethodHandle FPDFPage_New =
       downcall(
           "FPDFPage_New",
           FunctionDescriptor.of(ADDRESS, ADDRESS, JAVA_INT, JAVA_DOUBLE, JAVA_DOUBLE));
-
-  /** Delete a page at the given index. */
-  public static final MethodHandle FPDFPage_Delete =
-      downcall("FPDFPage_Delete", FunctionDescriptor.ofVoid(ADDRESS, JAVA_INT));
 
   /**
    * Import pages from another document. pageRange is a comma-separated page range string like
@@ -139,10 +140,6 @@ public final class EditBindings {
   /**
    * Get the image metadata for an image object. Writes into an FPDF_IMAGEOBJ_METADATA struct.
    * Returns 1 on success.
-   *
-   * <p>FPDF_IMAGEOBJ_METADATA layout: { unsigned int width; unsigned int height; float
-   * horizontal_dpi; float vertical_dpi; unsigned int bits_per_pixel; int colorspace; int
-   * marked_content_id; }
    */
   public static final MethodHandle FPDFImageObj_GetImageMetadata =
       downcall(

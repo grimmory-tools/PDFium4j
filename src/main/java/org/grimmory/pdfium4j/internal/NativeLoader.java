@@ -1,5 +1,6 @@
 package org.grimmory.pdfium4j.internal;
 
+import edu.umd.cs.findbugs.annotations.CheckForNull;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -12,6 +13,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import org.grimmory.pdfium4j.PdfiumLibrary;
 import org.grimmory.pdfium4j.exception.NativeLoadException;
 
 public final class NativeLoader {
@@ -129,7 +131,7 @@ public final class NativeLoader {
   }
 
   private static List<String> readLibraryIndex(String resource) {
-    List<String> result = new ArrayList<>();
+    List<String> result = new ArrayList<>(8);
     try (InputStream is = NativeLoader.class.getResourceAsStream(resource)) {
       if (is == null) return result;
       try (BufferedReader reader =
@@ -142,7 +144,8 @@ public final class NativeLoader {
           }
         }
       }
-    } catch (IOException ignored) {
+    } catch (IOException e) {
+      PdfiumLibrary.ignore(e);
     }
     return result;
   }
@@ -156,6 +159,7 @@ public final class NativeLoader {
     return extractResource(resource, dir, filename, true);
   }
 
+  @CheckForNull
   private static Path extractResource(String resource, Path dir, String filename, boolean required)
       throws IOException {
     try (InputStream is = NativeLoader.class.getResourceAsStream(resource)) {
@@ -193,21 +197,23 @@ public final class NativeLoader {
   private static boolean isMusl() {
     // Check for musl dynamic linker
     try {
-      java.nio.file.Path ldMusl = java.nio.file.Path.of("/lib");
-      if (java.nio.file.Files.exists(ldMusl)) {
-        try (var files = java.nio.file.Files.list(ldMusl)) {
+      Path ldMusl = Path.of("/lib");
+      if (Files.exists(ldMusl)) {
+        try (var files = Files.list(ldMusl)) {
           if (files.anyMatch(p -> p.getFileName().toString().startsWith("ld-musl-"))) {
             return true;
           }
         }
       }
-    } catch (Exception ignored) {
+    } catch (Exception e) {
+      PdfiumLibrary.ignore(e);
     }
     // Fallback: check /proc/self/maps for musl
     try {
-      String maps = java.nio.file.Files.readString(java.nio.file.Path.of("/proc/self/maps"));
+      String maps = Files.readString(Path.of("/proc/self/maps"));
       if (maps.contains("musl")) return true;
-    } catch (Exception ignored) {
+    } catch (Exception e) {
+      PdfiumLibrary.ignore(e);
     }
     return false;
   }

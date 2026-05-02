@@ -12,8 +12,6 @@ public interface BookMetadata {
     PDF
   }
 
-  BookFormat format();
-
   Optional<String> title();
 
   List<String> authors();

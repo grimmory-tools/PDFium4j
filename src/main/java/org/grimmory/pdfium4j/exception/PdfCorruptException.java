@@ -15,4 +15,9 @@ public class PdfCorruptException extends PdfiumException {
   public PdfCorruptException(String message, String filePath) {
     super(message, PdfErrorCode.FORMAT, "open", filePath);
   }
+
+  public PdfCorruptException(
+      String message, PdfErrorCode errorCode, String operation, String filePath) {
+    super(message, errorCode, operation, filePath);
+  }
 }

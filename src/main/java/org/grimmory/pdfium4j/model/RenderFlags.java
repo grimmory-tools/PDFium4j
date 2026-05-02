@@ -20,9 +20,6 @@ public record RenderFlags(int value) {
   /** Default flags: annotations rendered, anti-aliasing on, RGBA byte order. */
   public static final RenderFlags DEFAULT = builder().build();
 
-  /** Flags suitable for printing: annotations + print mode + anti-aliasing. */
-  public static final RenderFlags PRINT = builder().printing(true).build();
-
   public static Builder builder() {
     return new Builder();
   }
@@ -38,16 +35,6 @@ public record RenderFlags(int value) {
 
     public Builder annotations(boolean v) {
       this.annotations = v;
-      return this;
-    }
-
-    public Builder lcdText(boolean v) {
-      this.lcdText = v;
-      return this;
-    }
-
-    public Builder grayscale(boolean v) {
-      this.grayscale = v;
       return this;
     }
 

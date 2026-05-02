@@ -21,17 +21,4 @@ public enum MetadataTag {
   public String pdfKey() {
     return pdfKey;
   }
-
-  /**
-   * Find a tag by its PDF key (case-insensitive).
-   *
-   * @return the matching tag, or null if not found
-   */
-  public static MetadataTag fromKey(String key) {
-    if (key == null) return null;
-    for (MetadataTag tag : values()) {
-      if (tag.pdfKey.equalsIgnoreCase(key)) return tag;
-    }
-    return null;
-  }
 }

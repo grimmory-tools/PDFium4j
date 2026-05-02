@@ -50,38 +50,4 @@ public record PdfProcessingPolicy(
         DEFAULT_MAX_PARALLEL_THREADS,
         DEFAULT_FILE_BACKED_THRESHOLD);
   }
-
-  public static PdfProcessingPolicy strictPolicy() {
-    return new PdfProcessingPolicy(
-        Mode.STRICT,
-        DEFAULT_MAX_DOCUMENT_BYTES,
-        DEFAULT_MAX_RENDER_PIXELS,
-        DEFAULT_MAX_PARALLEL_THREADS,
-        DEFAULT_FILE_BACKED_THRESHOLD);
-  }
-
-  public PdfProcessingPolicy withMode(Mode value) {
-    return new PdfProcessingPolicy(
-        value, maxDocumentBytes, maxRenderPixels, maxParallelRenderThreads, fileBackedThreshold);
-  }
-
-  public PdfProcessingPolicy withMaxDocumentBytes(long value) {
-    return new PdfProcessingPolicy(
-        mode, value, maxRenderPixels, maxParallelRenderThreads, fileBackedThreshold);
-  }
-
-  public PdfProcessingPolicy withMaxRenderPixels(long value) {
-    return new PdfProcessingPolicy(
-        mode, maxDocumentBytes, value, maxParallelRenderThreads, fileBackedThreshold);
-  }
-
-  public PdfProcessingPolicy withMaxParallelRenderThreads(int value) {
-    return new PdfProcessingPolicy(
-        mode, maxDocumentBytes, maxRenderPixels, value, fileBackedThreshold);
-  }
-
-  public PdfProcessingPolicy withFileBackedThreshold(long value) {
-    return new PdfProcessingPolicy(
-        mode, maxDocumentBytes, maxRenderPixels, maxParallelRenderThreads, value);
-  }
 }

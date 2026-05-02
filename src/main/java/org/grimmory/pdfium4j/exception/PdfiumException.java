@@ -39,24 +39,26 @@ public class PdfiumException extends RuntimeException {
     this.filePath = filePath;
   }
 
-  /** The PDFium error code, or UNKNOWN if not available. */
-  public PdfErrorCode errorCode() {
+  public PdfErrorCode getErrorCode() {
     return errorCode;
   }
 
-  /** The operation that failed (e.g., "open", "render", "extractText"), or null. */
-  public String operation() {
+  public String getOperation() {
     return operation;
   }
 
-  /** The file path involved, or null for in-memory operations. */
-  public String filePath() {
+  public String getFilePath() {
     return filePath;
   }
 
   private static String formatMessage(
       String message, PdfErrorCode errorCode, String operation, String filePath) {
-    StringBuilder sb = new StringBuilder();
+    int capacity =
+        (message != null ? message.length() : 0)
+            + (operation != null ? operation.length() + 20 : 0)
+            + (filePath != null ? filePath.length() + 20 : 0)
+            + 64;
+    StringBuilder sb = new StringBuilder(capacity);
     if (message != null && !message.isEmpty()) sb.append(message);
     if (errorCode != null
         && errorCode != PdfErrorCode.UNKNOWN

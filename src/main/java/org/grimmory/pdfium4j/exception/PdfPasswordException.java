@@ -18,4 +18,9 @@ public class PdfPasswordException extends PdfiumException {
   public PdfPasswordException(String message, String filePath) {
     super(message, PdfErrorCode.PASSWORD, "open", filePath);
   }
+
+  public PdfPasswordException(
+      String message, PdfErrorCode errorCode, String operation, String filePath) {
+    super(message, errorCode, operation, filePath);
+  }
 }

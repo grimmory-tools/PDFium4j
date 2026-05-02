@@ -1,6 +1,15 @@
 package org.grimmory.pdfium4j.model;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.OptionalDouble;
+import java.util.OptionalInt;
 import java.util.regex.Pattern;
 
 /**
@@ -18,7 +27,9 @@ import java.util.regex.Pattern;
  * @param identifiers dc:identifier (ISBNs, URIs, etc.)
  * @param pdfaConformance PDF/A conformance level (e.g., "1b", "2a", "3u"), or empty
  * @param calibreFields Calibre custom metadata fields (calibre: namespace)
- * @param customFields other custom namespace fields
+ * @param customFields other custom namespace fields (simple text values)
+ * @param customListFields other custom namespace fields (list/bag values)
+ * @param xmpIdentifiers qualified identifiers from xmp:Identifier
  */
 public record XmpMetadata(
     Optional<String> title,
@@ -32,7 +43,18 @@ public record XmpMetadata(
     List<String> identifiers,
     Optional<String> pdfaConformance,
     Map<String, String> calibreFields,
-    Map<String, String> customFields) {
+    Map<String, String> customFields,
+    Map<String, List<String>> customListFields,
+    List<QualifiedIdentifier> xmpIdentifiers) {
+
+  /** A qualified identifier with a scheme and a value. */
+  public record QualifiedIdentifier(String scheme, String value) {
+    public QualifiedIdentifier {
+      Objects.requireNonNull(scheme, "scheme");
+      Objects.requireNonNull(value, "value");
+    }
+  }
+
   private static final Pattern WHITESPACE_HYPHEN = Pattern.compile("[\\s-]");
   private static final Pattern ISBN_FORMAT =
       Pattern.compile("(?i)^(urn:isbn:|isbn[: ]?)?[0-9X-]{10,17}$");
@@ -51,16 +73,15 @@ public record XmpMetadata(
     Objects.requireNonNull(pdfaConformance, "pdfaConformance");
     calibreFields = Map.copyOf(Objects.requireNonNull(calibreFields, "calibreFields"));
     customFields = Map.copyOf(Objects.requireNonNull(customFields, "customFields"));
-  }
-
-  /** Whether this PDF declares PDF/A conformance. */
-  public boolean isPdfA() {
-    return pdfaConformance.isPresent() && !pdfaConformance.get().isBlank();
-  }
-
-  /** Get the first creator (author), if any. */
-  public Optional<String> firstCreator() {
-    return creators.isEmpty() ? Optional.empty() : Optional.of(creators.getFirst());
+    Map<String, List<String>> listCopy = LinkedHashMap.newLinkedHashMap(16);
+    Objects.requireNonNull(customListFields, "customListFields")
+        .forEach(
+            (k, v) ->
+                listCopy.put(
+                    Objects.requireNonNull(k, "customListFields key"),
+                    List.copyOf(Objects.requireNonNull(v, "customListFields value"))));
+    customListFields = Collections.unmodifiableMap(listCopy);
+    xmpIdentifiers = List.copyOf(Objects.requireNonNull(xmpIdentifiers, "xmpIdentifiers"));
   }
 
   /** Get all ISBN identifiers found in dc:identifier fields. */
@@ -108,20 +129,135 @@ public record XmpMetadata(
     return Arrays.stream(val.split(",")).map(String::trim).filter(s -> !s.isEmpty()).toList();
   }
 
+  /**
+   * Get an XMP identifier value by its scheme (case-insensitive).
+   *
+   * <p>Note: This performs a linear scan of the identifiers list.
+   *
+   * @param scheme the scheme (e.g. "ISBN", "AMAZON", "GOOGLE")
+   * @return the value, if found
+   */
+  public Optional<String> xmpIdentifier(String scheme) {
+    return xmpIdentifiers.stream()
+        .filter(id -> id.scheme().equalsIgnoreCase(scheme))
+        .map(QualifiedIdentifier::value)
+        .findFirst();
+  }
+
   /** Create an empty XmpMetadata. */
   public static XmpMetadata empty() {
-    return new XmpMetadata(
-        Optional.empty(),
-        List.of(),
-        Optional.empty(),
-        List.of(),
-        Optional.empty(),
-        Optional.empty(),
-        Optional.empty(),
-        Optional.empty(),
-        List.of(),
-        Optional.empty(),
-        Map.of(),
-        Map.of());
+    return builder().build();
+  }
+
+  /** Create a new {@link Builder} for {@link XmpMetadata}. */
+  public static Builder builder() {
+    return new Builder();
+  }
+
+  /** Builder for {@link XmpMetadata} to insulate callers from record component additions. */
+  public static final class Builder {
+    private Optional<String> title = Optional.empty();
+    private List<String> creators = new ArrayList<>(8);
+    private Optional<String> description = Optional.empty();
+    private List<String> subjects = new ArrayList<>(8);
+    private Optional<String> publisher = Optional.empty();
+    private Optional<String> language = Optional.empty();
+    private Optional<String> date = Optional.empty();
+    private Optional<String> rights = Optional.empty();
+    private List<String> identifiers = new ArrayList<>(8);
+    private Optional<String> pdfaConformance = Optional.empty();
+    private Map<String, String> calibreFields = LinkedHashMap.newLinkedHashMap(8);
+    private Map<String, String> customFields = LinkedHashMap.newLinkedHashMap(8);
+    private Map<String, List<String>> customListFields = LinkedHashMap.newLinkedHashMap(8);
+    private List<QualifiedIdentifier> xmpIdentifiers = new ArrayList<>(8);
+
+    public Builder title(String val) {
+      this.title = Optional.ofNullable(val);
+      return this;
+    }
+
+    public Builder creators(List<String> val) {
+      this.creators = new ArrayList<>(val);
+      return this;
+    }
+
+    public Builder description(String val) {
+      this.description = Optional.ofNullable(val);
+      return this;
+    }
+
+    public Builder subjects(List<String> val) {
+      this.subjects = new ArrayList<>(val);
+      return this;
+    }
+
+    public Builder publisher(String val) {
+      this.publisher = Optional.ofNullable(val);
+      return this;
+    }
+
+    public Builder language(String val) {
+      this.language = Optional.ofNullable(val);
+      return this;
+    }
+
+    public Builder date(String val) {
+      this.date = Optional.ofNullable(val);
+      return this;
+    }
+
+    public Builder rights(String val) {
+      this.rights = Optional.ofNullable(val);
+      return this;
+    }
+
+    public Builder identifiers(List<String> val) {
+      this.identifiers = new ArrayList<>(val);
+      return this;
+    }
+
+    public Builder pdfaConformance(String val) {
+      this.pdfaConformance = Optional.ofNullable(val);
+      return this;
+    }
+
+    public Builder calibreFields(Map<String, String> val) {
+      this.calibreFields = new LinkedHashMap<>(val);
+      return this;
+    }
+
+    public Builder customFields(Map<String, String> val) {
+      this.customFields = new LinkedHashMap<>(val);
+      return this;
+    }
+
+    public Builder customListFields(Map<String, List<String>> val) {
+      this.customListFields = LinkedHashMap.newLinkedHashMap(val.size());
+      val.forEach((k, v) -> this.customListFields.put(k, new ArrayList<>(v)));
+      return this;
+    }
+
+    public Builder xmpIdentifiers(List<QualifiedIdentifier> val) {
+      this.xmpIdentifiers = new ArrayList<>(val);
+      return this;
+    }
+
+    public XmpMetadata build() {
+      return new XmpMetadata(
+          title,
+          creators,
+          description,
+          subjects,
+          publisher,
+          language,
+          date,
+          rights,
+          identifiers,
+          pdfaConformance,
+          calibreFields,
+          customFields,
+          customListFields,
+          xmpIdentifiers);
+    }
   }
 }
