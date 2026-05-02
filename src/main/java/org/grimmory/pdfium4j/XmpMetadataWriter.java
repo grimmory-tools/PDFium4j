@@ -1,7 +1,6 @@
 package org.grimmory.pdfium4j;
 
-import java.io.IOException;
-import java.io.OutputStream;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import org.grimmory.pdfium4j.model.XmpMetadata;
@@ -74,8 +73,8 @@ public final class XmpMetadataWriter {
     // We use a helper that writes to an Appendable to avoid massive String allocations.
     // However, for PDF embedding, we need specific padding and bytes.
     // We'll write to a writer wrapped around the stream.
-    java.io.Writer writer =
-        new java.io.BufferedWriter(new java.io.OutputStreamWriter(out, StandardCharsets.UTF_8));
+    Writer writer =
+        new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8));
     writeToWriter(metadata, writer);
     writer.flush();
   }
@@ -87,7 +86,7 @@ public final class XmpMetadataWriter {
    * @return a complete XMP packet string
    */
   public String write(XmpMetadata metadata) {
-    java.io.StringWriter sw = new java.io.StringWriter();
+    StringWriter sw = new StringWriter();
     try {
       writeToWriter(metadata, sw);
     } catch (IOException e) {
@@ -103,7 +102,7 @@ public final class XmpMetadataWriter {
    * @return the XMP packet as UTF-8 bytes
    */
   public byte[] writeBytes(XmpMetadata metadata) {
-    java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+    ByteArrayOutputStream bos = new ByteArrayOutputStream();
     try {
       write(metadata, bos);
     } catch (IOException e) {
@@ -112,7 +111,7 @@ public final class XmpMetadataWriter {
     return bos.toByteArray();
   }
 
-  private void writeToWriter(XmpMetadata metadata, java.io.Writer w) throws IOException {
+  private void writeToWriter(XmpMetadata metadata, Writer w) throws IOException {
     w.write("<?xpacket begin=\"\uFEFF\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n");
     w.write("<x:xmpmeta xmlns:x=\"adobe:ns:meta/\">\n");
     w.write("<rdf:RDF xmlns:rdf=\"");
@@ -127,7 +126,7 @@ public final class XmpMetadataWriter {
     w.write("<?xpacket end=\"w\"?>");
   }
 
-  private void writeDescriptions(java.io.Writer w, XmpMetadata metadata) throws IOException {
+  private void writeDescriptions(Writer w, XmpMetadata metadata) throws IOException {
     writeDublinCore(w, metadata);
     writePdfAConformance(w, metadata);
     writeCalibreFields(w, metadata);
@@ -135,7 +134,7 @@ public final class XmpMetadataWriter {
     writeXmpIdentifiers(w, metadata);
   }
 
-  private static void writeDublinCore(java.io.Writer w, XmpMetadata metadata) throws IOException {
+  private static void writeDublinCore(Writer w, XmpMetadata metadata) throws IOException {
     boolean hasDc =
         metadata.title().isPresent()
             || !metadata.creators().isEmpty()
@@ -169,7 +168,7 @@ public final class XmpMetadataWriter {
     w.write("</rdf:Description>\n");
   }
 
-  private static void writePdfAConformance(java.io.Writer w, XmpMetadata metadata)
+  private static void writePdfAConformance(Writer w, XmpMetadata metadata)
       throws IOException {
     if (metadata.pdfaConformance().isEmpty()) return;
     String conf = metadata.pdfaConformance().get();
@@ -196,7 +195,7 @@ public final class XmpMetadataWriter {
     w.write("</rdf:Description>\n");
   }
 
-  private static void writeCalibreFields(java.io.Writer w, XmpMetadata metadata)
+  private static void writeCalibreFields(Writer w, XmpMetadata metadata)
       throws IOException {
     if (metadata.calibreFields().isEmpty()) return;
 
@@ -220,7 +219,7 @@ public final class XmpMetadataWriter {
     w.write("</rdf:Description>\n");
   }
 
-  private void writeCustomFields(java.io.Writer w, XmpMetadata metadata) throws IOException {
+  private void writeCustomFields(Writer w, XmpMetadata metadata) throws IOException {
     if (metadata.customFields().isEmpty() && metadata.customListFields().isEmpty()) return;
 
     Map<String, Map<String, String>> simpleGrouped = new LinkedHashMap<>();
@@ -308,7 +307,7 @@ public final class XmpMetadataWriter {
   }
 
   private static void writeSimpleField(
-      java.io.Writer w, String prefix, String localName, String value) throws IOException {
+      Writer w, String prefix, String localName, String value) throws IOException {
     w.write("  <");
     w.write(prefix);
     w.write(":");
@@ -323,12 +322,12 @@ public final class XmpMetadataWriter {
   }
 
   private static void writeListField(
-      java.io.Writer w, String prefix, String localName, List<String> values) throws IOException {
+      Writer w, String prefix, String localName, List<String> values) throws IOException {
     String tag = prefix + ":" + localName;
     writeBag(w, tag, values);
   }
 
-  private static void writeXmpIdentifiers(java.io.Writer w, XmpMetadata metadata)
+  private static void writeXmpIdentifiers(Writer w, XmpMetadata metadata)
       throws IOException {
     if (metadata.xmpIdentifiers().isEmpty()) return;
 
@@ -356,7 +355,7 @@ public final class XmpMetadataWriter {
     w.write("</rdf:Description>\n");
   }
 
-  private static void writeAlt(java.io.Writer w, String tag, String value) throws IOException {
+  private static void writeAlt(Writer w, String tag, String value) throws IOException {
     w.write("  <");
     w.write(tag);
     w.write(">\n");
@@ -370,7 +369,7 @@ public final class XmpMetadataWriter {
     w.write(">\n");
   }
 
-  private static void writeSeq(java.io.Writer w, String tag, List<String> values)
+  private static void writeSeq(Writer w, String tag, List<String> values)
       throws IOException {
     w.write("  <");
     w.write(tag);
@@ -387,7 +386,7 @@ public final class XmpMetadataWriter {
     w.write(">\n");
   }
 
-  private static void writeBag(java.io.Writer w, String tag, List<String> values)
+  private static void writeBag(Writer w, String tag, List<String> values)
       throws IOException {
     w.write("  <");
     w.write(tag);
@@ -404,7 +403,7 @@ public final class XmpMetadataWriter {
     w.write(">\n");
   }
 
-  private static void writePadding(java.io.Writer w) throws IOException {
+  private static void writePadding(Writer w) throws IOException {
     String padding =
         "                                                                                \n";
     for (int i = 0; i < 20; i++) {
