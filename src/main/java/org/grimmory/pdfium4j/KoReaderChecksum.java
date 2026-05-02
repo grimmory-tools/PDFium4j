@@ -44,7 +44,7 @@ public final class KoReaderChecksum {
         MemorySegment segment = fc.map(FileChannel.MapMode.READ_ONLY, 0, fileSize, arena);
         return Optional.of(calculateFromSegment(segment));
       }
-    } catch (IOException e) {
+    } catch (IOException _) {
       return Optional.empty();
     }
   }

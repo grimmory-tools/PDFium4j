@@ -1,6 +1,8 @@
 package org.grimmory.pdfium4j.internal;
 
-import static java.lang.foreign.ValueLayout.*;
+import static java.lang.foreign.ValueLayout.ADDRESS;
+import static java.lang.foreign.ValueLayout.JAVA_DOUBLE;
+import static java.lang.foreign.ValueLayout.JAVA_INT;
 
 import java.lang.foreign.FunctionDescriptor;
 import java.lang.foreign.Linker;
@@ -38,7 +40,7 @@ public final class TextBindings {
 
   /** Close a text page handle. */
   public static final MethodHandle FPDFText_ClosePage =
-      downcall("FPDFText_ClosePage", FunctionDescriptor.ofVoid(ADDRESS));
+      downcallCritical("FPDFText_ClosePage", FunctionDescriptor.ofVoid(ADDRESS));
 
   /** Count characters on the text page. Returns -1 on error. */
   public static final MethodHandle FPDFText_CountChars =
@@ -61,23 +63,6 @@ public final class TextBindings {
       downcallCritical("FPDFText_GetUnicode", FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_INT));
 
   /**
-   * Get bounded text within a rectangle (UTF-16LE output). Returns number of characters written
-   * (including null terminator).
-   */
-  public static final MethodHandle FPDFText_GetBoundedText =
-      downcall(
-          "FPDFText_GetBoundedText",
-          FunctionDescriptor.of(
-              JAVA_INT,
-              ADDRESS,
-              JAVA_DOUBLE,
-              JAVA_DOUBLE,
-              JAVA_DOUBLE,
-              JAVA_DOUBLE,
-              ADDRESS,
-              JAVA_INT));
-
-  /**
    * Get character bounding box by index. Writes left, right, bottom, top to the output pointers
    * (doubles). Returns 1 on success, 0 on failure.
    */
@@ -90,12 +75,6 @@ public final class TextBindings {
   public static final MethodHandle FPDFText_GetFontSize =
       downcallCritical(
           "FPDFText_GetFontSize", FunctionDescriptor.of(JAVA_DOUBLE, ADDRESS, JAVA_INT));
-
-  /** Get the origin point (baseline start) of a character by index. Returns 1 on success. */
-  public static final MethodHandle FPDFText_GetCharOrigin =
-      downcall(
-          "FPDFText_GetCharOrigin",
-          FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_INT, ADDRESS, ADDRESS));
 
   /** Load web links from a text page. Returns FPDF_PAGELINK handle. */
   public static final MethodHandle FPDFLink_LoadWebLinks =
@@ -113,12 +92,6 @@ public final class TextBindings {
       downcall(
           "FPDFLink_GetURL", FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_INT, ADDRESS, JAVA_INT));
 
-  /** Get text range for a web link. Returns 1 on success. */
-  public static final MethodHandle FPDFLink_GetTextRange =
-      downcall(
-          "FPDFLink_GetTextRange",
-          FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_INT, ADDRESS, ADDRESS));
-
   /** Count rectangles for a web link. */
   public static final MethodHandle FPDFLink_CountRects =
       downcallCritical("FPDFLink_CountRects", FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_INT));
@@ -135,5 +108,5 @@ public final class TextBindings {
 
   /** Close web links handle. */
   public static final MethodHandle FPDFLink_CloseWebLinks =
-      downcall("FPDFLink_CloseWebLinks", FunctionDescriptor.ofVoid(ADDRESS));
+      downcallCritical("FPDFLink_CloseWebLinks", FunctionDescriptor.ofVoid(ADDRESS));
 }

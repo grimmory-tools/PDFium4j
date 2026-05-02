@@ -64,7 +64,7 @@ public final class PdfDateUtils {
       if (ISO_DATE_PATTERN.matcher(pdfDate).matches()) {
         try {
           return Optional.of(LocalDate.parse(pdfDate).atStartOfDay().atOffset(ZoneOffset.UTC));
-        } catch (Exception e) {
+        } catch (Exception _) {
           return Optional.empty();
         }
       }
@@ -106,7 +106,7 @@ public final class PdfDateUtils {
       }
 
       return Optional.of(OffsetDateTime.of(year, month, day, hour, minute, second, 0, offset));
-    } catch (Exception e) {
+    } catch (Exception _) {
       return Optional.empty();
     }
   }
@@ -118,31 +118,60 @@ public final class PdfDateUtils {
    * @return the PDF date string (e.g. "D:20201231235959Z")
    */
   public static String format(OffsetDateTime dateTime) {
-    StringBuilder sb = new StringBuilder("D:");
-    sb.append(String.format("%04d", dateTime.getYear()));
-    sb.append(String.format("%02d", dateTime.getMonthValue()));
-    sb.append(String.format("%02d", dateTime.getDayOfMonth()));
-    sb.append(String.format("%02d", dateTime.getHour()));
-    sb.append(String.format("%02d", dateTime.getMinute()));
-    sb.append(String.format("%02d", dateTime.getSecond()));
+    StringBuilder sb = new StringBuilder(24);
+    sb.append("D:");
+    appendPadded(sb, dateTime.getYear(), 4);
+    appendPadded(sb, dateTime.getMonthValue(), 2);
+    appendPadded(sb, dateTime.getDayOfMonth(), 2);
+    appendPadded(sb, dateTime.getHour(), 2);
+    appendPadded(sb, dateTime.getMinute(), 2);
+    appendPadded(sb, dateTime.getSecond(), 2);
 
     ZoneOffset offset = dateTime.getOffset();
-    if (offset.getTotalSeconds() % 60 != 0) {
+    int totalSeconds = offset.getTotalSeconds();
+    if (totalSeconds % 60 != 0) {
       throw new IllegalArgumentException("PDF dates only support minute-precision offsets");
     }
-    if (offset.getTotalSeconds() == 0) {
+    if (totalSeconds == 0) {
       sb.append("Z");
     } else {
-      int totalSeconds = offset.getTotalSeconds();
       int absSeconds = Math.abs(totalSeconds);
       int hours = absSeconds / 3600;
       int minutes = (absSeconds % 3600) / 60;
       sb.append(totalSeconds >= 0 ? "+" : "-");
-      sb.append(String.format("%02d", hours));
+      appendPadded(sb, hours, 2);
       sb.append("'");
-      sb.append(String.format("%02d", minutes));
+      appendPadded(sb, minutes, 2);
       sb.append("'");
     }
     return sb.toString();
+  }
+
+  private static void appendPadded(StringBuilder sb, int value, int width) {
+    long v = Math.abs((long) value);
+    if (width == 2) {
+      sb.append((char) ('0' + (v / 10 % 10)));
+      sb.append((char) ('0' + (v % 10)));
+    } else if (width == 4) {
+      sb.append((char) ('0' + (v / 1000 % 10)));
+      sb.append((char) ('0' + (v / 100 % 10)));
+      sb.append((char) ('0' + (v / 10 % 10)));
+      sb.append((char) ('0' + (v % 10)));
+    } else {
+      int digits = 1;
+      long div = 1;
+      while (v >= div * 10) {
+        div *= 10;
+        digits++;
+      }
+      int pad = width - digits;
+      for (int i = 0; i < pad; i++) {
+        sb.append('0');
+      }
+      while (div > 0) {
+        sb.append((char) ('0' + ((v / div) % 10)));
+        div /= 10;
+      }
+    }
   }
 }

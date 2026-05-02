@@ -19,12 +19,8 @@ public record PdfProbeResult(
     PASSWORD_REQUIRED,
     /** Document is corrupt or malformed. */
     CORRUPT,
-    /** Document uses unsupported features. */
-    UNSUPPORTED,
     /** File cannot be read. */
-    UNREADABLE,
-    /** Unknown error occurred. */
-    ERROR
+    UNREADABLE
   }
 
   public boolean isValid() {

@@ -1,6 +1,9 @@
 package org.grimmory.pdfium4j.internal;
 
-import static java.lang.foreign.ValueLayout.*;
+import static java.lang.foreign.ValueLayout.ADDRESS;
+import static java.lang.foreign.ValueLayout.JAVA_FLOAT;
+import static java.lang.foreign.ValueLayout.JAVA_INT;
+import static java.lang.foreign.ValueLayout.JAVA_LONG;
 
 import java.lang.foreign.FunctionDescriptor;
 import java.lang.foreign.Linker;
@@ -82,7 +85,7 @@ public final class ViewBindings {
       downcall("FPDF_LoadCustomDocument", FunctionDescriptor.of(ADDRESS, ADDRESS, ADDRESS));
 
   public static final MethodHandle FPDF_CloseDocument =
-      downcall("FPDF_CloseDocument", FunctionDescriptor.ofVoid(ADDRESS));
+      downcallCritical("FPDF_CloseDocument", FunctionDescriptor.ofVoid(ADDRESS));
 
   public static final MethodHandle FPDF_GetLastError =
       downcallCritical("FPDF_GetLastError", FunctionDescriptor.of(JAVA_LONG));
@@ -99,7 +102,7 @@ public final class ViewBindings {
       downcall("FPDF_LoadPage", FunctionDescriptor.of(ADDRESS, ADDRESS, JAVA_INT));
 
   public static final MethodHandle FPDF_ClosePage =
-      downcall("FPDF_ClosePage", FunctionDescriptor.ofVoid(ADDRESS));
+      downcallCritical("FPDF_ClosePage", FunctionDescriptor.ofVoid(ADDRESS));
 
   public static final MethodHandle FPDF_GetPageWidthF =
       downcallCritical("FPDF_GetPageWidthF", FunctionDescriptor.of(JAVA_FLOAT, ADDRESS));
@@ -113,23 +116,15 @@ public final class ViewBindings {
           FunctionDescriptor.ofVoid(
               ADDRESS, ADDRESS, JAVA_INT, JAVA_INT, JAVA_INT, JAVA_INT, JAVA_INT, JAVA_INT));
 
-  public static final int FPDF_ERR_SUCCESS = 0;
-  public static final int FPDF_ERR_UNKNOWN = 1;
-  public static final int FPDF_ERR_FILE = 2;
   public static final int FPDF_ERR_FORMAT = 3;
   public static final int FPDF_ERR_PASSWORD = 4;
   public static final int FPDF_ERR_SECURITY = 5;
-  public static final int FPDF_ERR_PAGE = 6;
 
   public static final int FPDF_ANNOT = 0x01;
   public static final int FPDF_LCD_TEXT = 0x02;
-  public static final int FPDF_NO_NATIVETEXT = 0x04;
   public static final int FPDF_GRAYSCALE = 0x08;
   public static final int FPDF_REVERSE_BYTE_ORDER = 0x10;
   public static final int FPDF_PRINTING = 0x800;
-  public static final int FPDF_NO_CATCH = 0x100;
-  public static final int FPDF_RENDER_LIMITEDIMAGECACHE = 0x200;
-  public static final int FPDF_RENDER_FORCEHALFTONE = 0x400;
   public static final int FPDF_RENDER_NO_SMOOTHTEXT = 0x1000;
   public static final int FPDF_RENDER_NO_SMOOTHIMAGE = 0x2000;
   public static final int FPDF_RENDER_NO_SMOOTHPATH = 0x4000;

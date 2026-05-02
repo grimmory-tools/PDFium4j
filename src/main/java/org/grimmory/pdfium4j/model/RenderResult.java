@@ -5,6 +5,7 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.ByteBuffer;
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
 import javax.imageio.ImageWriteParam;
@@ -19,12 +20,22 @@ import javax.imageio.stream.ImageOutputStream;
  *
  * @param width image width in pixels
  * @param height image height in pixels
- * @param rgba raw RGBA pixel data (4 bytes per pixel)
+ * @param rgba raw RGBA pixel data (4 bytes per pixel). <b>Warning:</b> This array is mutable. For a
+ *     read-only view, use {@link #asReadOnlyBuffer()}.
  */
 public record RenderResult(int width, int height, byte[] rgba) {
 
   public RenderResult {
     rgba = rgba.clone();
+  }
+
+  /**
+   * Returns a read-only view of the pixel data.
+   *
+   * @return a read-only ByteBuffer wrapping the rgba array
+   */
+  public ByteBuffer asReadOnlyBuffer() {
+    return ByteBuffer.wrap(rgba).asReadOnlyBuffer();
   }
 
   @Override

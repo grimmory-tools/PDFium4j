@@ -1,6 +1,8 @@
 package org.grimmory.pdfium4j.internal;
 
-import static java.lang.foreign.ValueLayout.*;
+import static java.lang.foreign.ValueLayout.ADDRESS;
+import static java.lang.foreign.ValueLayout.JAVA_INT;
+import static java.lang.foreign.ValueLayout.JAVA_LONG;
 
 import java.lang.foreign.FunctionDescriptor;
 import java.lang.foreign.Linker;
@@ -36,29 +38,12 @@ public final class BitmapBindings {
     Objects.requireNonNull(FPDFBitmap_GetStride, "FPDFBitmap_GetStride");
   }
 
-  // Bitmap format constants
-  public static final int FPDFBitmap_Unknown = 0;
-  public static final int FPDFBitmap_Gray = 1;
-  public static final int FPDFBitmap_BGR = 2;
-  public static final int FPDFBitmap_BGRx = 3;
-  public static final int FPDFBitmap_BGRA = 4;
-
   /**
    * Create a new bitmap. Parameters: width (pixels), height (pixels), alpha (0 = no alpha/BGRx,
    * non-zero = with alpha/BGRA). Returns FPDF_BITMAP handle (NULL on failure).
    */
   public static final MethodHandle FPDFBitmap_Create =
       downcall("FPDFBitmap_Create", FunctionDescriptor.of(ADDRESS, JAVA_INT, JAVA_INT, JAVA_INT));
-
-  /**
-   * Create a bitmap using an externally allocated buffer. Parameters: width, height, format
-   * (FPDFBitmap_* constant), firstScan (pointer to first scanline byte), stride (bytes per
-   * scanline). Returns FPDF_BITMAP handle.
-   */
-  public static final MethodHandle FPDFBitmap_CreateEx =
-      downcall(
-          "FPDFBitmap_CreateEx",
-          FunctionDescriptor.of(ADDRESS, JAVA_INT, JAVA_INT, JAVA_INT, ADDRESS, JAVA_INT));
 
   /** Fill a rectangle in the bitmap. color is 0xAARRGGBB. */
   public static final MethodHandle FPDFBitmap_FillRect =
@@ -84,5 +69,5 @@ public final class BitmapBindings {
 
   /** Destroy a bitmap and free its buffer (unless externally allocated). */
   public static final MethodHandle FPDFBitmap_Destroy =
-      downcall("FPDFBitmap_Destroy", FunctionDescriptor.ofVoid(ADDRESS));
+      downcallCritical("FPDFBitmap_Destroy", FunctionDescriptor.ofVoid(ADDRESS));
 }

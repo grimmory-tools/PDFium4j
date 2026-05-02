@@ -1,13 +1,21 @@
 package org.grimmory.pdfium4j.model;
 
 import edu.umd.cs.findbugs.annotations.CheckForNull;
+import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.grimmory.pdfium4j.PdfDocument;
+import org.grimmory.pdfium4j.PdfiumLibrary;
 import org.grimmory.pdfium4j.XmpMetadataParser;
 
 /**
@@ -53,82 +61,6 @@ public record PdfBookMetadata(
     customFields = Collections.unmodifiableMap(customFields);
   }
 
-  @Override
-  public BookFormat format() {
-    return BookFormat.PDF;
-  }
-
-  /**
-   * Create BookMetadata from a PDF document. Combines Info dictionary metadata with XMP metadata.
-   *
-   * @param document the PDF document
-   * @return unified metadata
-   */
-  public static PdfBookMetadata from(PdfDocument document) {
-    if (document == null) {
-      return empty();
-    }
-
-    XmpMetadata xmp = XmpMetadataParser.parseFrom(document);
-
-    Optional<String> title = xmp.title().or(() -> document.metadata(MetadataTag.TITLE));
-
-    List<String> authors = extractAuthors(xmp, document);
-
-    Optional<String> series =
-        Optional.ofNullable(xmp.calibreFields().get("series")).filter(s -> !s.isBlank());
-
-    Optional<Float> seriesNumber =
-        Optional.ofNullable(xmp.calibreFields().get("series_index"))
-            .flatMap(
-                s -> {
-                  try {
-                    return Optional.of(Float.parseFloat(s));
-                  } catch (NumberFormatException e) {
-                    return Optional.empty();
-                  }
-                });
-
-    Optional<String> isbn = extractIsbn(xmp);
-
-    Optional<String> language =
-        xmp.language()
-            .or(() -> Optional.ofNullable(xmp.customFields().get("Language")))
-            .map(PdfBookMetadata::normalizeLanguage);
-
-    Optional<LocalDate> publishedDate = extractPublishedDate(xmp);
-
-    List<String> subjects = new ArrayList<>(xmp.subjects());
-    Optional<String> keywordsOpt = document.metadata(MetadataTag.KEYWORDS);
-    if (keywordsOpt.isPresent()) {
-      for (String part : SEPARATOR_PATTERN.split(keywordsOpt.get())) {
-        String trimmed = part.trim();
-        if (!trimmed.isBlank() && !subjects.contains(trimmed)) {
-          subjects.add(trimmed);
-        }
-      }
-    }
-    subjects = Collections.unmodifiableList(subjects);
-
-    Optional<String> description = xmp.description();
-    Optional<String> publisher = xmp.publisher();
-    Map<String, String> customFields = extractCustomFields(xmp, document);
-
-    return new PdfBookMetadata(
-        title,
-        authors,
-        series,
-        seriesNumber,
-        isbn,
-        language,
-        publishedDate,
-        subjects,
-        description,
-        publisher,
-        xmp,
-        customFields);
-  }
-
   /** Create an empty PdfBookMetadata. */
   public static PdfBookMetadata empty() {
     return new PdfBookMetadata(
@@ -144,6 +76,36 @@ public record PdfBookMetadata(
         Optional.empty(),
         XmpMetadata.empty(),
         Map.of());
+  }
+
+  /**
+   * Extract book metadata from an open {@link PdfDocument}.
+   *
+   * @param document the open document
+   * @return combined metadata from Info dictionary and XMP packet
+   */
+  public static PdfBookMetadata from(PdfDocument document) {
+    XmpMetadata xmp = XmpMetadataParser.parseFrom(document);
+
+    return new PdfBookMetadata(
+        xmp.title().or(() -> document.metadata(MetadataTag.TITLE)),
+        extractAuthors(xmp, document),
+        xmp.calibreSeries(),
+        xmp.calibreSeriesIndex().isPresent()
+            ? Optional.of((float) xmp.calibreSeriesIndex().getAsDouble())
+            : Optional.empty(),
+        extractIsbn(xmp),
+        xmp.language()
+            .or(() -> document.metadata("Language").map(PdfBookMetadata::normalizeLanguage)),
+        extractPublishedDate(xmp)
+            .or(
+                () ->
+                    document.metadata(MetadataTag.CREATION_DATE).flatMap(PdfBookMetadata::parseDate)),
+        extractSubjects(xmp, document),
+        xmp.description().or(() -> document.metadata(MetadataTag.SUBJECT)),
+        xmp.publisher().or(() -> document.metadata(MetadataTag.PRODUCER)),
+        xmp,
+        extractCustomFields(xmp, document));
   }
 
   private static List<String> extractAuthors(XmpMetadata xmp, PdfDocument document) {
@@ -166,6 +128,25 @@ public record PdfBookMetadata(
     }
 
     return Collections.unmodifiableList(authors);
+  }
+
+  private static List<String> extractSubjects(XmpMetadata xmp, PdfDocument document) {
+    List<String> subjects = new ArrayList<>(xmp.subjects());
+    if (subjects.isEmpty()) {
+      document
+          .metadata(MetadataTag.KEYWORDS)
+          .ifPresent(
+              keywords -> {
+                String[] parts = SEPARATOR_PATTERN.split(keywords);
+                for (String part : parts) {
+                  String trimmed = part.trim();
+                  if (!trimmed.isBlank() && !subjects.contains(trimmed)) {
+                    subjects.add(trimmed);
+                  }
+                }
+              });
+    }
+    return Collections.unmodifiableList(subjects);
   }
 
   private static Optional<String> extractIsbn(XmpMetadata xmp) {
@@ -205,7 +186,7 @@ public record PdfBookMetadata(
           );
 
   private static Optional<LocalDate> extractPublishedDate(XmpMetadata xmp) {
-    List<String> candidates = new ArrayList<>();
+    List<String> candidates = new ArrayList<>(8);
     xmp.date().ifPresent(candidates::add);
     String createDate = xmp.customFields().get("CreateDate");
     if (createDate != null) candidates.add(createDate);
@@ -229,7 +210,8 @@ public record PdfBookMetadata(
       if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
         try {
           return Optional.of(LocalDate.of(year, month, day));
-        } catch (java.time.DateTimeException ignored) {
+        } catch (DateTimeException e) {
+          PdfiumLibrary.ignore(e);
         }
       }
     }
@@ -240,7 +222,8 @@ public record PdfBookMetadata(
     for (DateTimeFormatter fmt : DATE_FORMATS) {
       try {
         return Optional.of(LocalDate.parse(dateOnly, fmt));
-      } catch (DateTimeParseException ignored) {
+      } catch (DateTimeParseException e) {
+        PdfiumLibrary.ignore(e);
       }
     }
 
@@ -340,17 +323,4 @@ public record PdfBookMetadata(
     return lower;
   }
 
-  /** Get the PDF/A conformance level, if declared. */
-  public Optional<String> pdfaConformance() {
-    return rawMetadata.pdfaConformance();
-  }
-
-  /**
-   * Whether this PDF is image-only (scanned) with no extractable text. This is a hint based on XMP
-   * metadata, not a definitive check.
-   */
-  public boolean isLikelyImageOnly() {
-    // If no title, creators, or subjects, might be image-only
-    return title.isEmpty() && authors.isEmpty() && subjects.isEmpty();
-  }
 }

@@ -7,10 +7,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
-import java.util.HexFormat;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -93,12 +91,4 @@ class KoReaderChecksumTest {
     return bytes;
   }
 
-  private static String md5Hex(byte[] data) {
-    try {
-      MessageDigest md = MessageDigest.getInstance("MD5");
-      return HexFormat.of().formatHex(md.digest(data));
-    } catch (NoSuchAlgorithmException e) {
-      throw new IllegalStateException(e);
-    }
-  }
 }

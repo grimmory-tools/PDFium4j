@@ -1,6 +1,8 @@
 package org.grimmory.pdfium4j.internal;
 
-import static java.lang.foreign.ValueLayout.*;
+import static java.lang.foreign.ValueLayout.ADDRESS;
+import static java.lang.foreign.ValueLayout.JAVA_INT;
+import static java.lang.foreign.ValueLayout.JAVA_LONG;
 
 import java.lang.foreign.FunctionDescriptor;
 import java.lang.foreign.Linker;
@@ -42,14 +44,8 @@ public final class DocBindings {
       downcall(
           "FPDF_GetXMPMetadata", FunctionDescriptor.of(JAVA_LONG, ADDRESS, ADDRESS, JAVA_LONG));
 
-  public static final MethodHandle FPDF_GetDocPermissions =
-      downcallCritical("FPDF_GetDocPermissions", FunctionDescriptor.of(JAVA_INT, ADDRESS));
-
-  public static final MethodHandle FPDF_GetSecurityHandlerRevision =
-      downcallCritical("FPDF_GetSecurityHandlerRevision", FunctionDescriptor.of(JAVA_INT, ADDRESS));
-
   public static final MethodHandle FPDF_GetFileVersion =
-      downcall("FPDF_GetFileVersion", FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS));
+      downcallCritical("FPDF_GetFileVersion", FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS));
 
   public static final MethodHandle FPDF_GetPageLabel =
       downcall(
@@ -77,30 +73,13 @@ public final class DocBindings {
   public static final MethodHandle FPDFBookmark_GetAction =
       downcallCritical("FPDFBookmark_GetAction", FunctionDescriptor.of(ADDRESS, ADDRESS));
 
-  public static final MethodHandle FPDFBookmark_GetCount =
-      downcallCritical("FPDFBookmark_GetCount", FunctionDescriptor.of(JAVA_INT, ADDRESS));
-
-  public static final long PDFACTION_UNSUPPORTED = 0;
   public static final long PDFACTION_GOTO = 1;
-  public static final long PDFACTION_REMOTEGOTO = 2;
-  public static final long PDFACTION_URI = 3;
-  public static final long PDFACTION_LAUNCH = 4;
-  public static final long PDFACTION_EMBEDDEDGOTO = 5;
 
   public static final MethodHandle FPDFAction_GetType =
       downcallCritical("FPDFAction_GetType", FunctionDescriptor.of(JAVA_LONG, ADDRESS));
 
   public static final MethodHandle FPDFAction_GetDest =
       downcallCritical("FPDFAction_GetDest", FunctionDescriptor.of(ADDRESS, ADDRESS, ADDRESS));
-
-  public static final MethodHandle FPDFAction_GetURIPath =
-      downcall(
-          "FPDFAction_GetURIPath",
-          FunctionDescriptor.of(JAVA_LONG, ADDRESS, ADDRESS, ADDRESS, JAVA_LONG));
-
-  public static final MethodHandle FPDFAction_GetFilePath =
-      downcall(
-          "FPDFAction_GetFilePath", FunctionDescriptor.of(JAVA_LONG, ADDRESS, ADDRESS, JAVA_LONG));
 
   public static final MethodHandle FPDFDest_GetDestPageIndex =
       downcallCritical(

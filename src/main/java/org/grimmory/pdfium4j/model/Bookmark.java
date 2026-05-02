@@ -14,13 +14,4 @@ public record Bookmark(String title, int pageIndex, List<Bookmark> children) {
     children = children != null ? List.copyOf(children) : List.of();
   }
 
-  /** Returns true if this bookmark navigates to a page in the current document. */
-  public boolean isInternal() {
-    return pageIndex >= 0;
-  }
-
-  /** Returns true if this bookmark has child bookmarks. */
-  public boolean hasChildren() {
-    return !children.isEmpty();
-  }
 }

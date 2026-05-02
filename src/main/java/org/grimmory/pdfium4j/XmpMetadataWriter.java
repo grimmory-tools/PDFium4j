@@ -1,8 +1,16 @@
 package org.grimmory.pdfium4j;
 
-import java.io.*;
-import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.io.IOException;
+import java.io.StringWriter;
+import java.io.Writer;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import org.grimmory.pdfium4j.model.XmpMetadata;
 import org.grimmory.pdfium4j.model.XmpMetadata.QualifiedIdentifier;
 
@@ -36,7 +44,7 @@ public final class XmpMetadataWriter {
   private static final String NS_XAP = "http://ns.adobe.com/xap/1.0/";
   private static final String NS_XMP_IDQ = "http://ns.adobe.com/xmp/Identifier/qual/1.0/";
 
-  private final Map<String, String> customNamespaces = new LinkedHashMap<>();
+  private final Map<String, String> customNamespaces = LinkedHashMap.newLinkedHashMap(8);
 
   /**
    * Register a custom namespace for XMP serialization.
@@ -60,26 +68,6 @@ public final class XmpMetadataWriter {
   }
 
   /**
-   * Serialize an {@link XmpMetadata} record to an {@link OutputStream}.
-   *
-   * @param metadata the metadata to serialize
-   * @param out the output stream to write to
-   * @throws IOException if an I/O error occurs
-   */
-  public void write(XmpMetadata metadata, OutputStream out) throws IOException {
-    Objects.requireNonNull(metadata, "metadata");
-    Objects.requireNonNull(out, "out");
-
-    // We use a helper that writes to an Appendable to avoid massive String allocations.
-    // However, for PDF embedding, we need specific padding and bytes.
-    // We'll write to a writer wrapped around the stream.
-    Writer writer =
-        new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8));
-    writeToWriter(metadata, writer);
-    writer.flush();
-  }
-
-  /**
    * Serialize an {@link XmpMetadata} record to a complete XMP packet string.
    *
    * @param metadata the metadata to serialize
@@ -93,22 +81,6 @@ public final class XmpMetadataWriter {
       throw new RuntimeException("Unexpected I/O error writing to StringWriter", e);
     }
     return sw.toString();
-  }
-
-  /**
-   * Serialize metadata to raw bytes suitable for PDF XMP packet replacement.
-   *
-   * @param metadata the metadata to serialize
-   * @return the XMP packet as UTF-8 bytes
-   */
-  public byte[] writeBytes(XmpMetadata metadata) {
-    ByteArrayOutputStream bos = new ByteArrayOutputStream();
-    try {
-      write(metadata, bos);
-    } catch (IOException e) {
-      throw new RuntimeException("Unexpected I/O error writing to ByteArrayOutputStream", e);
-    }
-    return bos.toByteArray();
   }
 
   private void writeToWriter(XmpMetadata metadata, Writer w) throws IOException {
@@ -152,17 +124,31 @@ public final class XmpMetadataWriter {
     w.write(NS_DC);
     w.write("\">\n");
 
-    if (metadata.title().isPresent()) writeAlt(w, "dc:title", metadata.title().get());
+    Optional<String> title = metadata.title();
+    if (title.isPresent()) writeAlt(w, "dc:title", title.get());
+
     if (!metadata.creators().isEmpty()) writeSeq(w, "dc:creator", metadata.creators());
-    if (metadata.description().isPresent())
-      writeAlt(w, "dc:description", metadata.description().get());
+
+    Optional<String> description = metadata.description();
+    if (description.isPresent())
+      writeAlt(w, "dc:description", description.get());
+
     if (!metadata.subjects().isEmpty()) writeBag(w, "dc:subject", metadata.subjects());
-    if (metadata.publisher().isPresent())
-      writeBag(w, "dc:publisher", List.of(metadata.publisher().get()));
-    if (metadata.language().isPresent())
-      writeBag(w, "dc:language", List.of(metadata.language().get()));
-    if (metadata.date().isPresent()) writeSeq(w, "dc:date", List.of(metadata.date().get()));
-    if (metadata.rights().isPresent()) writeAlt(w, "dc:rights", metadata.rights().get());
+
+    Optional<String> publisher = metadata.publisher();
+    if (publisher.isPresent())
+      writeBag(w, "dc:publisher", List.of(publisher.get()));
+
+    Optional<String> language = metadata.language();
+    if (language.isPresent())
+      writeBag(w, "dc:language", List.of(language.get()));
+
+    Optional<String> date = metadata.date();
+    if (date.isPresent()) writeSeq(w, "dc:date", List.of(date.get()));
+
+    Optional<String> rights = metadata.rights();
+    if (rights.isPresent()) writeAlt(w, "dc:rights", rights.get());
+
     if (!metadata.identifiers().isEmpty()) writeBag(w, "dc:identifier", metadata.identifiers());
 
     w.write("</rdf:Description>\n");
@@ -170,8 +156,9 @@ public final class XmpMetadataWriter {
 
   private static void writePdfAConformance(Writer w, XmpMetadata metadata)
       throws IOException {
-    if (metadata.pdfaConformance().isEmpty()) return;
-    String conf = metadata.pdfaConformance().get();
+    Optional<String> pdfaConformance = metadata.pdfaConformance();
+    if (pdfaConformance.isEmpty()) return;
+    String conf = pdfaConformance.get();
     if (conf.isBlank()) return;
 
     w.write("<rdf:Description rdf:about=\"\"\n");
@@ -195,8 +182,7 @@ public final class XmpMetadataWriter {
     w.write("</rdf:Description>\n");
   }
 
-  private static void writeCalibreFields(Writer w, XmpMetadata metadata)
-      throws IOException {
+  private static void writeCalibreFields(Writer w, XmpMetadata metadata) throws IOException {
     if (metadata.calibreFields().isEmpty()) return;
 
     w.write("<rdf:Description rdf:about=\"\"\n");
@@ -222,10 +208,10 @@ public final class XmpMetadataWriter {
   private void writeCustomFields(Writer w, XmpMetadata metadata) throws IOException {
     if (metadata.customFields().isEmpty() && metadata.customListFields().isEmpty()) return;
 
-    Map<String, Map<String, String>> simpleGrouped = new LinkedHashMap<>();
-    Map<String, Map<String, List<String>>> listGrouped = new LinkedHashMap<>();
-    Map<String, String> simpleUnprefixed = new LinkedHashMap<>();
-    Map<String, List<String>> listUnprefixed = new LinkedHashMap<>();
+    Map<String, Map<String, String>> simpleGrouped = LinkedHashMap.newLinkedHashMap(8);
+    Map<String, Map<String, List<String>>> listGrouped = LinkedHashMap.newLinkedHashMap(8);
+    Map<String, String> simpleUnprefixed = LinkedHashMap.newLinkedHashMap(8);
+    Map<String, List<String>> listUnprefixed = LinkedHashMap.newLinkedHashMap(8);
 
     // Group simple fields
     for (Map.Entry<String, String> entry : metadata.customFields().entrySet()) {
@@ -291,7 +277,7 @@ public final class XmpMetadataWriter {
       if ("xmp".equals(prefix)) {
         unprefixed.put(key, value);
       } else if (customNamespaces.containsKey(prefix)) {
-        grouped.computeIfAbsent(prefix, _ -> new LinkedHashMap<>()).put(localName, value);
+        grouped.computeIfAbsent(prefix, _ -> LinkedHashMap.newLinkedHashMap(8)).put(localName, value);
       } else {
         throw new IllegalArgumentException("Namespace prefix '" + prefix + "' is not registered");
       }
@@ -306,8 +292,8 @@ public final class XmpMetadataWriter {
     return colonIdx >= 0 ? key.substring(colonIdx + 1) : key;
   }
 
-  private static void writeSimpleField(
-      Writer w, String prefix, String localName, String value) throws IOException {
+  private static void writeSimpleField(Writer w, String prefix, String localName, String value)
+      throws IOException {
     w.write("  <");
     w.write(prefix);
     w.write(":");
@@ -321,14 +307,13 @@ public final class XmpMetadataWriter {
     w.write(">\n");
   }
 
-  private static void writeListField(
-      Writer w, String prefix, String localName, List<String> values) throws IOException {
+  private static void writeListField(Writer w, String prefix, String localName, List<String> values)
+      throws IOException {
     String tag = prefix + ":" + localName;
     writeBag(w, tag, values);
   }
 
-  private static void writeXmpIdentifiers(Writer w, XmpMetadata metadata)
-      throws IOException {
+  private static void writeXmpIdentifiers(Writer w, XmpMetadata metadata) throws IOException {
     if (metadata.xmpIdentifiers().isEmpty()) return;
 
     w.write("<rdf:Description rdf:about=\"\"\n");
@@ -369,8 +354,7 @@ public final class XmpMetadataWriter {
     w.write(">\n");
   }
 
-  private static void writeSeq(Writer w, String tag, List<String> values)
-      throws IOException {
+  private static void writeSeq(Writer w, String tag, List<String> values) throws IOException {
     w.write("  <");
     w.write(tag);
     w.write(">\n");
@@ -386,8 +370,7 @@ public final class XmpMetadataWriter {
     w.write(">\n");
   }
 
-  private static void writeBag(Writer w, String tag, List<String> values)
-      throws IOException {
+  private static void writeBag(Writer w, String tag, List<String> values) throws IOException {
     w.write("  <");
     w.write(tag);
     w.write(">\n");

@@ -1,6 +1,15 @@
 package org.grimmory.pdfium4j.model;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.OptionalDouble;
+import java.util.OptionalInt;
 import java.util.regex.Pattern;
 
 /**
@@ -64,7 +73,7 @@ public record XmpMetadata(
     Objects.requireNonNull(pdfaConformance, "pdfaConformance");
     calibreFields = Map.copyOf(Objects.requireNonNull(calibreFields, "calibreFields"));
     customFields = Map.copyOf(Objects.requireNonNull(customFields, "customFields"));
-    Map<String, List<String>> listCopy = new LinkedHashMap<>();
+    Map<String, List<String>> listCopy = LinkedHashMap.newLinkedHashMap(16);
     Objects.requireNonNull(customListFields, "customListFields")
         .forEach(
             (k, v) ->
@@ -73,16 +82,6 @@ public record XmpMetadata(
                     List.copyOf(Objects.requireNonNull(v, "customListFields value"))));
     customListFields = Collections.unmodifiableMap(listCopy);
     xmpIdentifiers = List.copyOf(Objects.requireNonNull(xmpIdentifiers, "xmpIdentifiers"));
-  }
-
-  /** Whether this PDF declares PDF/A conformance. */
-  public boolean isPdfA() {
-    return pdfaConformance.isPresent() && !pdfaConformance.get().isBlank();
-  }
-
-  /** Get the first creator (author), if any. */
-  public Optional<String> firstCreator() {
-    return creators.isEmpty() ? Optional.empty() : Optional.of(creators.getFirst());
   }
 
   /** Get all ISBN identifiers found in dc:identifier fields. */
@@ -158,19 +157,19 @@ public record XmpMetadata(
   /** Builder for {@link XmpMetadata} to insulate callers from record component additions. */
   public static final class Builder {
     private Optional<String> title = Optional.empty();
-    private List<String> creators = new ArrayList<>();
+    private List<String> creators = new ArrayList<>(8);
     private Optional<String> description = Optional.empty();
-    private List<String> subjects = new ArrayList<>();
+    private List<String> subjects = new ArrayList<>(8);
     private Optional<String> publisher = Optional.empty();
     private Optional<String> language = Optional.empty();
     private Optional<String> date = Optional.empty();
     private Optional<String> rights = Optional.empty();
-    private List<String> identifiers = new ArrayList<>();
+    private List<String> identifiers = new ArrayList<>(8);
     private Optional<String> pdfaConformance = Optional.empty();
-    private Map<String, String> calibreFields = new LinkedHashMap<>();
-    private Map<String, String> customFields = new LinkedHashMap<>();
-    private Map<String, List<String>> customListFields = new LinkedHashMap<>();
-    private List<QualifiedIdentifier> xmpIdentifiers = new ArrayList<>();
+    private Map<String, String> calibreFields = LinkedHashMap.newLinkedHashMap(8);
+    private Map<String, String> customFields = LinkedHashMap.newLinkedHashMap(8);
+    private Map<String, List<String>> customListFields = LinkedHashMap.newLinkedHashMap(8);
+    private List<QualifiedIdentifier> xmpIdentifiers = new ArrayList<>(8);
 
     public Builder title(String val) {
       this.title = Optional.ofNullable(val);
@@ -233,7 +232,7 @@ public record XmpMetadata(
     }
 
     public Builder customListFields(Map<String, List<String>> val) {
-      this.customListFields = new LinkedHashMap<>();
+      this.customListFields = LinkedHashMap.newLinkedHashMap(val.size());
       val.forEach((k, v) -> this.customListFields.put(k, new ArrayList<>(v)));
       return this;
     }

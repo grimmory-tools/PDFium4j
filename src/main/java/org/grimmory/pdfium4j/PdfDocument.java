@@ -1,12 +1,20 @@
 package org.grimmory.pdfium4j;
 
-import static java.lang.foreign.ValueLayout.*;
+import static java.lang.foreign.ValueLayout.ADDRESS;
+import static java.lang.foreign.ValueLayout.JAVA_BYTE;
+import static java.lang.foreign.ValueLayout.JAVA_DOUBLE;
+import static java.lang.foreign.ValueLayout.JAVA_INT;
+import static java.lang.foreign.ValueLayout.JAVA_LONG;
 
 import edu.umd.cs.findbugs.annotations.CheckForNull;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.lang.foreign.*;
+import java.lang.foreign.Arena;
+import java.lang.foreign.Linker;
+import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
@@ -14,13 +22,19 @@ import java.lang.ref.Cleaner;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.SeekableByteChannel;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.grimmory.pdfium4j.exception.PdfCorruptException;
@@ -31,7 +45,14 @@ import org.grimmory.pdfium4j.internal.DocBindings;
 import org.grimmory.pdfium4j.internal.EditBindings;
 import org.grimmory.pdfium4j.internal.FfmHelper;
 import org.grimmory.pdfium4j.internal.ViewBindings;
-import org.grimmory.pdfium4j.model.*;
+import org.grimmory.pdfium4j.model.Bookmark;
+import org.grimmory.pdfium4j.model.MetadataTag;
+import org.grimmory.pdfium4j.model.PageSize;
+import org.grimmory.pdfium4j.model.PdfDiagnostic;
+import org.grimmory.pdfium4j.model.PdfErrorCode;
+import org.grimmory.pdfium4j.model.PdfProbeResult;
+import org.grimmory.pdfium4j.model.PdfProcessingPolicy;
+import org.grimmory.pdfium4j.model.RenderResult;
 
 /**
  * Represents an open PDF document backed by native PDFium.
@@ -45,24 +66,27 @@ import org.grimmory.pdfium4j.model.*;
  */
 public final class PdfDocument implements AutoCloseable {
 
-  private static final Map<Long, SeekableByteChannel> CHANNELS = new ConcurrentHashMap<>();
+  private static final Map<Long, SeekableByteChannel> CHANNELS = new ConcurrentHashMap<>(16);
   private static final AtomicLong CHANNEL_ID_SEQ = new AtomicLong();
   private static final Cleaner CLEANER = Cleaner.create();
+  private static final byte[] EMPTY_BYTE_ARRAY = new byte[0];
+
+  private static final MetadataTag[] METADATA_TAGS = MetadataTag.values();
 
   private final MemorySegment handle;
   private final Arena docArena;
-  private SeekableByteChannel sourceChannel;
+  private SeekableByteChannel docSourceChannel;
   private final Path sourcePath;
   private final byte[] sourceBytes;
   private final long channelId;
   private final PdfProcessingPolicy policy;
   private final Thread ownerThread;
-  private final List<PdfPage> openPages = new ArrayList<>();
+  private final List<PdfPage> openPages = new ArrayList<>(8);
   private volatile boolean closed = false;
   private volatile boolean structurallyModified = false;
-  private final Map<MetadataTag, String> pendingMetadata = new LinkedHashMap<>();
+  private final Map<MetadataTag, String> pendingMetadata = LinkedHashMap.newLinkedHashMap(8);
   private String pendingXmpMetadata = null;
-  private final State state;
+  private final CleanupState state;
   private final Cleaner.Cleanable cleanable;
 
   private PdfDocument(
@@ -77,54 +101,65 @@ public final class PdfDocument implements AutoCloseable {
       Thread ownerThread) {
     this.handle = handle;
     this.docArena = docArena;
-    this.sourceChannel = sourceChannel;
+    this.docSourceChannel = sourceChannel;
     this.channelId = channelId;
     this.sourcePath = sourcePath;
     this.sourceBytes = sourceBytes;
     this.policy = policy;
     this.ownerThread = ownerThread;
-    this.state = new State(channelId, sourceChannel, tempFile, docArena);
+    this.state = new CleanupState(channelId, sourceChannel, tempFile, docArena);
     this.cleanable = CLEANER.register(this, state);
+
     PdfiumLibrary.incrementDocumentCount();
   }
 
-  /** Represents the cleanup state to be executed by the {@link Cleaner}. */
-  private static final class State implements Runnable {
+  @SuppressFBWarnings("IS2_INCONSISTENT_SYNC")
+  private static final class CleanupState implements Runnable {
     private final long channelId;
-    private SeekableByteChannel sourceChannel;
+    private final AtomicReference<SeekableByteChannel> sourceChannelRef =
+        new AtomicReference<>();
     private final Path tempFile;
     private final Arena docArena;
 
-    private State(
-        long channelId, SeekableByteChannel sourceChannel, Path tempFile, Arena docArena) {
+    private CleanupState(
+        long channelId, SeekableByteChannel chan, Path tempFile, Arena docArena) {
       this.channelId = channelId;
-      this.sourceChannel = sourceChannel;
+      this.sourceChannelRef.set(chan);
       this.tempFile = tempFile;
       this.docArena = docArena;
     }
 
-    synchronized void updateSourceChannel(SeekableByteChannel newChannel) {
-      this.sourceChannel = newChannel;
+    void updateSourceChannel(SeekableByteChannel newChannel) {
+      this.sourceChannelRef.set(newChannel);
     }
 
     @Override
     public void run() {
       try {
         if (channelId > 0) {
-          CHANNELS.remove(channelId);
-        }
-        synchronized (this) {
-          if (sourceChannel != null) {
+          SeekableByteChannel removed = CHANNELS.remove(Long.valueOf(channelId));
+          SeekableByteChannel current = sourceChannelRef.get();
+          if (removed != null && removed != current) {
             try {
-              sourceChannel.close();
-            } catch (IOException ignored) {
+              removed.close();
+            } catch (IOException e) {
+              PdfiumLibrary.ignore(e);
             }
+          }
+        }
+        SeekableByteChannel chan = sourceChannelRef.getAndSet(null);
+        if (chan != null) {
+          try {
+            chan.close();
+          } catch (IOException e) {
+            PdfiumLibrary.ignore(e);
           }
         }
         if (tempFile != null) {
           try {
             Files.deleteIfExists(tempFile);
-          } catch (IOException ignored) {
+          } catch (IOException e) {
+            PdfiumLibrary.ignore(e);
           }
         }
         if (docArena != null) {
@@ -136,14 +171,10 @@ public final class PdfDocument implements AutoCloseable {
     }
   }
 
-  // --- Static Factories (Opening) ---
+
 
   public static PdfDocument open(Path path) {
     return open(path, null, resolvePolicy(null));
-  }
-
-  public static PdfDocument open(Path path, String password) {
-    return open(path, password, resolvePolicy(null));
   }
 
   @SuppressWarnings("resource")
@@ -151,6 +182,11 @@ public final class PdfDocument implements AutoCloseable {
     PdfProcessingPolicy resolvedPolicy = resolvePolicy(policy);
     PdfiumLibrary.ensureInitialized();
     try {
+      long size = Files.size(path);
+      if (size > resolvedPolicy.maxDocumentBytes()) {
+        throw new PdfiumException(
+            "Document size (" + size + " bytes) exceeds policy limit (" + resolvedPolicy.maxDocumentBytes() + ")", null);
+      }
       SeekableByteChannel channel = Files.newByteChannel(path, StandardOpenOption.READ);
       return openFromChannel(channel, path, null, password, path.toString(), resolvedPolicy);
     } catch (IOException e) {
@@ -162,14 +198,14 @@ public final class PdfDocument implements AutoCloseable {
     return open(data, null, resolvePolicy(null));
   }
 
-  public static PdfDocument open(byte[] data, String password) {
-    return open(data, password, resolvePolicy(null));
-  }
-
   public static PdfDocument open(byte[] data, String password, PdfProcessingPolicy policy) {
     PdfProcessingPolicy resolvedPolicy = resolvePolicy(policy);
     if (data == null || data.length == 0)
       throw new IllegalArgumentException("data is null or empty");
+    if (data.length > resolvedPolicy.maxDocumentBytes()) {
+      throw new PdfiumException(
+          "Document size (" + data.length + " bytes) exceeds policy limit (" + resolvedPolicy.maxDocumentBytes() + ")", null);
+    }
     PdfiumLibrary.ensureInitialized();
     Arena arena = Arena.ofShared();
     try {
@@ -190,17 +226,6 @@ public final class PdfDocument implements AutoCloseable {
       arena.close();
       throw new PdfiumException("Failed to open document from bytes", t);
     }
-  }
-
-  @SuppressWarnings("resource")
-  public static PdfDocument open(InputStream in) throws IOException {
-    Path temp = Files.createTempFile("pdfium4j-stream-", ".pdf");
-    try (OutputStream out = Files.newOutputStream(temp)) {
-      in.transferTo(out);
-    }
-    PdfiumLibrary.ensureInitialized();
-    SeekableByteChannel channel = Files.newByteChannel(temp, StandardOpenOption.READ);
-    return openFromChannel(channel, temp, temp, null, "InputStream", resolvePolicy(null));
   }
 
   private static PdfDocument openFromChannel(
@@ -256,12 +281,14 @@ public final class PdfDocument implements AutoCloseable {
       if (channelId > 0) CHANNELS.remove(channelId);
       try {
         channel.close();
-      } catch (IOException ignored) {
+      } catch (IOException ex) {
+        PdfiumLibrary.ignore(ex);
       }
       if (tempFile != null) {
         try {
           Files.deleteIfExists(tempFile);
-        } catch (IOException ignored) {
+        } catch (IOException ex) {
+          PdfiumLibrary.ignore(ex);
         }
       }
       docArena.close();
@@ -270,12 +297,14 @@ public final class PdfDocument implements AutoCloseable {
       if (channelId > 0) CHANNELS.remove(channelId);
       try {
         channel.close();
-      } catch (IOException ignored) {
+      } catch (IOException ex) {
+        PdfiumLibrary.ignore(ex);
       }
       if (tempFile != null) {
         try {
           Files.deleteIfExists(tempFile);
-        } catch (IOException ignored) {
+        } catch (IOException ex) {
+          PdfiumLibrary.ignore(ex);
         }
       }
       docArena.close();
@@ -303,7 +332,7 @@ public final class PdfDocument implements AutoCloseable {
     }
   }
 
-  // --- API ---
+
 
   public int pageCount() {
     ensureOpen();
@@ -325,11 +354,11 @@ public final class PdfDocument implements AutoCloseable {
       PdfPage page =
           new PdfPage(
               pageHandle,
-              handle,
               ownerThread,
               policy.maxRenderPixels(),
               this::unregisterPage,
               () -> structurallyModified = true);
+
       registerPage(page);
       return page;
     } catch (Throwable t) {
@@ -406,9 +435,11 @@ public final class PdfDocument implements AutoCloseable {
     }
     try (Arena arena = Arena.ofConfined()) {
       MemorySegment keySeg = arena.allocateFrom(tag.pdfKey());
+
       long needed =
           (long) DocBindings.FPDF_GetMetaText.invokeExact(handle, keySeg, MemorySegment.NULL, 0L);
       if (needed <= 2) return metadataFallback(tag);
+
       MemorySegment buf = arena.allocate(needed);
       DocBindings.FPDF_GetMetaText.invokeExact(handle, keySeg, buf, needed);
       String val = FfmHelper.fromWideString(buf, needed);
@@ -427,7 +458,8 @@ public final class PdfDocument implements AutoCloseable {
           Arena arena = Arena.ofConfined()) {
         MemorySegment segment = fc.map(FileChannel.MapMode.READ_ONLY, 0, fc.size(), arena);
         return extractMetadataFromSegment(segment, tag);
-      } catch (IOException ignored) {
+      } catch (IOException e) {
+        PdfiumLibrary.ignore(e);
       }
     }
     return Optional.empty();
@@ -436,8 +468,9 @@ public final class PdfDocument implements AutoCloseable {
   private static Optional<String> extractMetadataFromSegment(MemorySegment pdf, MetadataTag tag) {
     long size = pdf.byteSize();
     long tailLen = Math.min(size, 4096);
+    if (tailLen == 0) return Optional.empty();
     byte[] tailBytes = pdf.asSlice(size - tailLen, tailLen).toArray(JAVA_BYTE);
-    String tail = new String(tailBytes, java.nio.charset.StandardCharsets.ISO_8859_1);
+    String tail = new String(tailBytes, StandardCharsets.ISO_8859_1);
 
     // Find latest /Info reference in tail
     Pattern infoP = Pattern.compile("/Info\\s+(\\d+)\\s+(\\d+)\\s+R");
@@ -475,12 +508,11 @@ public final class PdfDocument implements AutoCloseable {
 
   @CheckForNull
   private static String extractDictFromSegment(MemorySegment pdf, int objNum, int genNum) {
-    byte[] marker =
-        (objNum + " " + genNum + " obj").getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+    byte[] marker = (objNum + " " + genNum + " obj").getBytes(StandardCharsets.ISO_8859_1);
     long pos = lastIndexOf(pdf, marker);
     if (pos < 0) return null;
 
-    byte[] dictStartMarker = "<<".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+    byte[] dictStartMarker = "<<".getBytes(StandardCharsets.ISO_8859_1);
     long dictStart = indexOf(pdf, dictStartMarker, pos);
     if (dictStart < 0) return null;
 
@@ -497,7 +529,7 @@ public final class PdfDocument implements AutoCloseable {
         depth--;
         if (depth == 0) {
           byte[] dictBytes = pdf.asSlice(dictStart, curr + 2 - dictStart).toArray(JAVA_BYTE);
-          return new String(dictBytes, java.nio.charset.StandardCharsets.ISO_8859_1);
+          return new String(dictBytes, StandardCharsets.ISO_8859_1);
         }
         curr += 2;
       } else {
@@ -535,11 +567,13 @@ public final class PdfDocument implements AutoCloseable {
     if (hex.startsWith("FEFF")) {
       // UTF-16BE
       try {
-        byte[] bytes = new byte[(hex.length() - 4) / 2];
+        int len = (hex.length() - 4) / 2;
+        if (len <= 0) return "";
+        byte[] bytes = new byte[len];
         for (int i = 0; i < bytes.length; i++) {
           bytes[i] = (byte) Integer.parseInt(hex.substring(4 + i * 2, 6 + i * 2), 16);
         }
-        return new String(bytes, java.nio.charset.StandardCharsets.UTF_16BE);
+        return new String(bytes, StandardCharsets.UTF_16BE);
       } catch (Exception e) {
         return hex;
       }
@@ -548,22 +582,23 @@ public final class PdfDocument implements AutoCloseable {
   }
 
   public Optional<String> metadata(String customKey) {
-    for (MetadataTag tag : MetadataTag.values())
+    for (MetadataTag tag : METADATA_TAGS)
       if (tag.pdfKey().equalsIgnoreCase(customKey)) return metadata(tag);
     return Optional.empty();
   }
 
   public Map<String, String> metadata() {
-    Map<String, String> meta = new LinkedHashMap<>();
-    for (MetadataTag tag : MetadataTag.values())
-      metadata(tag).ifPresent(v -> meta.put(tag.name(), v));
+    Map<String, String> meta = LinkedHashMap.newLinkedHashMap(METADATA_TAGS.length);
+    for (MetadataTag tag : METADATA_TAGS) metadata(tag).ifPresent(v -> meta.put(tag.name(), v));
     return meta;
   }
 
   public byte[] xmpMetadata() {
     ensureOpen();
     if (pendingXmpMetadata != null) {
-      return pendingXmpMetadata.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+      return pendingXmpMetadata.isEmpty()
+          ? EMPTY_BYTE_ARRAY
+          : pendingXmpMetadata.getBytes(StandardCharsets.UTF_8);
     }
     try (Arena arena = Arena.ofShared()) {
       if (DocBindings.FPDF_GetXMPMetadata != null) {
@@ -575,7 +610,8 @@ public final class PdfDocument implements AutoCloseable {
           return buf.toArray(JAVA_BYTE);
         }
       }
-    } catch (Throwable ignored) {
+    } catch (Throwable e) {
+      PdfiumLibrary.ignore(e);
     }
     if (sourceBytes != null) {
       return extractXmpFromSegment(MemorySegment.ofArray(sourceBytes));
@@ -585,30 +621,31 @@ public final class PdfDocument implements AutoCloseable {
           Arena arena = Arena.ofConfined()) {
         MemorySegment segment = fc.map(FileChannel.MapMode.READ_ONLY, 0, fc.size(), arena);
         return extractXmpFromSegment(segment);
-      } catch (IOException ignored) {
+      } catch (IOException e) {
+        PdfiumLibrary.ignore(e);
       }
     }
-    return new byte[0];
+    return EMPTY_BYTE_ARRAY;
   }
 
   private static byte[] extractXmpFromSegment(MemorySegment pdf) {
-    byte[] startMarker = "<?xpacket begin".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+    byte[] startMarker = "<?xpacket begin".getBytes(StandardCharsets.ISO_8859_1);
     long start = lastIndexOf(pdf, startMarker);
-    if (start < 0) return new byte[0];
+    if (start < 0) return EMPTY_BYTE_ARRAY;
 
-    byte[] endMarker = "<?xpacket end".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+    byte[] endMarker = "<?xpacket end".getBytes(StandardCharsets.ISO_8859_1);
     long end = indexOf(pdf, endMarker, start);
-    if (end < 0) return new byte[0];
+    if (end < 0) return EMPTY_BYTE_ARRAY;
 
-    byte[] termMarker = "?>".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+    byte[] termMarker = "?>".getBytes(StandardCharsets.ISO_8859_1);
     long term = indexOf(pdf, termMarker, end);
-    if (term < 0) return new byte[0];
+    if (term < 0) return EMPTY_BYTE_ARRAY;
 
     return pdf.asSlice(start, term + 2 - start).toArray(JAVA_BYTE);
   }
 
   public String xmpMetadataString() {
-    return new String(xmpMetadata(), java.nio.charset.StandardCharsets.UTF_8);
+    return new String(xmpMetadata(), StandardCharsets.UTF_8);
   }
 
   public void setMetadata(MetadataTag tag, String value) {
@@ -623,7 +660,8 @@ public final class PdfDocument implements AutoCloseable {
           structurallyModified = true;
         }
       }
-    } catch (Throwable ignored) {
+    } catch (Throwable e) {
+      PdfiumLibrary.ignore(e);
     }
   }
 
@@ -689,31 +727,27 @@ public final class PdfDocument implements AutoCloseable {
     }
   }
 
-  public void save(Path path) {
-    save(path, SaveOptions.DEFAULT);
-  }
-
   @SuppressWarnings("resource")
-  public void save(Path path, SaveOptions options) {
+  public void save(Path path) {
     if (path.equals(sourcePath)) {
       Path temp = null;
       try {
         temp = Files.createTempFile("pdfium4j-save-", ".pdf");
         try (OutputStream out = Files.newOutputStream(temp)) {
-          save(out, options);
+          save(out);
         }
-        if (sourceChannel != null) {
-          sourceChannel.close();
-          sourceChannel = null;
+        if (docSourceChannel != null) {
+          docSourceChannel.close();
+          docSourceChannel = null;
           CHANNELS.remove(channelId);
           state.updateSourceChannel(null);
         }
         Files.move(temp, path, StandardCopyOption.REPLACE_EXISTING);
         temp = null; // Prevent deletion in finally if move succeeded
         if (channelId > 0) {
-          sourceChannel = Files.newByteChannel(path, StandardOpenOption.READ);
-          CHANNELS.put(channelId, sourceChannel);
-          state.updateSourceChannel(sourceChannel);
+          docSourceChannel = Files.newByteChannel(path, StandardOpenOption.READ);
+          CHANNELS.put(channelId, docSourceChannel);
+          state.updateSourceChannel(docSourceChannel);
         }
       } catch (IOException e) {
         throw new PdfiumException("Failed to save to source path: " + path, e);
@@ -721,13 +755,14 @@ public final class PdfDocument implements AutoCloseable {
         if (temp != null) {
           try {
             Files.deleteIfExists(temp);
-          } catch (IOException ignored) {
+          } catch (IOException e) {
+            PdfiumLibrary.ignore(e);
           }
         }
       }
     } else {
       try (OutputStream out = Files.newOutputStream(path)) {
-        save(out, options);
+        save(out);
       } catch (IOException e) {
         throw new PdfiumException("Failed to save to " + path, e);
       }
@@ -735,35 +770,28 @@ public final class PdfDocument implements AutoCloseable {
   }
 
   public void save(OutputStream out) {
-    save(out, SaveOptions.DEFAULT);
-  }
-
-  public void save(OutputStream out, SaveOptions options) {
     ensureOpen();
     try {
-      PdfSaver.save(
-          handle,
-          buildMergedMetadata(),
-          !pendingMetadata.isEmpty(),
-          pendingXmpMetadata,
-          options.skipValidation(),
-          sourceChannel,
-          sourcePath,
-          sourceBytes,
-          structurallyModified,
-          out);
+      PdfSaver.SaveParams params =
+          new PdfSaver.SaveParams(
+              handle,
+              buildMergedMetadata(),
+              !pendingMetadata.isEmpty(),
+              pendingXmpMetadata,
+              docSourceChannel,
+              sourcePath,
+              sourceBytes,
+              structurallyModified,
+              out);
+      PdfSaver.save(params);
     } catch (IOException e) {
       throw new PdfiumException("Failed to save document", e);
     }
   }
 
   public byte[] saveToBytes() {
-    return saveToBytes(SaveOptions.DEFAULT);
-  }
-
-  public byte[] saveToBytes(SaveOptions options) {
-    java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
-    save(bos, options);
+    ByteArrayOutputStream bos = new ByteArrayOutputStream();
+    save(bos);
     return bos.toByteArray();
   }
 
@@ -778,11 +806,12 @@ public final class PdfDocument implements AutoCloseable {
         snapshot = new ArrayList<>(openPages);
         openPages.clear();
       }
-      for (PdfPage page : snapshot) {
-        page.closeFromDocument();
+      for (PdfPage pdfPage : snapshot) {
+        pdfPage.closeFromDocument();
       }
       ViewBindings.FPDF_CloseDocument.invokeExact(handle);
-    } catch (Throwable ignored) {
+    } catch (Throwable e) {
+      PdfiumLibrary.ignore(e);
     } finally {
       cleanable.clean();
     }
@@ -833,9 +862,10 @@ public final class PdfDocument implements AutoCloseable {
   }
 
   private Map<MetadataTag, String> buildMergedMetadata() {
-    Map<MetadataTag, String> merged = new LinkedHashMap<>();
-    for (MetadataTag tag : MetadataTag.values())
-      if (!pendingMetadata.containsKey(tag)) metadata(tag).ifPresent(v -> merged.put(tag, v));
+    Map<MetadataTag, String> merged = LinkedHashMap.newLinkedHashMap(METADATA_TAGS.length);
+      for (MetadataTag tag : METADATA_TAGS) {
+          if (!pendingMetadata.containsKey(tag)) metadata(tag).ifPresent(v -> merged.put(tag, v));
+      }
     merged.putAll(pendingMetadata);
     return merged;
   }

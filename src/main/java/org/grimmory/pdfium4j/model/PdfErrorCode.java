@@ -10,6 +10,7 @@ public enum PdfErrorCode {
   SECURITY(5, "unsupported security handler"),
   PAGE(6, "page not found or invalid");
 
+  private static final PdfErrorCode[] VALUES = values();
   private final int code;
   private final String description;
 
@@ -18,16 +19,12 @@ public enum PdfErrorCode {
     this.description = description;
   }
 
-  public int code() {
-    return code;
-  }
-
-  public String description() {
+    public String description() {
     return description;
   }
 
   public static PdfErrorCode fromCode(int code) {
-    for (PdfErrorCode e : values()) {
+    for (PdfErrorCode e : VALUES) {
       if (e.code == code) return e;
     }
     return UNKNOWN;

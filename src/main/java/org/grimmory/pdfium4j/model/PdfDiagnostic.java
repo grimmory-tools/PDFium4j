@@ -25,12 +25,7 @@ public record PdfDiagnostic(
     warnings = warnings != null ? List.copyOf(warnings) : List.of();
   }
 
-  /** Whether this appears to be a scanned/image-only PDF (no extractable text). */
-  public boolean isImageOnly() {
-    return valid && pageCount > 0 && !hasText;
-  }
-
-  /** Human-readable PDF version string (e.g. "1.4", "1.7", "2.0"). */
+    /** Human-readable PDF version string (e.g. "1.4", "1.7", "2.0"). */
   public String fileVersionString() {
     if (fileVersion <= 0) return "unknown";
     return (fileVersion / 10) + "." + (fileVersion % 10);

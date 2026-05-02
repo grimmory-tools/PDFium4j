@@ -1,8 +1,15 @@
 package org.grimmory.pdfium4j.internal;
 
-import static java.lang.foreign.ValueLayout.*;
+import static java.lang.foreign.ValueLayout.ADDRESS;
+import static java.lang.foreign.ValueLayout.JAVA_FLOAT;
+import static java.lang.foreign.ValueLayout.JAVA_INT;
+import static java.lang.foreign.ValueLayout.JAVA_LONG;
 
-import java.lang.foreign.*;
+import java.lang.foreign.FunctionDescriptor;
+import java.lang.foreign.Linker;
+import java.lang.foreign.MemoryLayout;
+import java.lang.foreign.StructLayout;
+import java.lang.foreign.SymbolLookup;
 import java.lang.invoke.MethodHandle;
 import java.util.Objects;
 
@@ -48,7 +55,7 @@ public final class AnnotBindings {
 
   /** Close an annotation handle. */
   public static final MethodHandle FPDFPage_CloseAnnot =
-      downcall("FPDFPage_CloseAnnot", FunctionDescriptor.ofVoid(ADDRESS));
+      downcallCritical("FPDFPage_CloseAnnot", FunctionDescriptor.ofVoid(ADDRESS));
 
   /** Get annotation subtype. Returns FPDF_ANNOTATION_SUBTYPE (int). */
   public static final MethodHandle FPDFAnnot_GetSubtype =
@@ -65,5 +72,5 @@ public final class AnnotBindings {
 
   /** Get annotation bounding rectangle. Writes into FS_RECTF. Returns 1 on success. */
   public static final MethodHandle FPDFAnnot_GetRect =
-      downcall("FPDFAnnot_GetRect", FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS));
+      downcallCritical("FPDFAnnot_GetRect", FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS));
 }

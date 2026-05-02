@@ -1,8 +1,16 @@
 package org.grimmory.pdfium4j.internal;
 
-import static java.lang.foreign.ValueLayout.*;
+import static java.lang.foreign.ValueLayout.ADDRESS;
+import static java.lang.foreign.ValueLayout.JAVA_DOUBLE;
+import static java.lang.foreign.ValueLayout.JAVA_FLOAT;
+import static java.lang.foreign.ValueLayout.JAVA_INT;
+import static java.lang.foreign.ValueLayout.JAVA_LONG;
 
-import java.lang.foreign.*;
+import java.lang.foreign.FunctionDescriptor;
+import java.lang.foreign.Linker;
+import java.lang.foreign.MemoryLayout;
+import java.lang.foreign.StructLayout;
+import java.lang.foreign.SymbolLookup;
 import java.lang.invoke.MethodHandle;
 import java.util.Objects;
 
@@ -55,10 +63,6 @@ public final class EditBindings {
   public static final MethodHandle FPDFPage_SetRotation =
       downcall("FPDFPage_SetRotation", FunctionDescriptor.ofVoid(ADDRESS, JAVA_INT));
 
-  /** Commit page object changes (must call after modifications). Returns 1 on success. */
-  public static final MethodHandle FPDFPage_GenerateContent =
-      downcall("FPDFPage_GenerateContent", FunctionDescriptor.of(JAVA_INT, ADDRESS));
-
   /** Set document metadata value by tag name. Returns 1 on success. */
   public static final MethodHandle FPDF_SetMetaText =
       downcallOptional(
@@ -87,30 +91,16 @@ public final class EditBindings {
   public static final FunctionDescriptor WRITE_BLOCK_DESC =
       FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS, JAVA_LONG);
 
-  /** Create a new empty document. Returns FPDF_DOCUMENT handle (NULL on failure). */
-  public static final MethodHandle FPDF_CreateNewDocument =
-      downcall("FPDF_CreateNewDocument", FunctionDescriptor.of(ADDRESS));
-
   /** Save the document to an FPDF_FILEWRITE sink. Returns 1 on success. */
   public static final MethodHandle FPDF_SaveAsCopy =
       downcallOptional(
           "FPDF_SaveAsCopy", FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS, JAVA_INT));
-
-  /** Save the document with a specific PDF version number. Returns 1 on success. */
-  public static final MethodHandle FPDF_SaveWithVersion =
-      downcallOptional(
-          "FPDF_SaveWithVersion",
-          FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS, JAVA_INT, JAVA_INT));
 
   /** Create a new blank page at the given index. Returns FPDF_PAGE handle (NULL on failure). */
   public static final MethodHandle FPDFPage_New =
       downcall(
           "FPDFPage_New",
           FunctionDescriptor.of(ADDRESS, ADDRESS, JAVA_INT, JAVA_DOUBLE, JAVA_DOUBLE));
-
-  /** Delete a page at the given index. */
-  public static final MethodHandle FPDFPage_Delete =
-      downcall("FPDFPage_Delete", FunctionDescriptor.ofVoid(ADDRESS, JAVA_INT));
 
   /**
    * Import pages from another document. pageRange is a comma-separated page range string like

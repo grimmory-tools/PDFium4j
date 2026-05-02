@@ -3,8 +3,15 @@ package org.grimmory.pdfium4j;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.grimmory.pdfium4j.exception.PdfiumException;
-import org.grimmory.pdfium4j.internal.*;
+import org.grimmory.pdfium4j.internal.AnnotBindings;
+import org.grimmory.pdfium4j.internal.BitmapBindings;
+import org.grimmory.pdfium4j.internal.DocBindings;
+import org.grimmory.pdfium4j.internal.EditBindings;
+import org.grimmory.pdfium4j.internal.NativeLoader;
+import org.grimmory.pdfium4j.internal.TextBindings;
+import org.grimmory.pdfium4j.internal.ViewBindings;
 
 /**
  * Global initialization and configuration for the PDFium native library.
@@ -60,8 +67,7 @@ public final class PdfiumLibrary {
     }
   }
 
-  private static final java.util.concurrent.atomic.AtomicInteger openDocumentCount =
-      new java.util.concurrent.atomic.AtomicInteger(0);
+  private static final AtomicInteger openDocumentCount = new AtomicInteger(0);
 
   static void incrementDocumentCount() {
     synchronized (LOCK) {
@@ -78,11 +84,18 @@ public final class PdfiumLibrary {
     }
   }
 
+    /** Ensures the library is initialized. Internal use only. */
+  static void ensureInitialized() {
+    if (!initialized) {
+      initialize();
+    }
+  }
+
   /**
-   * Shuts down the PDFium library and releases all global native resources. Subsequent operations
-   * will fail until re-initialized.
+   * Shuts down the PDFium library and releases global resources.
    *
-   * @throws IllegalStateException if there are still open documents
+   * @throws IllegalStateException if documents are still open
+   * @throws PdfiumException if shutdown fails
    */
   public static void shutdown() {
     synchronized (LOCK) {
@@ -102,15 +115,28 @@ public final class PdfiumLibrary {
     }
   }
 
-  /** Ensures the library is initialized. Internal use only. */
-  static void ensureInitialized() {
-    if (!initialized) {
-      initialize();
-    }
-  }
-
-  /** Whether the library is currently initialized. */
+  /**
+   * Returns whether the PDFium library is currently initialized.
+   *
+   * @return {@code true} if initialized, {@code false} otherwise
+   */
   public static boolean isInitialized() {
     return initialized;
+  }
+
+  private static final boolean LOG_SWALLOWED = false;
+
+  private static final class SwallowLoggerHolder {
+    private static final System.Logger LOGGER = System.getLogger(PdfiumLibrary.class.getName());
+  }
+
+  /**
+   * Central point for swallowed exceptions.
+   *
+   * @param t the exception to ignore
+   */
+  public static void ignore(Throwable t) {
+    if (!LOG_SWALLOWED) return;
+    SwallowLoggerHolder.LOGGER.log(System.Logger.Level.DEBUG, "Swallowed exception", t);
   }
 }

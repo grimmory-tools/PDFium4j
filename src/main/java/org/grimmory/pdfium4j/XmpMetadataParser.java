@@ -5,12 +5,28 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.io.ByteArrayInputStream;
 import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import javax.xml.XMLConstants;
+import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
-import org.grimmory.pdfium4j.model.XmpMetadata;
+import javax.xml.parsers.ParserConfigurationException;
 import org.grimmory.pdfium4j.model.XmpMetadata.QualifiedIdentifier;
-import org.w3c.dom.*;
+import org.grimmory.pdfium4j.model.XmpMetadata;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NamedNodeMap;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
+import org.xml.sax.EntityResolver;
 import org.xml.sax.InputSource;
+import org.xml.sax.SAXException;
 
 /**
  * Parses XMP metadata XML into structured {@link XmpMetadata}. Handles Dublin Core, PDF/A, and
@@ -41,6 +57,29 @@ public final class XmpMetadataParser {
           "adobe:ns:meta/" // x:xmpmeta wrapper
           );
 
+  private static final DocumentBuilderFactory DB_FACTORY;
+
+  static {
+    DB_FACTORY = DocumentBuilderFactory.newInstance();
+    DB_FACTORY.setNamespaceAware(true);
+    try {
+      DB_FACTORY.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+      DB_FACTORY.setFeature("http://xml.org/sax/features/external-general-entities", false);
+      DB_FACTORY.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+      DB_FACTORY.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
+      DB_FACTORY.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
+    } catch (ParserConfigurationException e) {
+      throw new RuntimeException("Failed to configure secure XML parser", e);
+    }
+  }
+
+  private static final EntityResolver REJECTING_RESOLVER =
+      (publicId, systemId) -> {
+        throw new SAXException("External entities are not allowed");
+      };
+
+  private XmpMetadataParser() {}
+
   /**
    * Parse XMP metadata from raw XML bytes.
    *
@@ -56,14 +95,9 @@ public final class XmpMetadataParser {
     }
     // Let the XML parser detect encoding from byte stream (BOM / XML declaration)
     try {
-      DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-      factory.setNamespaceAware(true);
-      factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-      factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
-      factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
-
-      Document doc =
-          factory.newDocumentBuilder().parse(new InputSource(new ByteArrayInputStream(xmpBytes)));
+      DocumentBuilder builder = DB_FACTORY.newDocumentBuilder();
+      builder.setEntityResolver(REJECTING_RESOLVER);
+      Document doc = builder.parse(new InputSource(new ByteArrayInputStream(xmpBytes)));
       return extractFromDocument(doc);
     } catch (Exception _) {
       // Corrupt producers may embed null bytes, stray BOMs, or garbage before the declaration
@@ -89,14 +123,9 @@ public final class XmpMetadataParser {
     String xml = sanitizeXmpString(xmpXml);
 
     try {
-      DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-      factory.setNamespaceAware(true);
-      // Secure parsing: disable external entities (XXE protection)
-      factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-      factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
-      factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
-
-      Document doc = factory.newDocumentBuilder().parse(new InputSource(new StringReader(xml)));
+      DocumentBuilder builder = DB_FACTORY.newDocumentBuilder();
+      builder.setEntityResolver(REJECTING_RESOLVER);
+      Document doc = builder.parse(new InputSource(new StringReader(xml)));
 
       return extractFromDocument(doc);
     } catch (Exception e) {
@@ -160,16 +189,18 @@ public final class XmpMetadataParser {
     Map<String, String> calibreFields = extractCalibreFields(doc);
 
     // Custom fields from all non-standard namespaces
-    Map<String, String> simpleFields = new LinkedHashMap<>();
-    Map<String, List<String>> listFields = new LinkedHashMap<>();
+    Map<String, String> simpleFields = LinkedHashMap.newLinkedHashMap(16);
+    Map<String, List<String>> listFields = LinkedHashMap.newLinkedHashMap(16);
 
     NodeList descNodes = doc.getElementsByTagNameNS(NS_RDF, "Description");
-    for (int i = 0; i < descNodes.getLength(); i++) {
+    int descLen = descNodes.getLength();
+    for (int i = 0; i < descLen; i++) {
       Element desc = (Element) descNodes.item(i);
 
       // Check attributes on Description elements
       NamedNodeMap attrs = desc.getAttributes();
-      for (int j = 0; j < attrs.getLength(); j++) {
+      int attrsLen = attrs.getLength();
+      for (int j = 0; j < attrsLen; j++) {
         Node attr = attrs.item(j);
         String ns = attr.getNamespaceURI();
         if (ns != null && !CORE_NAMESPACES.contains(ns)) {
@@ -184,7 +215,8 @@ public final class XmpMetadataParser {
 
       // Check child elements
       NodeList children = desc.getChildNodes();
-      for (int j = 0; j < children.getLength(); j++) {
+      int childrenLen = children.getLength();
+      for (int j = 0; j < childrenLen; j++) {
         Node child = children.item(j);
         if (child.getNodeType() != Node.ELEMENT_NODE) continue;
         String ns = child.getNamespaceURI();
@@ -237,7 +269,8 @@ public final class XmpMetadataParser {
    */
   private static Optional<String> getFirstDcText(Document doc, String localName) {
     NodeList nodes = doc.getElementsByTagNameNS(NS_DC, localName);
-    if (nodes.getLength() == 0) return Optional.empty();
+    int len = nodes.getLength();
+    if (len == 0) return Optional.empty();
 
     Element elem = (Element) nodes.item(0);
     String text = getTextFromRdfContainer(elem);
@@ -253,10 +286,11 @@ public final class XmpMetadataParser {
   /** Get all values from a Dublin Core element (handles RDF Bag/Seq). */
   private static List<String> getDcList(Document doc, String localName) {
     NodeList nodes = doc.getElementsByTagNameNS(NS_DC, localName);
-    if (nodes.getLength() == 0) return List.of();
+    int len = nodes.getLength();
+    if (len == 0) return Collections.emptyList();
 
-    List<String> values = new ArrayList<>();
-    for (int i = 0; i < nodes.getLength(); i++) {
+    List<String> values = new ArrayList<>(len);
+    for (int i = 0; i < len; i++) {
       Element elem = (Element) nodes.item(i);
       List<String> rdfValues = getListFromRdfContainer(elem);
       if (!rdfValues.isEmpty()) {
@@ -275,10 +309,11 @@ public final class XmpMetadataParser {
   @CheckForNull
   private static String getTextFromRdfContainer(Element parent) {
     NodeList lis = parent.getElementsByTagNameNS(NS_RDF, "li");
-    if (lis.getLength() == 0) {
+    int len = lis.getLength();
+    if (len == 0) {
       return null;
     }
-    for (int i = 0; i < lis.getLength(); i++) {
+    for (int i = 0; i < len; i++) {
       Element li = (Element) lis.item(i);
       String lang = li.getAttributeNS("http://www.w3.org/XML/1998/namespace", "lang");
       if ("x-default".equals(lang)) {
@@ -290,9 +325,11 @@ public final class XmpMetadataParser {
 
   /** Extract all list values from RDF Bag/Seq container. */
   private static List<String> getListFromRdfContainer(Element parent) {
-    List<String> values = new ArrayList<>();
     NodeList lis = parent.getElementsByTagNameNS(NS_RDF, "li");
-    for (int i = 0; i < lis.getLength(); i++) {
+    int len = lis.getLength();
+    if (len == 0) return Collections.emptyList();
+    List<String> values = new ArrayList<>(len);
+    for (int i = 0; i < len; i++) {
       String text = lis.item(i).getTextContent();
       if (text != null && !text.isBlank()) {
         values.add(text.trim());
@@ -317,19 +354,22 @@ public final class XmpMetadataParser {
    * nested inside calibre:series.
    */
   private static Map<String, String> extractCalibreFields(Document doc) {
-    Map<String, String> fields = new LinkedHashMap<>();
+    Map<String, String> fields = LinkedHashMap.newLinkedHashMap(16);
     NodeList descNodes = doc.getElementsByTagNameNS(NS_RDF, "Description");
-    for (int i = 0; i < descNodes.getLength(); i++) {
+    int descLen = descNodes.getLength();
+    for (int i = 0; i < descLen; i++) {
       Element desc = (Element) descNodes.item(i);
       NamedNodeMap attrs = desc.getAttributes();
-      for (int j = 0; j < attrs.getLength(); j++) {
+      int attrsLen = attrs.getLength();
+      for (int j = 0; j < attrsLen; j++) {
         Node attr = attrs.item(j);
         if (NS_CALIBRE.equals(attr.getNamespaceURI())) {
           fields.put(attr.getLocalName(), attr.getNodeValue());
         }
       }
       NodeList children = desc.getChildNodes();
-      for (int j = 0; j < children.getLength(); j++) {
+      int childrenLen = children.getLength();
+      for (int j = 0; j < childrenLen; j++) {
         Node child = children.item(j);
         if (child.getNodeType() == Node.ELEMENT_NODE
             && NS_CALIBRE.equals(child.getNamespaceURI())) {
@@ -340,7 +380,8 @@ public final class XmpMetadataParser {
           } else {
             // Check for rdf:value first (structured value)
             NodeList rdfValues = childElem.getElementsByTagNameNS(NS_RDF, "value");
-            if (rdfValues.getLength() > 0) {
+            int rdfLen = rdfValues.getLength();
+            if (rdfLen > 0) {
               String text = rdfValues.item(0).getTextContent();
               if (text != null && !text.isBlank()) {
                 fields.put(child.getLocalName(), text.trim());
@@ -354,7 +395,8 @@ public final class XmpMetadataParser {
             }
             // Also extract calibreSI:series_index nested inside calibre:series
             NodeList siNodes = childElem.getElementsByTagNameNS(NS_CALIBRE_SI, "series_index");
-            if (siNodes.getLength() > 0) {
+            int siLen = siNodes.getLength();
+            if (siLen > 0) {
               String siText = siNodes.item(0).getTextContent();
               if (siText != null && !siText.isBlank()) {
                 fields.put("series_index", siText.trim());
@@ -369,19 +411,22 @@ public final class XmpMetadataParser {
 
   /** Extract qualified identifiers from xmp:Identifier. */
   private static List<QualifiedIdentifier> extractXmpIdentifiers(Document doc) {
-    List<QualifiedIdentifier> ids = new ArrayList<>();
+    List<QualifiedIdentifier> ids = new ArrayList<>(16);
     NodeList idNodes = doc.getElementsByTagNameNS(NS_XMP, "Identifier");
-    for (int i = 0; i < idNodes.getLength(); i++) {
+    int idLen = idNodes.getLength();
+    for (int i = 0; i < idLen; i++) {
       Element idElem = (Element) idNodes.item(i);
       NodeList lis = idElem.getElementsByTagNameNS(NS_RDF, "li");
-      for (int j = 0; j < lis.getLength(); j++) {
+      int lisLen = lis.getLength();
+      for (int j = 0; j < lisLen; j++) {
         Element li = (Element) lis.item(j);
 
         // Scheme is usually in xmpidq:Scheme attribute or nested element
         String scheme = li.getAttributeNS(NS_XMP_IDQ, "Scheme");
         if (scheme.isBlank()) {
           NodeList schemeNodes = li.getElementsByTagNameNS(NS_XMP_IDQ, "Scheme");
-          if (schemeNodes.getLength() > 0) {
+          int schemeLen = schemeNodes.getLength();
+          if (schemeLen > 0) {
             scheme = schemeNodes.item(0).getTextContent();
           }
         }
@@ -389,7 +434,8 @@ public final class XmpMetadataParser {
         // Value is in nested rdf:value element
         String value = "";
         NodeList valueNodes = li.getElementsByTagNameNS(NS_RDF, "value");
-        if (valueNodes.getLength() > 0) {
+        int valueLen = valueNodes.getLength();
+        if (valueLen > 0) {
           value = valueNodes.item(0).getTextContent();
         }
 
@@ -404,7 +450,8 @@ public final class XmpMetadataParser {
   @CheckForNull
   private static String getElementText(Document doc, String namespaceURI, String localName) {
     NodeList nodes = doc.getElementsByTagNameNS(namespaceURI, localName);
-    if (nodes.getLength() > 0) {
+    int len = nodes.getLength();
+    if (len > 0) {
       return nodes.item(0).getTextContent();
     }
     return null;
@@ -414,7 +461,8 @@ public final class XmpMetadataParser {
   private static String getDirectTextContent(Element element) {
     StringBuilder sb = new StringBuilder(element.getTextContent().length());
     NodeList children = element.getChildNodes();
-    for (int i = 0; i < children.getLength(); i++) {
+    int len = children.getLength();
+    for (int i = 0; i < len; i++) {
       Node child = children.item(i);
       if (child.getNodeType() == Node.TEXT_NODE) {
         sb.append(child.getNodeValue());

@@ -4,11 +4,8 @@ package org.grimmory.pdfium4j.model;
 public record PageSize(float width, float height) {
 
   public static final PageSize A4 = new PageSize(595, 842);
-  public static final PageSize A3 = new PageSize(842, 1190);
-  public static final PageSize LETTER = new PageSize(612, 792);
-  public static final PageSize LEGAL = new PageSize(612, 1008);
 
-  /** Width in pixels at the given DPI. Clamped to avoid overflow. */
+    /** Width in pixels at the given DPI. Clamped to avoid overflow. */
   public int widthPixels(int dpi) {
     return safePixels(width, dpi);
   }
