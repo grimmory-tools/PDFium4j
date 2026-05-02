@@ -6,7 +6,6 @@ import static java.lang.foreign.ValueLayout.JAVA_INT;
 import static java.lang.foreign.ValueLayout.JAVA_LONG;
 
 import edu.umd.cs.findbugs.annotations.CheckForNull;
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -291,9 +290,6 @@ final class PdfSaver {
     update.writeTo(params.out());
   }
 
-  @SuppressFBWarnings(
-      value = "VA_FORMAT_STRING_USES_NEWLINE",
-      justification = "PDF xref entries must be exactly 20 bytes; %n is platform-dependent")
   private static void writeXrefTable(OutputStream update, Map<Integer, Long> objOffsets)
       throws IOException {
     update.write(XREF_HEADER);
@@ -638,7 +634,7 @@ final class PdfSaver {
         byte[] numBytes = pdf.asSlice(numStart, numEnd - numStart + 1).toArray(JAVA_BYTE);
         int num = Integer.parseInt(new String(numBytes, StandardCharsets.ISO_8859_1));
         if (num > max) max = num;
-      } catch (Exception _) {
+      } catch (Exception ignored) {
         // ignore malformed
       }
     }

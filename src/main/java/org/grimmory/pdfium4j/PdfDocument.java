@@ -101,7 +101,7 @@ public final class PdfDocument implements AutoCloseable {
   private volatile boolean structurallyModified = false;
 
   /** Cached page count; -1 means not yet fetched or invalidated. */
-  private int cachedPageCount = -1;
+  private volatile int cachedPageCount = -1;
 
   /** Lazy-parsed fallback Info dict key→value map (populated at most once per document). */
   private Map<String, String> cachedFallbackMeta;
@@ -717,10 +717,10 @@ public final class PdfDocument implements AutoCloseable {
       PdfiumLibrary.ignore(e);
     }
     // Fallback path: memoize so repeated calls never re-map the file.
-    if (cachedFallbackXmp != null) return cachedFallbackXmp;
+    if (cachedFallbackXmp != null) return cachedFallbackXmp.clone();
     byte[] result = computeFallbackXmp();
     cachedFallbackXmp = result;
-    return result;
+    return result == null ? null : result.clone();
   }
 
   private byte[] computeFallbackXmp() {
