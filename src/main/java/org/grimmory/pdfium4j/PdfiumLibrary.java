@@ -80,6 +80,10 @@ public final class PdfiumLibrary {
 
   static void decrementDocumentCount() {
     synchronized (LOCK) {
+      int open = openDocumentCount.get();
+      if (open <= 0) {
+        throw new IllegalStateException("openDocumentCount underflow");
+      }
       openDocumentCount.decrementAndGet();
     }
   }

@@ -122,13 +122,12 @@ final class PdfSaver {
   private static void writeSource(SaveParams params, MemorySegment baseSegment, OutputStream out)
       throws IOException {
     WritableByteChannel target = Channels.newChannel(out);
-    if (!params.structurallyModified() && params.sourcePath() != null) {
+    if (!params.structurallyModified() && params.originalSource() instanceof FileChannel fc) {
+      transferAll(fc, target);
+    } else if (!params.structurallyModified() && params.sourcePath() != null) {
       try (FileChannel fc = FileChannel.open(params.sourcePath(), StandardOpenOption.READ)) {
         transferAll(fc, target);
       }
-    } else if (!params.structurallyModified()
-        && params.originalSource() instanceof FileChannel fc) {
-      transferAll(fc, target);
     } else {
       writeSegment(baseSegment, out);
     }

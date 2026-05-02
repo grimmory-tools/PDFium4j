@@ -33,6 +33,14 @@ public final class DocBindings {
     // Metadata is often provided by FPDF_GetMetaText, but XMP is optional as we have a byte-level
     // fallback
     Objects.requireNonNull(FPDF_GetMetaText, "FPDF_GetMetaText");
+    Objects.requireNonNull(FPDFBookmark_GetFirstChild, "FPDFBookmark_GetFirstChild");
+    Objects.requireNonNull(FPDFBookmark_GetNextSibling, "FPDFBookmark_GetNextSibling");
+    Objects.requireNonNull(FPDFBookmark_GetTitle, "FPDFBookmark_GetTitle");
+    Objects.requireNonNull(FPDFBookmark_GetDest, "FPDFBookmark_GetDest");
+    Objects.requireNonNull(FPDFBookmark_GetAction, "FPDFBookmark_GetAction");
+    Objects.requireNonNull(FPDFAction_GetType, "FPDFAction_GetType");
+    Objects.requireNonNull(FPDFAction_GetDest, "FPDFAction_GetDest");
+    Objects.requireNonNull(FPDFDest_GetDestPageIndex, "FPDFDest_GetDestPageIndex");
   }
 
   public static final MethodHandle FPDF_GetMetaText =

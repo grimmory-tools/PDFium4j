@@ -120,7 +120,11 @@ public final class PdfDateUtils {
   public static String format(OffsetDateTime dateTime) {
     StringBuilder sb = new StringBuilder(24);
     sb.append("D:");
-    appendPadded(sb, dateTime.getYear(), 4);
+    int year = dateTime.getYear();
+    if (year < 0 || year > 9999) {
+      throw new IllegalArgumentException("PDF dates only support 4-digit years");
+    }
+    appendPadded(sb, year, 4);
     appendPadded(sb, dateTime.getMonthValue(), 2);
     appendPadded(sb, dateTime.getDayOfMonth(), 2);
     appendPadded(sb, dateTime.getHour(), 2);

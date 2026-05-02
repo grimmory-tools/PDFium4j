@@ -35,6 +35,11 @@ public final class AnnotBindings {
   public static void checkRequired() {
     // Annotation support is technically optional but core to grimmory
     Objects.requireNonNull(FPDFPage_GetAnnotCount, "FPDFPage_GetAnnotCount");
+    Objects.requireNonNull(FPDFPage_GetAnnot, "FPDFPage_GetAnnot");
+    Objects.requireNonNull(FPDFPage_CloseAnnot, "FPDFPage_CloseAnnot");
+    Objects.requireNonNull(FPDFAnnot_GetSubtype, "FPDFAnnot_GetSubtype");
+    Objects.requireNonNull(FPDFAnnot_GetStringValue, "FPDFAnnot_GetStringValue");
+    Objects.requireNonNull(FPDFAnnot_GetRect, "FPDFAnnot_GetRect");
   }
 
   /** FS_RECTF struct layout: left, bottom, right, top (all floats). */

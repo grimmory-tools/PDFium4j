@@ -864,6 +864,7 @@ public final class PdfDocument implements AutoCloseable {
   public void save(Path path) {
     if (path.equals(sourcePath)) {
       Path temp = null;
+      boolean detachedSource = false;
       try {
         temp = Files.createTempFile("pdfium4j-save-", ".pdf");
         try (OutputStream out = Files.newOutputStream(temp)) {
@@ -874,6 +875,7 @@ public final class PdfDocument implements AutoCloseable {
           docSourceChannel = null;
           CHANNELS.remove(channelId);
           state.updateSourceChannel(null);
+          detachedSource = true;
         }
         Files.move(temp, path, StandardCopyOption.REPLACE_EXISTING);
         temp = null; // Prevent deletion in finally if move succeeded
@@ -881,8 +883,18 @@ public final class PdfDocument implements AutoCloseable {
           docSourceChannel = Files.newByteChannel(path, StandardOpenOption.READ);
           CHANNELS.put(channelId, docSourceChannel);
           state.updateSourceChannel(docSourceChannel);
+          detachedSource = false;
         }
       } catch (IOException e) {
+        if (detachedSource && channelId > 0 && docSourceChannel == null) {
+          try {
+            docSourceChannel = Files.newByteChannel(path, StandardOpenOption.READ);
+            CHANNELS.put(channelId, docSourceChannel);
+            state.updateSourceChannel(docSourceChannel);
+          } catch (IOException restoreEx) {
+            PdfiumLibrary.ignore(restoreEx);
+          }
+        }
         throw new PdfiumException("Failed to save to source path: " + path, e);
       } finally {
         if (temp != null) {

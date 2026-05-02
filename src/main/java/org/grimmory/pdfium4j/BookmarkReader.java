@@ -16,13 +16,11 @@ final class BookmarkReader {
   private BookmarkReader() {}
 
   static List<Bookmark> readBookmarks(MemorySegment docHandle) {
-    try (Arena arena = Arena.ofConfined()) {
-      return collectBookmarkChildren(arena, docHandle, MemorySegment.NULL, 0);
-    }
+    return collectBookmarkChildren(docHandle, MemorySegment.NULL, 0);
   }
 
   private static List<Bookmark> collectBookmarkChildren(
-      Arena arena, MemorySegment docHandle, MemorySegment parent, int depth) {
+      MemorySegment docHandle, MemorySegment parent, int depth) {
     if (depth > MAX_BOOKMARK_DEPTH) return List.of();
 
     List<Bookmark> result = new ArrayList<>(16);
@@ -34,7 +32,7 @@ final class BookmarkReader {
     }
 
     while (!FfmHelper.isNull(child)) {
-      result.add(toBookmark(arena, docHandle, child, depth));
+      result.add(toBookmark(docHandle, child, depth));
       try {
         child =
             (MemorySegment) DocBindings.FPDFBookmark_GetNextSibling.invokeExact(docHandle, child);
@@ -45,26 +43,27 @@ final class BookmarkReader {
     return List.copyOf(result);
   }
 
-  private static Bookmark toBookmark(
-      Arena arena, MemorySegment docHandle, MemorySegment bm, int depth) {
-    String title = getBookmarkTitle(arena, bm);
+  private static Bookmark toBookmark(MemorySegment docHandle, MemorySegment bm, int depth) {
+    String title = getBookmarkTitle(bm);
     int pageIndex = resolveBookmarkPage(docHandle, bm);
-    List<Bookmark> children = collectBookmarkChildren(arena, docHandle, bm, depth + 1);
+    List<Bookmark> children = collectBookmarkChildren(docHandle, bm, depth + 1);
     return new Bookmark(title, pageIndex, children);
   }
 
-  private static String getBookmarkTitle(Arena arena, MemorySegment bm) {
+  private static String getBookmarkTitle(MemorySegment bm) {
     try {
       long needed =
           (long) DocBindings.FPDFBookmark_GetTitle.invokeExact(bm, MemorySegment.NULL, 0L);
       if (needed <= 2) return "";
 
-      MemorySegment buf = arena.allocate(needed);
-      long copied = (long) DocBindings.FPDFBookmark_GetTitle.invokeExact(bm, buf, needed);
-      if (copied <= 2) {
-        return "";
+      try (Arena arena = Arena.ofConfined()) {
+        MemorySegment buf = arena.allocate(needed);
+        long copied = (long) DocBindings.FPDFBookmark_GetTitle.invokeExact(bm, buf, needed);
+        if (copied <= 2) {
+          return "";
+        }
+        return FfmHelper.fromWideString(buf, needed);
       }
-      return FfmHelper.fromWideString(buf, needed);
     } catch (Throwable e) {
       PdfiumLibrary.ignore(e);
       return "";
