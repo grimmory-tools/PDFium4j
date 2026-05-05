@@ -53,11 +53,17 @@ public final class ScratchBuffer {
 
   /** Returns a probe buffer for two-phase UTF-8 key APIs. */
   public static MemorySegment utf8ProbeBuffer(String key) {
-    long keyBytes = FfmHelper.utf8ByteLengthWithNull(key);
-    // Clamp to MAX_SIZE to avoid overflow and respect safety limits.
-    // We add a smaller probe (1KB) to minimize over-allocation.
-    long total = Math.min(keyBytes + 1024, MAX_SIZE);
-    return get(total);
+    return get(probeSize(FfmHelper.utf8ByteLengthWithNull(key)));
+  }
+
+  static long probeSize(long keyBytes) {
+    if (keyBytes < 0) {
+      throw new IllegalArgumentException("Invalid UTF-8 probe size: " + keyBytes);
+    }
+    if (keyBytes >= MAX_SIZE - 1024) {
+      return MAX_SIZE;
+    }
+    return keyBytes + 1024;
   }
 
   /**
@@ -83,6 +89,10 @@ public final class ScratchBuffer {
 
   /** Wrap existing key and value segments into the reusable thread-local slot holder. */
   public static KeyValueSlots keyAndWideValue(MemorySegment keySeg, MemorySegment valueSeg) {
+    if (USE_COUNT.get()[0] <= 0) {
+      throw new IllegalStateException(
+          "ScratchBuffer.keyAndWideValue() called without active acquire()");
+    }
     State s = getOrCreateState();
     s.keyValueSlots.keySeg = keySeg;
     s.keyValueSlots.valueSeg = valueSeg;
@@ -180,6 +190,7 @@ public final class ScratchBuffer {
     private Arena loopArena;
     private MemorySegment segment;
     private MemorySegment steadySegment;
+    private MemorySegment largestSegment;
     private MemorySegment loopScratch;
     private char[] charArray;
     private byte[] byteArray;
@@ -195,6 +206,7 @@ public final class ScratchBuffer {
       this.arenas.add(this.arena);
       this.segment = arena.allocate(INITIAL_SIZE, 8);
       this.steadySegment = segment;
+      this.largestSegment = segment;
       this.loopArena = Arena.ofConfined();
       this.arenas.add(this.loopArena);
       this.loopScratch = loopArena.allocate(64, 8);
@@ -240,6 +252,10 @@ public final class ScratchBuffer {
       }
 
       if (segment.byteSize() < minBytes) {
+        if (largestSegment != null && largestSegment.byteSize() >= minBytes) {
+          segment = largestSegment;
+          return segment;
+        }
         if (minBytes > 1024 * 1024) {
           // Large scratch allocations are rare and might indicate a logic error or
           // extremely large metadata.
@@ -258,6 +274,8 @@ public final class ScratchBuffer {
       this.segment = arena.allocate(size, 8);
       if (size <= STEADY_STATE_SIZE) {
         this.steadySegment = this.segment;
+      } else {
+        this.largestSegment = this.segment;
       }
     }
 
@@ -270,6 +288,7 @@ public final class ScratchBuffer {
         }
       }
       arenas.clear();
+      largestSegment = null;
       keyValueSlots.keySeg = null;
       keyValueSlots.valueSeg = null;
     }

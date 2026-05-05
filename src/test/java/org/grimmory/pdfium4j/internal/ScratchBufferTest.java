@@ -2,6 +2,7 @@ package org.grimmory.pdfium4j.internal;
 
 import static java.lang.foreign.ValueLayout.JAVA_BYTE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -58,10 +59,31 @@ class ScratchBufferTest {
 
   @Test
   void utf8ProbeBufferClampsToMax() {
-    // MAX_SIZE is 128MB. keyBytes + 1024.
-    // If keyBytes is huge, it should clamp.
-    MemorySegment probe = ScratchBuffer.utf8ProbeBuffer("a".repeat(1024 * 1024 * 128 + 100));
-    assertTrue(probe.byteSize() <= 1024L * 1024L * 128L);
+    long maxSize = 1024L * 1024L * 128L;
+    assertEquals(maxSize, ScratchBuffer.probeSize(maxSize));
+    assertEquals(maxSize, ScratchBuffer.probeSize(Long.MAX_VALUE));
+  }
+
+  @Test
+  void oscillatingRequestsReuseLargestSegment() {
+    MemorySegment large = ScratchBuffer.get(10L * 1024L * 1024L);
+
+    ScratchBuffer.get(8);
+    MemorySegment medium = ScratchBuffer.get(5L * 1024L * 1024L);
+
+    assertSame(large, medium);
+  }
+
+  @Test
+  void keyAndWideValueRequiresAcquire() {
+    ScratchBuffer.release();
+    try {
+      MemorySegment key = MemorySegment.ofArray(new byte[8]);
+      MemorySegment value = MemorySegment.ofArray(new byte[8]);
+      assertThrows(IllegalStateException.class, () -> ScratchBuffer.keyAndWideValue(key, value));
+    } finally {
+      ScratchBuffer.acquire();
+    }
   }
 
   @Test
