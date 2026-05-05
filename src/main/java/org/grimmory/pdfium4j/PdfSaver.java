@@ -633,8 +633,8 @@ final class PdfSaver {
         byte[] numBytes = pdf.asSlice(numStart, numEnd - numStart + 1).toArray(JAVA_BYTE);
         int num = Integer.parseInt(new String(numBytes, StandardCharsets.ISO_8859_1));
         if (num > max) max = num;
-      } catch (Exception _) {
-        // ignore malformed
+      } catch (Exception KEE_) {
+        // ignored
       }
     }
     return max;

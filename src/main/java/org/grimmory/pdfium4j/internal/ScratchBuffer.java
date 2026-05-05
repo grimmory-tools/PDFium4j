@@ -332,7 +332,7 @@ public final class ScratchBuffer {
         try {
           a.close();
         } catch (Exception _) {
-          // ignored - best effort cleanup
+          // ignored
         }
       }
       arenas.clear();
