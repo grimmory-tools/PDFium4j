@@ -604,6 +604,7 @@ final class PdfSaver {
     return null;
   }
 
+  @SuppressWarnings("PMD.EmptyCatchBlock")
   private static int findMaxObjectNumber(MemorySegment pdf) {
     // Scan for " obj" and walk back through "genNum objNum" to extract the object number.
     // Handles any generation number, not just 0.
@@ -633,8 +634,8 @@ final class PdfSaver {
         byte[] numBytes = pdf.asSlice(numStart, numEnd - numStart + 1).toArray(JAVA_BYTE);
         int num = Integer.parseInt(new String(numBytes, StandardCharsets.ISO_8859_1));
         if (num > max) max = num;
-      } catch (Exception ignored) {
-        // ignore malformed
+      } catch (Exception _) {
+        // ignored
       }
     }
     return max;
