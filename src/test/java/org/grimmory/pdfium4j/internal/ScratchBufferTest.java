@@ -34,13 +34,13 @@ class ScratchBufferTest {
     MemorySegment scratch = MemorySegment.ofArray(new byte[32]);
     MemorySegment expectedKey = FfmHelper.writeUtf8String(scratch, key);
 
-    assertEquals(expectedKey.byteSize(), pair.keySeg.byteSize());
-    assertEquals(valueBytes, pair.valueSeg.byteSize());
+    assertEquals(expectedKey.byteSize(), pair.keySeg().byteSize());
+    assertEquals(valueBytes, pair.valueSeg().byteSize());
 
-    long keyTerminatorOffset = pair.keySeg.byteSize() - 1;
-    assertEquals(0, pair.keySeg.get(JAVA_BYTE, keyTerminatorOffset));
-    pair.valueSeg.set(JAVA_BYTE, 0, (byte) 0x7F);
-    assertEquals(0, pair.keySeg.get(JAVA_BYTE, keyTerminatorOffset));
+    long keyTerminatorOffset = pair.keySeg().byteSize() - 1;
+    assertEquals(0, pair.keySeg().get(JAVA_BYTE, keyTerminatorOffset));
+    pair.valueSeg().set(JAVA_BYTE, 0, (byte) 0x7F);
+    assertEquals(0, pair.keySeg().get(JAVA_BYTE, keyTerminatorOffset));
   }
 
   @Test
@@ -108,7 +108,8 @@ class ScratchBufferTest {
                 address1.set(s.address());
                 ready.countDown();
                 go.await();
-              } catch (InterruptedException ignored) {
+              } catch (InterruptedException _) {
+                Thread.currentThread().interrupt();
               } finally {
                 ScratchBuffer.release();
               }
@@ -122,7 +123,8 @@ class ScratchBufferTest {
                 address2.set(s.address());
                 ready.countDown();
                 go.await();
-              } catch (InterruptedException ignored) {
+              } catch (InterruptedException _) {
+                Thread.currentThread().interrupt();
               } finally {
                 ScratchBuffer.release();
               }

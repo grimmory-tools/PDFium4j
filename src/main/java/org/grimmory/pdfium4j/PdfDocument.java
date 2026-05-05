@@ -514,10 +514,10 @@ public final class PdfDocument implements AutoCloseable {
       long copied =
           (long)
               DocBindings.FPDF_GetMetaText.invokeExact(
-                  handle, keyAndValue.keySeg, keyAndValue.valueSeg, needed);
-      long byteLen = FfmHelper.normalizeWideByteLength(keyAndValue.valueSeg, copied, needed);
+                  handle, keyAndValue.keySeg(), keyAndValue.valueSeg(), needed);
+      long byteLen = FfmHelper.normalizeWideByteLength(keyAndValue.valueSeg(), copied, needed);
       if (byteLen == 0) return metadataFallback(tag);
-      String val = FfmHelper.fromWideString(keyAndValue.valueSeg, byteLen);
+      String val = FfmHelper.fromWideString(keyAndValue.valueSeg(), byteLen);
       return (val == null || val.isEmpty()) ? Optional.empty() : Optional.of(val);
     } catch (Throwable t) {
       return metadataFallback(tag);
@@ -713,12 +713,12 @@ public final class PdfDocument implements AutoCloseable {
       long copied =
           (long)
               DocBindings.FPDF_GetMetaText.invokeExact(
-                  handle, keyAndValue.keySeg, keyAndValue.valueSeg, needed);
-      long byteLen = FfmHelper.normalizeWideByteLength(keyAndValue.valueSeg, copied, needed);
+                  handle, keyAndValue.keySeg(), keyAndValue.valueSeg(), needed);
+      long byteLen = FfmHelper.normalizeWideByteLength(keyAndValue.valueSeg(), copied, needed);
       if (byteLen == 0) {
         return Optional.empty();
       }
-      String val = FfmHelper.fromWideString(keyAndValue.valueSeg, byteLen);
+      String val = FfmHelper.fromWideString(keyAndValue.valueSeg(), byteLen);
       return (val == null || val.isEmpty()) ? Optional.empty() : Optional.of(val);
     } catch (Throwable _) {
       return Optional.empty();

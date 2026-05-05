@@ -21,7 +21,7 @@ public final class ScratchBuffer {
 
   private static final long INITIAL_SIZE = 4096;
   private static final long STEADY_STATE_SIZE = 64L * 1024L;
-  private static final long MAX_SIZE = 1024 * 1024 * 128; // 128MB safety limit
+  private static final long MAX_SIZE = 1024L * 1024L * 128L; // 128MB safety limit
 
   private static final ThreadLocal<State> STATE = new ThreadLocal<>();
   private static final ThreadLocal<int[]> USE_COUNT = ThreadLocal.withInitial(() -> new int[] {0});
@@ -162,8 +162,16 @@ public final class ScratchBuffer {
   }
 
   public static final class KeyValueSlots {
-    public MemorySegment keySeg;
-    public MemorySegment valueSeg;
+    private MemorySegment keySeg;
+    private MemorySegment valueSeg;
+
+    public MemorySegment keySeg() {
+      return keySeg;
+    }
+
+    public MemorySegment valueSeg() {
+      return valueSeg;
+    }
   }
 
   private static final class State {
@@ -257,7 +265,7 @@ public final class ScratchBuffer {
       for (Arena a : arenas) {
         try {
           a.close();
-        } catch (Exception ignored) {
+        } catch (Exception _) {
           // Already closed or thread dead
         }
       }
