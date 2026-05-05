@@ -327,6 +327,7 @@ public final class ScratchBuffer {
       }
     }
 
+    @SuppressWarnings("PMD.EmptyCatchBlock")
     private void close() {
       for (Arena a : arenas) {
         try {
