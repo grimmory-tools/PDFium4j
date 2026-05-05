@@ -121,7 +121,7 @@ public final class ScratchBuffer {
    */
   public static Scope acquireScope() {
     acquire();
-    return new Scope();
+    return Scope.INSTANCE;
   }
 
   /**
@@ -129,6 +129,7 @@ public final class ScratchBuffer {
    * mechanism.
    */
   public static final class Scope implements AutoCloseable {
+    private static final Scope INSTANCE = new Scope();
 
     private Scope() {}
 
