@@ -88,6 +88,8 @@ public final class XmpMetadataWriter {
    * @return a complete XMP packet string
    */
   public String write(XmpMetadata metadata) {
+    Objects.requireNonNull(metadata, "metadata");
+    validate(metadata);
     StringWriter sw = new StringWriter();
     try {
       writeToWriter(metadata, sw);
@@ -103,12 +105,40 @@ public final class XmpMetadataWriter {
    *
    * @param metadata the metadata to serialize
    * @param out the caller-owned stream to write to (this method never closes it)
-   * @throws IOException if an I/O error occurs
+   * @throws PdfiumException if an I/O error occurs or metadata is invalid
    */
-  public void write(XmpMetadata metadata, OutputStream out) throws IOException {
-    Writer w = new OutputStreamWriter(out, StandardCharsets.UTF_8);
-    writeToWriter(metadata, w);
-    w.flush();
+  public void write(XmpMetadata metadata, OutputStream out) {
+    Objects.requireNonNull(metadata, "metadata");
+    Objects.requireNonNull(out, "out");
+    validate(metadata);
+    try {
+      Writer w = new OutputStreamWriter(out, StandardCharsets.UTF_8);
+      writeToWriter(metadata, w);
+      w.flush();
+    } catch (IOException e) {
+      throw new PdfiumException("I/O error writing XMP to stream", e);
+    }
+  }
+
+  private void validate(XmpMetadata metadata) {
+    metadata.calibreFields().keySet().forEach(XmpMetadataWriter::validateNcName);
+    metadata.customFields().keySet().forEach(this::validateCustomField);
+    metadata.customListFields().keySet().forEach(this::validateCustomField);
+  }
+
+  private void validateCustomField(String key) {
+    int colonIdx = key.indexOf(':');
+    if (colonIdx > 0) {
+      String prefix = key.substring(0, colonIdx);
+      String localName = key.substring(colonIdx + 1);
+      validateNcName(prefix);
+      validateNcName(localName);
+      if (!"xmp".equals(prefix) && !customNamespaces.containsKey(prefix)) {
+        throw new IllegalArgumentException("Namespace prefix '" + prefix + "' is not registered");
+      }
+    } else {
+      validateNcName(key);
+    }
   }
 
   /**
@@ -226,7 +256,6 @@ public final class XmpMetadataWriter {
 
     for (Map.Entry<String, String> entry : metadata.calibreFields().entrySet()) {
       String key = entry.getKey();
-      validateNcName(key);
       w.write("  <calibre:");
       w.write(key);
       w.write(">");
@@ -302,7 +331,7 @@ public final class XmpMetadataWriter {
     }
   }
 
-  private void writeUnprefixedCustomDescription(
+  private static void writeUnprefixedCustomDescription(
       Writer w, Map<String, String> simpleUnprefixed, Map<String, List<String>> listUnprefixed)
       throws IOException {
     if (simpleUnprefixed.isEmpty() && listUnprefixed.isEmpty()) return;
@@ -327,19 +356,15 @@ public final class XmpMetadataWriter {
     if (colonIdx > 0) {
       String prefix = key.substring(0, colonIdx);
       String localName = key.substring(colonIdx + 1);
-      validateNcName(prefix);
-      validateNcName(localName);
       if ("xmp".equals(prefix)) {
         unprefixed.put(key, value);
-      } else if (customNamespaces.containsKey(prefix)) {
+      } else {
+        // We know prefix is registered because of validate()
         grouped
             .computeIfAbsent(prefix, _ -> LinkedHashMap.newLinkedHashMap(8))
             .put(localName, value);
-      } else {
-        throw new IllegalArgumentException("Namespace prefix '" + prefix + "' is not registered");
       }
     } else {
-      validateNcName(key);
       unprefixed.put(key, value);
     }
   }
@@ -383,7 +408,7 @@ public final class XmpMetadataWriter {
     w.write(NS_XMP_IDQ);
     w.write("\">\n");
     w.write("  <xmp:Identifier>\n");
-    w.write("    <rdf:Bag>\n");
+    w.write(RDF_BAG_START);
     for (QualifiedIdentifier id : metadata.xmpIdentifiers()) {
       w.write("      <rdf:li rdf:parseType=\"Resource\">\n");
       w.write("        <xmpidq:Scheme>");
@@ -394,7 +419,7 @@ public final class XmpMetadataWriter {
       w.write("</rdf:value>\n");
       w.write("      </rdf:li>\n");
     }
-    w.write("    </rdf:Bag>\n");
+    w.write(RDF_BAG_END);
     w.write("  </xmp:Identifier>\n");
     w.write(RDF_DESCRIPTION_END);
   }
