@@ -169,15 +169,32 @@ public final class ScratchBuffer {
     return s;
   }
 
+  /**
+   * Transient holder backed by the current thread's scratch state.
+   *
+   * <p>Instances are reused. Callers must consume the returned segments immediately and must not
+   * retain this holder or its segments across subsequent {@link ScratchBuffer} calls or across
+   * {@link #release()}.
+   */
   public static final class KeyValueSlots {
     private MemorySegment keySeg;
     private MemorySegment valueSeg;
 
+    /**
+     * Returns the current key segment view.
+     *
+     * <p>The returned segment is transient scratch state and must not be retained.
+     */
     @SuppressFBWarnings("EI_EXPOSE_REP")
     public MemorySegment keySeg() {
       return keySeg;
     }
 
+    /**
+     * Returns the current value segment view.
+     *
+     * <p>The returned segment is transient scratch state and must not be retained.
+     */
     @SuppressFBWarnings("EI_EXPOSE_REP")
     public MemorySegment valueSeg() {
       return valueSeg;

@@ -322,6 +322,22 @@ class PdfDocumentTest {
 
   @Test
   @EnabledIf("pdfiumAvailable")
+  void openDocumentDoesNotPinScratchOnOwnerThread() throws IOException {
+    Path pdf = getTestPdf();
+    if (pdf == null) return;
+
+    try (PdfDocument doc = PdfDocument.open(pdf)) {
+      assertThrows(IllegalStateException.class, () -> ScratchBuffer.get(8));
+
+      PageSize size = doc.pageSize(0);
+      assertTrue(size.width() > 0);
+
+      assertThrows(IllegalStateException.class, () -> ScratchBuffer.get(8));
+    }
+  }
+
+  @Test
+  @EnabledIf("pdfiumAvailable")
   void extractText() throws IOException {
     Path testPdf = getTestPdfWithText();
     if (testPdf == null) return;
