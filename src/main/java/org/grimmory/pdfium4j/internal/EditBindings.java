@@ -52,7 +52,7 @@ public final class EditBindings {
     Objects.requireNonNull(FPDF_SaveAsCopy, "FPDF_SaveAsCopy");
   }
 
-  /** Get page rotation. Returns 0 (0°), 1 (90°), 2 (180°), or 3 (270°). */
+  /** Get page rotation. Returns 0 (0 deg), 1 (90 deg), 2 (180 deg), or 3 (270 deg). */
   public static final MethodHandle FPDFPage_GetRotation =
       downcallCritical("FPDFPage_GetRotation", FunctionDescriptor.of(JAVA_INT, ADDRESS));
 

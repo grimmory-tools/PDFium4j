@@ -16,8 +16,6 @@ import java.util.Optional;
  *
  * <p>Samples 1024-byte windows at offsets derived from LuaJIT bit shifts: 0, 1K, 4K, 16K, 64K,
  * 256K, 1M, 4M, 16M, 64M, 256M, 1G.
- *
- * <p>Uses Modern Java 25 MemorySegment for high-performance streaming access.
  */
 public final class KoReaderChecksum {
 
@@ -38,10 +36,8 @@ public final class KoReaderChecksum {
     try (FileChannel fc = FileChannel.open(path, StandardOpenOption.READ)) {
       long fileSize = fc.size();
       if (fileSize == 0) return Optional.empty();
-      // Use positional reads into a reusable 1 KB buffer; avoids mapping the entire file
-      // when only up to 11 × 1 KB sample windows are needed.
       return Optional.of(calculateFromChannel(fc, fileSize));
-    } catch (IOException _) {
+    } catch (IOException e) {
       return Optional.empty();
     }
   }
@@ -86,9 +82,6 @@ public final class KoReaderChecksum {
       if (position >= byteSize) break;
 
       long len = Math.min(SAMPLE_SIZE, byteSize - position);
-      if (len <= 0) break;
-
-      // Modern Java 25: Efficiently update MD5 from MemorySegment
       md5.update(segment.asSlice(position, len).asByteBuffer());
     }
 

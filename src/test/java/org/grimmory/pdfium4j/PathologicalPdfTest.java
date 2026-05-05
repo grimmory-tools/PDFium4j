@@ -76,7 +76,9 @@ public class PathologicalPdfTest {
 
   @Disabled("Requires encrypted PDF fixture")
   @Test
-  void testPasswordProtectedHandling() {}
+  void testPasswordProtectedHandling() {
+    fail("Requires encrypted PDF fixture to implement meaningful assertions");
+  }
 
   @Test
   void testImageOnlyDetectionEmpty() {
@@ -87,7 +89,9 @@ public class PathologicalPdfTest {
 
   @Disabled("Requires large-dimension PDF fixture")
   @Test
-  void testLargeDimensionHandling() {}
+  void testLargeDimensionHandling() {
+    fail("Requires large-dimension PDF fixture to implement meaningful assertions");
+  }
 
   @Test
   void testBitFlipFuzzing() {
