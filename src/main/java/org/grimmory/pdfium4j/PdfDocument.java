@@ -298,7 +298,7 @@ public final class PdfDocument implements AutoCloseable {
       MemorySegment doc =
           (MemorySegment) ViewBindings.FPDF_LoadCustomDocument.invokeExact(fileAccess, pwdSeg);
       if (FfmHelper.isNull(doc)) {
-        int err = (int) (long) ViewBindings.FPDF_GetLastError.invokeExact();
+        int err = (int) ViewBindings.FPDF_GetLastError.invokeExact();
         throw mapOpenError("Failed to open document: " + label, err);
       }
       return new PdfDocument(
@@ -372,7 +372,7 @@ public final class PdfDocument implements AutoCloseable {
         }
       }
       return 1;
-    } catch (IOException e) {
+    } catch (IOException _) {
       return 0;
     }
   }
@@ -510,7 +510,8 @@ public final class PdfDocument implements AutoCloseable {
           (long) DocBindings.FPDF_GetMetaText.invokeExact(handle, keySeg, MemorySegment.NULL, 0L);
       if (needed <= 2) return metadataFallback(tag);
 
-      ScratchBuffer.KeyValueSlots keyAndValue = resolveMetaBuffer(initialScratch, key, keySeg, needed);
+      ScratchBuffer.KeyValueSlots keyAndValue =
+          resolveMetaBuffer(initialScratch, key, keySeg, needed);
       long copied =
           (long)
               DocBindings.FPDF_GetMetaText.invokeExact(
@@ -518,8 +519,8 @@ public final class PdfDocument implements AutoCloseable {
       long byteLen = FfmHelper.normalizeWideByteLength(keyAndValue.valueSeg(), copied, needed);
       if (byteLen == 0) return metadataFallback(tag);
       String val = FfmHelper.fromWideString(keyAndValue.valueSeg(), byteLen);
-      return (val == null || val.isEmpty()) ? Optional.empty() : Optional.of(val);
-    } catch (Throwable t) {
+      return val.isEmpty() ? Optional.empty() : Optional.of(val);
+    } catch (Throwable _) {
       return metadataFallback(tag);
     }
   }
@@ -601,10 +602,7 @@ public final class PdfDocument implements AutoCloseable {
     }
     Matcher hexM = INFO_DICT_HEX_PATTERN.matcher(dict);
     while (hexM.find()) {
-      String key = hexM.group(1);
-      if (!result.containsKey(key)) {
-        result.put(key, decodeHexPdfString(hexM.group(2)));
-      }
+      result.computeIfAbsent(hexM.group(1), _ -> decodeHexPdfString(hexM.group(2)));
     }
     return Collections.unmodifiableMap(result);
   }
@@ -677,7 +675,7 @@ public final class PdfDocument implements AutoCloseable {
           bytes[i] = (byte) Integer.parseInt(hex.substring(4 + i * 2, 6 + i * 2), 16);
         }
         return new String(bytes, StandardCharsets.UTF_16BE);
-      } catch (Exception e) {
+      } catch (Exception _) {
         return hex;
       }
     }
@@ -719,7 +717,7 @@ public final class PdfDocument implements AutoCloseable {
         return Optional.empty();
       }
       String val = FfmHelper.fromWideString(keyAndValue.valueSeg(), byteLen);
-      return (val == null || val.isEmpty()) ? Optional.empty() : Optional.of(val);
+      return val.isEmpty() ? Optional.empty() : Optional.of(val);
     } catch (Throwable _) {
       return Optional.empty();
     }
@@ -1035,7 +1033,7 @@ public final class PdfDocument implements AutoCloseable {
   private static void throwLastError(String message) {
     int err;
     try {
-      err = (int) (long) ViewBindings.FPDF_GetLastError.invokeExact();
+      err = (int) ViewBindings.FPDF_GetLastError.invokeExact();
     } catch (Throwable t) {
       err = 0;
     }
@@ -1072,7 +1070,7 @@ public final class PdfDocument implements AutoCloseable {
       MemorySegment doc =
           (MemorySegment) ViewBindings.FPDF_LoadDocument.invokeExact(pathSeg, MemorySegment.NULL);
       if (FfmHelper.isNull(doc)) {
-        int err = (int) (long) ViewBindings.FPDF_GetLastError.invokeExact();
+        int err = (int) ViewBindings.FPDF_GetLastError.invokeExact();
         if (err == ViewBindings.FPDF_ERR_PASSWORD) return PdfProbeResult.ok(-1, true);
         return PdfProbeResult.error(
             PdfProbeResult.Status.CORRUPT, PdfErrorCode.fromCode(err), "Failed to probe document");
@@ -1101,7 +1099,7 @@ public final class PdfDocument implements AutoCloseable {
           (MemorySegment)
               ViewBindings.FPDF_LoadMemDocument.invokeExact(seg, data.length, MemorySegment.NULL);
       if (FfmHelper.isNull(doc)) {
-        int err = (int) (long) ViewBindings.FPDF_GetLastError.invokeExact();
+        int err = (int) ViewBindings.FPDF_GetLastError.invokeExact();
         if (err == ViewBindings.FPDF_ERR_PASSWORD) return PdfProbeResult.ok(-1, true);
         return PdfProbeResult.error(
             PdfProbeResult.Status.CORRUPT, PdfErrorCode.fromCode(err), "Failed to probe document");

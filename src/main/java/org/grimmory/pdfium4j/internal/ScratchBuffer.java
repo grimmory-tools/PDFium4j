@@ -1,5 +1,6 @@
 package org.grimmory.pdfium4j.internal;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.util.ArrayList;
@@ -77,10 +78,7 @@ public final class ScratchBuffer {
     MemorySegment scratch = get(total);
     MemorySegment keySeg = FfmHelper.writeUtf8String(scratch, key);
     MemorySegment valueSeg = scratch.asSlice(keySeg.byteSize(), valueBytes);
-    State s = getOrCreateState();
-    s.keyValueSlots.keySeg = keySeg;
-    s.keyValueSlots.valueSeg = valueSeg;
-    return s.keyValueSlots;
+    return keyAndWideValue(keySeg, valueSeg);
   }
 
   /** Wrap existing key and value segments into the reusable thread-local slot holder. */
@@ -165,10 +163,12 @@ public final class ScratchBuffer {
     private MemorySegment keySeg;
     private MemorySegment valueSeg;
 
+    @SuppressFBWarnings("EI_EXPOSE_REP")
     public MemorySegment keySeg() {
       return keySeg;
     }
 
+    @SuppressFBWarnings("EI_EXPOSE_REP")
     public MemorySegment valueSeg() {
       return valueSeg;
     }
@@ -266,7 +266,7 @@ public final class ScratchBuffer {
         try {
           a.close();
         } catch (Exception _) {
-          // Already closed or thread dead
+          continue;
         }
       }
       arenas.clear();
