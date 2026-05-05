@@ -331,7 +331,7 @@ public final class ScratchBuffer {
       for (Arena a : arenas) {
         try {
           a.close();
-        } catch (Exception ignored) {
+        } catch (Exception _) {
           // ignored - best effort cleanup
         }
       }
