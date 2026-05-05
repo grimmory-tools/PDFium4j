@@ -1,12 +1,12 @@
 package org.grimmory.pdfium4j;
 
-import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.util.ArrayList;
 import java.util.List;
 import org.grimmory.pdfium4j.exception.PdfiumException;
 import org.grimmory.pdfium4j.internal.DocBindings;
 import org.grimmory.pdfium4j.internal.FfmHelper;
+import org.grimmory.pdfium4j.internal.ScratchBuffer;
 import org.grimmory.pdfium4j.model.Bookmark;
 
 final class BookmarkReader {
@@ -56,14 +56,13 @@ final class BookmarkReader {
           (long) DocBindings.FPDFBookmark_GetTitle.invokeExact(bm, MemorySegment.NULL, 0L);
       if (needed <= 2) return "";
 
-      try (Arena arena = Arena.ofConfined()) {
-        MemorySegment buf = arena.allocate(needed);
-        long copied = (long) DocBindings.FPDFBookmark_GetTitle.invokeExact(bm, buf, needed);
-        if (copied <= 2) {
-          return "";
-        }
-        return FfmHelper.fromWideString(buf, needed);
+      MemorySegment buf = ScratchBuffer.get(needed);
+      long copied = (long) DocBindings.FPDFBookmark_GetTitle.invokeExact(bm, buf, needed);
+      long byteLen = FfmHelper.normalizeWideByteLength(buf, copied, needed);
+      if (byteLen == 0) {
+        return "";
       }
+      return FfmHelper.fromWideString(buf, byteLen);
     } catch (Throwable e) {
       PdfiumLibrary.ignore(e);
       return "";
