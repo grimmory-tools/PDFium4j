@@ -8,6 +8,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
@@ -24,6 +25,8 @@ public final class NativeLoader {
    * extraction and {@code System.loadLibrary("pdfium")} lookup.
    */
   public static final String PROP_LIBRARY_PATH = "pdfium4j.library.path";
+
+  public static final String PROP_LIBRARY_PATH_ALLOW_UNSAFE = "pdfium4j.library.path.allowUnsafe";
 
   private static volatile boolean loaded = false;
   private static volatile Throwable loadError = null;
@@ -54,40 +57,83 @@ public final class NativeLoader {
   }
 
   private static void performLoad() {
+    if (tryLoadOverride()) {
+      return;
+    }
     try {
-      String overridePath = System.getProperty(PROP_LIBRARY_PATH);
-      if (overridePath != null && !overridePath.isBlank()) {
-        try {
-          System.load(overridePath);
-          return;
-        } catch (UnsatisfiedLinkError e) {
-          throw new NativeLoadException(
-              "PDFium override path set via -D"
-                  + PROP_LIBRARY_PATH
-                  + "="
-                  + overridePath
-                  + " but loading that file failed",
-              e);
-        }
-      }
-
       tryLoadFromClasspath();
     } catch (NativeLoadException classpathMiss) {
-      try {
-        System.loadLibrary("pdfium");
-      } catch (UnsatisfiedLinkError e) {
-        NativeLoadException ex =
-            new NativeLoadException(
-                "PDFium native library not found for "
-                    + detectPlatform()
-                    + ". Also tried System.loadLibrary(\"pdfium\") and failed. "
-                    + "Set -D"
-                    + PROP_LIBRARY_PATH
-                    + "=/path/to/libpdfium.<ext> to load a system copy explicitly.",
-                classpathMiss);
-        ex.addSuppressed(e);
-        throw ex;
-      }
+      tryLoadSystemLibrary(classpathMiss);
+    }
+  }
+
+  private static boolean tryLoadOverride() {
+    String overridePath = System.getProperty(PROP_LIBRARY_PATH);
+    if (overridePath == null || overridePath.isBlank()) {
+      return false;
+    }
+    if (!Boolean.getBoolean(PROP_LIBRARY_PATH_ALLOW_UNSAFE)) {
+      throw new NativeLoadException(
+          "Refusing to load native override from -D"
+              + PROP_LIBRARY_PATH
+              + " without explicit opt-in. "
+              + "Set -D"
+              + PROP_LIBRARY_PATH_ALLOW_UNSAFE
+              + "=true to acknowledge the security risk.");
+    }
+    Path validated = validateOverridePath(overridePath);
+    try {
+      System.load(validated.toString());
+      return true;
+    } catch (UnsatisfiedLinkError e) {
+      throw new NativeLoadException(
+          "PDFium override path set via -D"
+              + PROP_LIBRARY_PATH
+              + "="
+              + validated
+              + " but loading that file failed",
+          e);
+    }
+  }
+
+  private static Path validateOverridePath(String overridePath) {
+    final Path raw;
+    try {
+      raw = Path.of(overridePath);
+    } catch (InvalidPathException e) {
+      throw new NativeLoadException("Invalid override path for -D" + PROP_LIBRARY_PATH, e);
+    }
+    if (!raw.isAbsolute()) {
+      throw new NativeLoadException("Override path must be absolute: " + overridePath);
+    }
+    Path path = raw.normalize();
+    if (!Files.exists(path)) {
+      throw new NativeLoadException("Override path does not exist: " + path);
+    }
+    if (!Files.isRegularFile(path)) {
+      throw new NativeLoadException("Override path is not a regular file: " + path);
+    }
+    if (!Files.isReadable(path)) {
+      throw new NativeLoadException("Override path is not readable: " + path);
+    }
+    return path;
+  }
+
+  private static void tryLoadSystemLibrary(NativeLoadException classpathMiss) {
+    try {
+      System.loadLibrary("pdfium");
+    } catch (UnsatisfiedLinkError e) {
+      NativeLoadException ex =
+          new NativeLoadException(
+              "PDFium native library not found for "
+                  + detectPlatform()
+                  + ". Also tried System.loadLibrary(\"pdfium\") and failed. "
+                  + "Set -D"
+                  + PROP_LIBRARY_PATH
+                  + "=/path/to/libpdfium.<ext> to load a system copy explicitly.",
+              classpathMiss);
+      ex.addSuppressed(e);
+      throw ex;
     }
   }
 
@@ -101,7 +147,7 @@ public final class NativeLoader {
     }
 
     try {
-      Path tmpDir = Files.createTempDirectory("pdfium4j-");
+      Path tmpDir = IoUtils.createTempDirectory("pdfium4j-");
       tmpDir.toFile().deleteOnExit();
 
       List<String> libs = readLibraryIndex(resourceBase + "native-libs.txt");
@@ -191,28 +237,35 @@ public final class NativeLoader {
     return osKey + "-" + detectArch();
   }
 
+  private static boolean isMusl() {
+    return probeLibDirForMusl() || probeProcMapsForMusl();
+  }
+
   @SuppressFBWarnings(
       value = "DMI_HARDCODED_ABSOLUTE_FILENAME",
       justification = "Musl detection requires probing standard linker locations")
-  private static boolean isMusl() {
-    // Check for musl dynamic linker
+  private static boolean probeLibDirForMusl() {
     try {
       Path ldMusl = Path.of("/lib");
       if (Files.exists(ldMusl)) {
         try (var files = Files.list(ldMusl)) {
-          if (files.anyMatch(p -> p.getFileName().toString().startsWith("ld-musl-"))) {
-            return true;
-          }
+          return files.anyMatch(p -> p.getFileName().toString().startsWith("ld-musl-"));
         }
       }
-    } catch (Exception e) {
+    } catch (IOException e) {
       PdfiumLibrary.ignore(e);
     }
-    // Fallback: check /proc/self/maps for musl
+    return false;
+  }
+
+  private static boolean probeProcMapsForMusl() {
     try {
-      String maps = Files.readString(Path.of("/proc/self/maps"));
-      if (maps.contains("musl")) return true;
-    } catch (Exception e) {
+      Path mapsPath = Path.of("/proc/self/maps");
+      if (Files.exists(mapsPath)) {
+        String maps = Files.readString(mapsPath);
+        return maps.contains("musl");
+      }
+    } catch (IOException e) {
       PdfiumLibrary.ignore(e);
     }
     return false;
