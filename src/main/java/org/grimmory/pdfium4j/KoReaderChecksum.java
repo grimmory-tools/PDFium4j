@@ -37,7 +37,7 @@ public final class KoReaderChecksum {
       long fileSize = fc.size();
       if (fileSize == 0) return Optional.empty();
       return Optional.of(calculateFromChannel(fc, fileSize));
-    } catch (IOException e) {
+    } catch (IOException _) {
       return Optional.empty();
     }
   }
