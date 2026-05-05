@@ -26,6 +26,42 @@ class ScratchBufferTest {
   }
 
   @Test
+  void acquireScopeProvidesValidBuffer() {
+    // Release the setup acquire to test scope isolation
+    ScratchBuffer.release();
+    try {
+      assertThrows(IllegalStateException.class, () -> ScratchBuffer.get(8));
+
+      try (var _ = ScratchBuffer.acquireScope()) {
+        MemorySegment s = ScratchBuffer.get(8);
+        assertTrue(s.byteSize() >= 8);
+        s.set(JAVA_BYTE, 0, (byte) 0x11);
+      }
+
+      assertThrows(IllegalStateException.class, () -> ScratchBuffer.get(8));
+    } finally {
+      ScratchBuffer.acquire();
+    }
+  }
+
+  @Test
+  void acquireScopeIsReentrant() {
+    try (var _ = ScratchBuffer.acquireScope()) {
+      MemorySegment s1 = ScratchBuffer.get(8);
+      s1.set(JAVA_BYTE, 0, (byte) 0x22);
+
+      try (var _ = ScratchBuffer.acquireScope()) {
+        MemorySegment s2 = ScratchBuffer.get(16);
+        assertEquals((byte) 0x22, s1.get(JAVA_BYTE, 0));
+        s2.set(JAVA_BYTE, 0, (byte) 0x33);
+      }
+
+      // Buffer should still be valid after inner scope closes
+      assertEquals((byte) 0x33, ScratchBuffer.get(16).get(JAVA_BYTE, 0));
+    }
+  }
+
+  @Test
   void utf8KeyAndWideValueUsesUtf8ByteOffset() {
     String key = "Ünî";
     long valueBytes = 32;

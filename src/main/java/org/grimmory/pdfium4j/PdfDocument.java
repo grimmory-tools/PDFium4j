@@ -417,8 +417,7 @@ public final class PdfDocument implements AutoCloseable {
 
   public PageSize pageSize(int index) {
     ensureOpen();
-    ScratchBuffer.acquire();
-    try {
+    try (var _ = ScratchBuffer.acquireScope()) {
       MemorySegment scratch = ScratchBuffer.get(16);
       MemorySegment w = scratch.asSlice(0, JAVA_DOUBLE.byteSize());
       MemorySegment h = scratch.asSlice(JAVA_DOUBLE.byteSize(), JAVA_DOUBLE.byteSize());
@@ -427,25 +426,19 @@ public final class PdfDocument implements AutoCloseable {
       return new PageSize((float) w.get(JAVA_DOUBLE, 0), (float) h.get(JAVA_DOUBLE, 0));
     } catch (Throwable t) {
       throw new PdfiumException("Failed to get page size " + index, t);
-    } finally {
-      ScratchBuffer.release();
     }
   }
 
   public List<Bookmark> bookmarks() {
     ensureOpen();
-    ScratchBuffer.acquire();
-    try {
+    try (var _ = ScratchBuffer.acquireScope()) {
       return BookmarkReader.readBookmarks(handle);
-    } finally {
-      ScratchBuffer.release();
     }
   }
 
   public Optional<String> pageLabel(int index) {
     ensureOpen();
-    ScratchBuffer.acquire();
-    try {
+    try (var _ = ScratchBuffer.acquireScope()) {
       long needed =
           (long) DocBindings.FPDF_GetPageLabel.invokeExact(handle, index, MemorySegment.NULL, 0L);
       if (needed <= 2) return Optional.empty();
@@ -455,8 +448,6 @@ public final class PdfDocument implements AutoCloseable {
       return byteLen == 0 ? Optional.empty() : Optional.of(FfmHelper.fromWideString(buf, byteLen));
     } catch (Throwable _) {
       return Optional.empty();
-    } finally {
-      ScratchBuffer.release();
     }
   }
 
@@ -465,8 +456,7 @@ public final class PdfDocument implements AutoCloseable {
     int count = pageCount();
     if (count <= 0) return List.of();
     List<PageSize> sizes = new ArrayList<>(count);
-    ScratchBuffer.acquire();
-    try {
+    try (var _ = ScratchBuffer.acquireScope()) {
       MemorySegment loopScratch = ScratchBuffer.getLoopScratch(2 * JAVA_DOUBLE.byteSize());
       MemorySegment w = loopScratch.asSlice(0, JAVA_DOUBLE.byteSize());
       MemorySegment h = loopScratch.asSlice(JAVA_DOUBLE.byteSize(), JAVA_DOUBLE.byteSize());
@@ -479,23 +469,18 @@ public final class PdfDocument implements AutoCloseable {
       throw e;
     } catch (Throwable t) {
       throw new PdfiumException("Failed to get page sizes", t);
-    } finally {
-      ScratchBuffer.release();
     }
     return sizes;
   }
 
   public int fileVersion() {
     ensureOpen();
-    ScratchBuffer.acquire();
-    try {
+    try (var _ = ScratchBuffer.acquireScope()) {
       MemorySegment v = ScratchBuffer.get(JAVA_INT.byteSize());
       int ok = (int) DocBindings.FPDF_GetFileVersion.invokeExact(handle, v);
       return ok != 0 ? v.get(JAVA_INT, 0) : 0;
     } catch (Throwable _) {
       return 0;
-    } finally {
-      ScratchBuffer.release();
     }
   }
 
@@ -516,8 +501,7 @@ public final class PdfDocument implements AutoCloseable {
       String pending = pendingMetadata.get(tag);
       return (pending == null || pending.isEmpty()) ? Optional.empty() : Optional.of(pending);
     }
-    ScratchBuffer.acquire();
-    try {
+    try (var _ = ScratchBuffer.acquireScope()) {
       String key = tag.pdfKey();
       MemorySegment initialScratch = ScratchBuffer.utf8ProbeBuffer(key);
       MemorySegment keySeg = FfmHelper.writeUtf8String(initialScratch, key);
@@ -538,8 +522,6 @@ public final class PdfDocument implements AutoCloseable {
       return val.isEmpty() ? Optional.empty() : Optional.of(val);
     } catch (Throwable _) {
       return metadataFallback(tag);
-    } finally {
-      ScratchBuffer.release();
     }
   }
 
@@ -715,8 +697,7 @@ public final class PdfDocument implements AutoCloseable {
   }
 
   private Optional<String> tryGetMetaText(String customKey) {
-    ScratchBuffer.acquire();
-    try {
+    try (var _ = ScratchBuffer.acquireScope()) {
       MemorySegment initialScratch = ScratchBuffer.utf8ProbeBuffer(customKey);
       MemorySegment keySeg = FfmHelper.writeUtf8String(initialScratch, customKey);
       long needed =
@@ -739,8 +720,6 @@ public final class PdfDocument implements AutoCloseable {
       return val.isEmpty() ? Optional.empty() : Optional.of(val);
     } catch (Throwable _) {
       return Optional.empty();
-    } finally {
-      ScratchBuffer.release();
     }
   }
 

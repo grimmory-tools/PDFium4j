@@ -303,20 +303,19 @@ class PdfDocumentTest {
     Path pdf = getTestPdf();
     if (pdf == null) return;
 
-    ScratchBuffer.acquire();
-    try (PdfDocument doc1 = PdfDocument.open(pdf)) {
-      assertTrue(doc1.pageCount() > 0);
-      MemorySegment first = ScratchBuffer.get(1024);
-      first.set(JAVA_BYTE, 0, (byte) 0x42);
+    try (var _ = ScratchBuffer.acquireScope()) {
+      try (PdfDocument doc1 = PdfDocument.open(pdf)) {
+        assertTrue(doc1.pageCount() > 0);
+        MemorySegment first = ScratchBuffer.get(1024);
+        first.set(JAVA_BYTE, 0, (byte) 0x42);
 
-      try (PdfDocument doc2 = PdfDocument.open(pdf)) {
-        assertTrue(doc2.pageCount() >= 0);
+        try (PdfDocument doc2 = PdfDocument.open(pdf)) {
+          assertTrue(doc2.pageCount() >= 0);
+          assertEquals(0x42, first.get(JAVA_BYTE, 0));
+        }
+
         assertEquals(0x42, first.get(JAVA_BYTE, 0));
       }
-
-      assertEquals(0x42, first.get(JAVA_BYTE, 0));
-    } finally {
-      ScratchBuffer.release();
     }
   }
 

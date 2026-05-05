@@ -142,8 +142,7 @@ public final class PdfPage implements AutoCloseable {
    * @return the page text, or empty string if no text content
    */
   public String extractText() {
-    ScratchBuffer.acquire();
-    try {
+    try (var _ = ScratchBuffer.acquireScope()) {
       return withTextPage(
           "Failed to extract text",
           textPage -> {
@@ -165,8 +164,6 @@ public final class PdfPage implements AutoCloseable {
               return FfmHelper.fromWideString(buf, (long) written * 2);
             }
           });
-    } finally {
-      ScratchBuffer.release();
     }
   }
 
@@ -473,8 +470,7 @@ public final class PdfPage implements AutoCloseable {
    */
   public List<PdfAnnotation> annotations() {
     ensureOpen();
-    ScratchBuffer.acquire();
-    try {
+    try (var _ = ScratchBuffer.acquireScope()) {
       int count = (int) AnnotBindings.FPDFPage_GetAnnotCount.invokeExact(handle);
       if (count <= 0) {
         return List.of();
@@ -511,8 +507,6 @@ public final class PdfPage implements AutoCloseable {
       throw e;
     } catch (Throwable t) {
       throw new PdfiumException("Failed to read annotations", t);
-    } finally {
-      ScratchBuffer.release();
     }
   }
 
@@ -559,8 +553,7 @@ public final class PdfPage implements AutoCloseable {
    * @return list of detected web links, or empty list if none
    */
   public List<PdfLink> webLinks() {
-    ScratchBuffer.acquire();
-    try {
+    try (var _ = ScratchBuffer.acquireScope()) {
       return withTextPage(
           "Failed to extract web links",
           textPage -> {
@@ -590,8 +583,6 @@ public final class PdfPage implements AutoCloseable {
               }
             }
           });
-    } finally {
-      ScratchBuffer.release();
     }
   }
 

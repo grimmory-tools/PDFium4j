@@ -108,6 +108,37 @@ public final class ScratchBuffer {
     USE_COUNT.get()[0]++;
   }
 
+  /**
+   * Acquires the scratch buffer and returns a zero-allocation AutoCloseable scope.
+   *
+   * <p>Usage:
+   *
+   * <pre>{@code
+   * try (var scope = ScratchBuffer.acquireScope()) {
+   *     // use ScratchBuffer.get(...) safely
+   * }
+   * }</pre>
+   */
+  public static Scope acquireScope() {
+    acquire();
+    return Scope.INSTANCE;
+  }
+
+  /**
+   * A stateless, zero-allocation token used exclusively to hook into Java's try-with-resources
+   * mechanism.
+   */
+  public static final class Scope implements AutoCloseable {
+    private static final Scope INSTANCE = new Scope();
+
+    private Scope() {}
+
+    @Override
+    public void close() {
+      release();
+    }
+  }
+
   /** Release and close all thread-local scratch state for the current thread. */
   public static void release() {
     int[] countRef = USE_COUNT.get();
