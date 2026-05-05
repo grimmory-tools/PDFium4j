@@ -1,11 +1,13 @@
 package org.grimmory.pdfium4j;
 
+import static java.lang.foreign.ValueLayout.JAVA_BYTE;
 import static org.junit.jupiter.api.Assertions.*;
 
 import edu.umd.cs.findbugs.annotations.CheckForNull;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.lang.foreign.MemorySegment;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -14,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
+import org.grimmory.pdfium4j.internal.ScratchBuffer;
 import org.grimmory.pdfium4j.model.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
@@ -292,6 +295,44 @@ class PdfDocumentTest {
         page::size,
         "Page handle should be invalid after owning document closes");
     assertDoesNotThrow(page::close, "Closing an already-invalidated page should be idempotent");
+  }
+
+  @Test
+  @EnabledIf("pdfiumAvailable")
+  void nestedDocumentClosingDoesNotInvalidateBuffer() throws IOException {
+    Path pdf = getTestPdf();
+    if (pdf == null) return;
+
+    try (var _ = ScratchBuffer.acquireScope()) {
+      try (PdfDocument doc1 = PdfDocument.open(pdf)) {
+        assertTrue(doc1.pageCount() > 0);
+        MemorySegment first = ScratchBuffer.get(1024);
+        first.set(JAVA_BYTE, 0, (byte) 0x42);
+
+        try (PdfDocument doc2 = PdfDocument.open(pdf)) {
+          assertTrue(doc2.pageCount() >= 0);
+          assertEquals(0x42, first.get(JAVA_BYTE, 0));
+        }
+
+        assertEquals(0x42, first.get(JAVA_BYTE, 0));
+      }
+    }
+  }
+
+  @Test
+  @EnabledIf("pdfiumAvailable")
+  void openDocumentDoesNotPinScratchOnOwnerThread() throws IOException {
+    Path pdf = getTestPdf();
+    if (pdf == null) return;
+
+    try (PdfDocument doc = PdfDocument.open(pdf)) {
+      assertThrows(IllegalStateException.class, () -> ScratchBuffer.get(8));
+
+      PageSize size = doc.pageSize(0);
+      assertTrue(size.width() > 0);
+
+      assertThrows(IllegalStateException.class, () -> ScratchBuffer.get(8));
+    }
   }
 
   @Test

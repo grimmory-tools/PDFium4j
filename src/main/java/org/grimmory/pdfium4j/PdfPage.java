@@ -19,6 +19,7 @@ import org.grimmory.pdfium4j.internal.AnnotBindings;
 import org.grimmory.pdfium4j.internal.BitmapBindings;
 import org.grimmory.pdfium4j.internal.EditBindings;
 import org.grimmory.pdfium4j.internal.FfmHelper;
+import org.grimmory.pdfium4j.internal.ScratchBuffer;
 import org.grimmory.pdfium4j.internal.TextBindings;
 import org.grimmory.pdfium4j.internal.ViewBindings;
 import org.grimmory.pdfium4j.model.AnnotationType;
@@ -141,27 +142,29 @@ public final class PdfPage implements AutoCloseable {
    * @return the page text, or empty string if no text content
    */
   public String extractText() {
-    return withTextPage(
-        "Failed to extract text",
-        textPage -> {
-          int charCount = (int) TextBindings.FPDFText_CountChars.invokeExact(textPage);
-          if (charCount <= 0) {
-            return "";
-          }
-
-          try (Arena arena = Arena.ofConfined()) {
-            long bufSize = ((long) charCount + 1) * 2;
-            MemorySegment buf = arena.allocate(bufSize);
-
-            int written =
-                (int) TextBindings.FPDFText_GetText.invokeExact(textPage, 0, charCount, buf);
-            if (written <= 0) {
+    try (var _ = ScratchBuffer.acquireScope()) {
+      return withTextPage(
+          "Failed to extract text",
+          textPage -> {
+            int charCount = (int) TextBindings.FPDFText_CountChars.invokeExact(textPage);
+            if (charCount <= 0) {
               return "";
             }
 
-            return FfmHelper.fromWideString(buf, (long) written * 2);
-          }
-        });
+            try (Arena arena = Arena.ofConfined()) {
+              long bufSize = ((long) charCount + 1) * 2;
+              MemorySegment buf = arena.allocate(bufSize);
+
+              int written =
+                  (int) TextBindings.FPDFText_GetText.invokeExact(textPage, 0, charCount, buf);
+              if (written <= 0) {
+                return "";
+              }
+
+              return FfmHelper.fromWideString(buf, (long) written * 2);
+            }
+          });
+    }
   }
 
   /**
@@ -467,7 +470,7 @@ public final class PdfPage implements AutoCloseable {
    */
   public List<PdfAnnotation> annotations() {
     ensureOpen();
-    try {
+    try (var _ = ScratchBuffer.acquireScope()) {
       int count = (int) AnnotBindings.FPDFPage_GetAnnotCount.invokeExact(handle);
       if (count <= 0) {
         return List.of();
@@ -550,35 +553,37 @@ public final class PdfPage implements AutoCloseable {
    * @return list of detected web links, or empty list if none
    */
   public List<PdfLink> webLinks() {
-    return withTextPage(
-        "Failed to extract web links",
-        textPage -> {
-          MemorySegment pageLink = MemorySegment.NULL;
-          try {
-            pageLink = (MemorySegment) TextBindings.FPDFLink_LoadWebLinks.invokeExact(textPage);
-            if (FfmHelper.isNull(pageLink)) return List.of();
+    try (var _ = ScratchBuffer.acquireScope()) {
+      return withTextPage(
+          "Failed to extract web links",
+          textPage -> {
+            MemorySegment pageLink = MemorySegment.NULL;
+            try {
+              pageLink = (MemorySegment) TextBindings.FPDFLink_LoadWebLinks.invokeExact(textPage);
+              if (FfmHelper.isNull(pageLink)) return List.of();
 
-            int count = (int) TextBindings.FPDFLink_CountWebLinks.invokeExact(pageLink);
-            if (count <= 0) return List.of();
+              int count = (int) TextBindings.FPDFLink_CountWebLinks.invokeExact(pageLink);
+              if (count <= 0) return List.of();
 
-            List<PdfLink> result = new ArrayList<>(count);
-            for (int i = 0; i < count; i++) {
-              String url = getWebLinkUrl(pageLink, i);
-              PdfAnnotation.Rect rect = getWebLinkRect(pageLink, i);
-              result.add(
-                  new PdfLink(url.isEmpty() ? Optional.empty() : Optional.of(url), rect, -1));
-            }
-            return List.copyOf(result);
-          } finally {
-            if (!FfmHelper.isNull(pageLink)) {
-              try {
-                TextBindings.FPDFLink_CloseWebLinks.invokeExact(pageLink);
-              } catch (Throwable e) {
-                PdfiumLibrary.ignore(e);
+              List<PdfLink> result = new ArrayList<>(count);
+              for (int i = 0; i < count; i++) {
+                String url = getWebLinkUrl(pageLink, i);
+                PdfAnnotation.Rect rect = getWebLinkRect(pageLink, i);
+                result.add(
+                    new PdfLink(url.isEmpty() ? Optional.empty() : Optional.of(url), rect, -1));
+              }
+              return List.copyOf(result);
+            } finally {
+              if (!FfmHelper.isNull(pageLink)) {
+                try {
+                  TextBindings.FPDFLink_CloseWebLinks.invokeExact(pageLink);
+                } catch (Throwable e) {
+                  PdfiumLibrary.ignore(e);
+                }
               }
             }
-          }
-        });
+          });
+    }
   }
 
   /**

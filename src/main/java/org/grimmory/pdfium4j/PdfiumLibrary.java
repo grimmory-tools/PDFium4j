@@ -53,12 +53,10 @@ public final class PdfiumLibrary {
         TextBindings.checkRequired();
         AnnotBindings.checkRequired();
 
-        try (Arena arena = Arena.ofConfined()) {
-          MemorySegment config = arena.allocate(ViewBindings.LIBRARY_CONFIG_LAYOUT);
-          // Version 2 is required by modern PDFium builds
-          config.set(ValueLayout.JAVA_INT, 0, 2);
-          ViewBindings.FPDF_InitLibraryWithConfig.invokeExact(config);
-        }
+        Arena arena = Arena.global();
+        MemorySegment config = arena.allocate(ViewBindings.LIBRARY_CONFIG_LAYOUT);
+        config.set(ValueLayout.JAVA_INT, 0, 2);
+        ViewBindings.FPDF_InitLibraryWithConfig.invokeExact(config);
         initialized = true;
       } catch (Throwable t) {
         initError = t;

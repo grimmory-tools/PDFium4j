@@ -44,6 +44,7 @@ import org.grimmory.pdfium4j.exception.PdfiumException;
 import org.grimmory.pdfium4j.internal.DocBindings;
 import org.grimmory.pdfium4j.internal.EditBindings;
 import org.grimmory.pdfium4j.internal.FfmHelper;
+import org.grimmory.pdfium4j.internal.ScratchBuffer;
 import org.grimmory.pdfium4j.internal.ViewBindings;
 import org.grimmory.pdfium4j.model.Bookmark;
 import org.grimmory.pdfium4j.model.MetadataTag;
@@ -136,7 +137,6 @@ public final class PdfDocument implements AutoCloseable {
     this.ownerThread = ownerThread;
     this.state = new CleanupState(channelId, sourceChannel, tempFile, docArena);
     this.cleanable = CLEANER.register(this, state);
-
     PdfiumLibrary.incrementDocumentCount();
   }
 
@@ -296,7 +296,7 @@ public final class PdfDocument implements AutoCloseable {
       MemorySegment doc =
           (MemorySegment) ViewBindings.FPDF_LoadCustomDocument.invokeExact(fileAccess, pwdSeg);
       if (FfmHelper.isNull(doc)) {
-        int err = (int) (long) ViewBindings.FPDF_GetLastError.invokeExact();
+        int err = (int) ViewBindings.FPDF_GetLastError.invokeExact();
         throw mapOpenError("Failed to open document: " + label, err);
       }
       return new PdfDocument(
@@ -370,7 +370,7 @@ public final class PdfDocument implements AutoCloseable {
         }
       }
       return 1;
-    } catch (IOException e) {
+    } catch (IOException _) {
       return 0;
     }
   }
@@ -417,9 +417,10 @@ public final class PdfDocument implements AutoCloseable {
 
   public PageSize pageSize(int index) {
     ensureOpen();
-    try (Arena arena = Arena.ofConfined()) {
-      MemorySegment w = arena.allocate(JAVA_DOUBLE);
-      MemorySegment h = arena.allocate(JAVA_DOUBLE);
+    try (var _ = ScratchBuffer.acquireScope()) {
+      MemorySegment scratch = ScratchBuffer.get(16);
+      MemorySegment w = scratch.asSlice(0, JAVA_DOUBLE.byteSize());
+      MemorySegment h = scratch.asSlice(JAVA_DOUBLE.byteSize(), JAVA_DOUBLE.byteSize());
       int ok = (int) ViewBindings.FPDF_GetPageSizeByIndex.invokeExact(handle, index, w, h);
       if (ok == 0) throwLastError("Failed to get page size " + index);
       return new PageSize((float) w.get(JAVA_DOUBLE, 0), (float) h.get(JAVA_DOUBLE, 0));
@@ -430,19 +431,22 @@ public final class PdfDocument implements AutoCloseable {
 
   public List<Bookmark> bookmarks() {
     ensureOpen();
-    return BookmarkReader.readBookmarks(handle);
+    try (var _ = ScratchBuffer.acquireScope()) {
+      return BookmarkReader.readBookmarks(handle);
+    }
   }
 
   public Optional<String> pageLabel(int index) {
     ensureOpen();
-    try (Arena arena = Arena.ofConfined()) {
+    try (var _ = ScratchBuffer.acquireScope()) {
       long needed =
           (long) DocBindings.FPDF_GetPageLabel.invokeExact(handle, index, MemorySegment.NULL, 0L);
       if (needed <= 2) return Optional.empty();
-      MemorySegment buf = arena.allocate(needed);
-      DocBindings.FPDF_GetPageLabel.invokeExact(handle, index, buf, needed);
-      return Optional.of(FfmHelper.fromWideString(buf, needed));
-    } catch (Throwable t) {
+      MemorySegment buf = ScratchBuffer.get(needed);
+      long copied = (long) DocBindings.FPDF_GetPageLabel.invokeExact(handle, index, buf, needed);
+      long byteLen = FfmHelper.normalizeWideByteLength(buf, copied, needed);
+      return byteLen == 0 ? Optional.empty() : Optional.of(FfmHelper.fromWideString(buf, byteLen));
+    } catch (Throwable _) {
       return Optional.empty();
     }
   }
@@ -452,11 +456,10 @@ public final class PdfDocument implements AutoCloseable {
     int count = pageCount();
     if (count <= 0) return List.of();
     List<PageSize> sizes = new ArrayList<>(count);
-    // Reuse a single Arena and single pair of output segments for all pages avoids
-    // creating count×Arena and count×2×MemorySegment allocations in the loop.
-    try (Arena arena = Arena.ofConfined()) {
-      MemorySegment w = arena.allocate(JAVA_DOUBLE);
-      MemorySegment h = arena.allocate(JAVA_DOUBLE);
+    try (var _ = ScratchBuffer.acquireScope()) {
+      MemorySegment loopScratch = ScratchBuffer.getLoopScratch(2 * JAVA_DOUBLE.byteSize());
+      MemorySegment w = loopScratch.asSlice(0, JAVA_DOUBLE.byteSize());
+      MemorySegment h = loopScratch.asSlice(JAVA_DOUBLE.byteSize(), JAVA_DOUBLE.byteSize());
       for (int i = 0; i < count; i++) {
         int ok = (int) ViewBindings.FPDF_GetPageSizeByIndex.invokeExact(handle, i, w, h);
         if (ok == 0) throwLastError("Failed to get page size " + i);
@@ -472,11 +475,11 @@ public final class PdfDocument implements AutoCloseable {
 
   public int fileVersion() {
     ensureOpen();
-    try (Arena arena = Arena.ofConfined()) {
-      MemorySegment v = arena.allocate(JAVA_INT);
+    try (var _ = ScratchBuffer.acquireScope()) {
+      MemorySegment v = ScratchBuffer.get(JAVA_INT.byteSize());
       int ok = (int) DocBindings.FPDF_GetFileVersion.invokeExact(handle, v);
       return ok != 0 ? v.get(JAVA_INT, 0) : 0;
-    } catch (Throwable t) {
+    } catch (Throwable _) {
       return 0;
     }
   }
@@ -498,18 +501,26 @@ public final class PdfDocument implements AutoCloseable {
       String pending = pendingMetadata.get(tag);
       return (pending == null || pending.isEmpty()) ? Optional.empty() : Optional.of(pending);
     }
-    try (Arena arena = Arena.ofConfined()) {
-      MemorySegment keySeg = arena.allocateFrom(tag.pdfKey());
+    try (var _ = ScratchBuffer.acquireScope()) {
+      String key = tag.pdfKey();
+      MemorySegment initialScratch = ScratchBuffer.utf8ProbeBuffer(key);
+      MemorySegment keySeg = FfmHelper.writeUtf8String(initialScratch, key);
 
       long needed =
           (long) DocBindings.FPDF_GetMetaText.invokeExact(handle, keySeg, MemorySegment.NULL, 0L);
       if (needed <= 2) return metadataFallback(tag);
 
-      MemorySegment buf = arena.allocate(needed);
-      DocBindings.FPDF_GetMetaText.invokeExact(handle, keySeg, buf, needed);
-      String val = FfmHelper.fromWideString(buf, needed);
-      return (val == null || val.isEmpty()) ? Optional.empty() : Optional.of(val);
-    } catch (Throwable t) {
+      ScratchBuffer.KeyValueSlots keyAndValue =
+          resolveMetaBuffer(initialScratch, key, keySeg, needed);
+      long copied =
+          (long)
+              DocBindings.FPDF_GetMetaText.invokeExact(
+                  handle, keyAndValue.keySeg(), keyAndValue.valueSeg(), needed);
+      long byteLen = FfmHelper.normalizeWideByteLength(keyAndValue.valueSeg(), copied, needed);
+      if (byteLen == 0) return metadataFallback(tag);
+      String val = FfmHelper.fromWideString(keyAndValue.valueSeg(), byteLen);
+      return val.isEmpty() ? Optional.empty() : Optional.of(val);
+    } catch (Throwable _) {
       return metadataFallback(tag);
     }
   }
@@ -591,10 +602,7 @@ public final class PdfDocument implements AutoCloseable {
     }
     Matcher hexM = INFO_DICT_HEX_PATTERN.matcher(dict);
     while (hexM.find()) {
-      String key = hexM.group(1);
-      if (!result.containsKey(key)) {
-        result.put(key, decodeHexPdfString(hexM.group(2)));
-      }
+      result.computeIfAbsent(hexM.group(1), _ -> decodeHexPdfString(hexM.group(2)));
     }
     return Collections.unmodifiableMap(result);
   }
@@ -667,7 +675,7 @@ public final class PdfDocument implements AutoCloseable {
           bytes[i] = (byte) Integer.parseInt(hex.substring(4 + i * 2, 6 + i * 2), 16);
         }
         return new String(bytes, StandardCharsets.UTF_16BE);
-      } catch (Exception e) {
+      } catch (Exception _) {
         return hex;
       }
     }
@@ -676,24 +684,55 @@ public final class PdfDocument implements AutoCloseable {
 
   public Optional<String> metadata(String customKey) {
     // Check known enum-backed tags first
-    for (MetadataTag tag : METADATA_TAGS)
+    for (MetadataTag tag : METADATA_TAGS) {
       if (tag.pdfKey().equalsIgnoreCase(customKey)) return metadata(tag);
+    }
     // Support arbitrary /Info keys (e.g. /Language) via FPDF_GetMetaText
     ensureOpen();
-    try (Arena arena = Arena.ofConfined()) {
-      MemorySegment keySeg = arena.allocateFrom(customKey);
+    Optional<String> val = tryGetMetaText(customKey);
+    if (val.isPresent()) {
+      return val;
+    }
+    return findMetadataInFallback(customKey);
+  }
+
+  private Optional<String> tryGetMetaText(String customKey) {
+    try (var _ = ScratchBuffer.acquireScope()) {
+      MemorySegment initialScratch = ScratchBuffer.utf8ProbeBuffer(customKey);
+      MemorySegment keySeg = FfmHelper.writeUtf8String(initialScratch, customKey);
       long needed =
           (long) DocBindings.FPDF_GetMetaText.invokeExact(handle, keySeg, MemorySegment.NULL, 0L);
-      if (needed > 2) {
-        MemorySegment buf = arena.allocate(needed);
-        DocBindings.FPDF_GetMetaText.invokeExact(handle, keySeg, buf, needed);
-        String val = FfmHelper.fromWideString(buf, needed);
-        if (val != null && !val.isEmpty()) return Optional.of(val);
+      if (needed <= 2) {
+        return Optional.empty();
       }
-    } catch (Throwable ignored) {
-      // fall through to fallback
+
+      ScratchBuffer.KeyValueSlots keyAndValue =
+          resolveMetaBuffer(initialScratch, customKey, keySeg, needed);
+      long copied =
+          (long)
+              DocBindings.FPDF_GetMetaText.invokeExact(
+                  handle, keyAndValue.keySeg(), keyAndValue.valueSeg(), needed);
+      long byteLen = FfmHelper.normalizeWideByteLength(keyAndValue.valueSeg(), copied, needed);
+      if (byteLen == 0) {
+        return Optional.empty();
+      }
+      String val = FfmHelper.fromWideString(keyAndValue.valueSeg(), byteLen);
+      return val.isEmpty() ? Optional.empty() : Optional.of(val);
+    } catch (Throwable _) {
+      return Optional.empty();
     }
-    // Fallback: check the raw parsed Info dict (case-insensitive key match)
+  }
+
+  private static ScratchBuffer.KeyValueSlots resolveMetaBuffer(
+      MemorySegment initialScratch, String key, MemorySegment keySeg, long needed) {
+    if (keySeg.byteSize() + needed <= initialScratch.byteSize()) {
+      return ScratchBuffer.keyAndWideValue(
+          keySeg, initialScratch.asSlice(keySeg.byteSize(), needed));
+    }
+    return ScratchBuffer.utf8KeyAndWideValue(key, needed);
+  }
+
+  private Optional<String> findMetadataInFallback(String customKey) {
     Map<String, String> fallback = getOrBuildFallbackMeta();
     for (Map.Entry<String, String> entry : fallback.entrySet()) {
       if (entry.getKey().equalsIgnoreCase(customKey)) {
@@ -785,7 +824,9 @@ public final class PdfDocument implements AutoCloseable {
     ensureOpen();
     pendingMetadata.put(tag, value);
     try (Arena arena = Arena.ofConfined()) {
-      MemorySegment tagSeg = arena.allocateFrom(tag.pdfKey());
+      long keyUpperBound = Math.addExact(Math.multiplyExact((long) tag.pdfKey().length(), 4), 1);
+      MemorySegment tagSeg =
+          FfmHelper.writeUtf8String(arena.allocate(keyUpperBound, 1), tag.pdfKey());
       MemorySegment valSeg = FfmHelper.toWideString(arena, value);
       if (EditBindings.FPDF_SetMetaText != null) {
         int ok = (int) EditBindings.FPDF_SetMetaText.invokeExact(handle, tagSeg, valSeg);
@@ -991,7 +1032,7 @@ public final class PdfDocument implements AutoCloseable {
   private static void throwLastError(String message) {
     int err;
     try {
-      err = (int) (long) ViewBindings.FPDF_GetLastError.invokeExact();
+      err = (int) ViewBindings.FPDF_GetLastError.invokeExact();
     } catch (Throwable t) {
       err = 0;
     }
@@ -1028,7 +1069,7 @@ public final class PdfDocument implements AutoCloseable {
       MemorySegment doc =
           (MemorySegment) ViewBindings.FPDF_LoadDocument.invokeExact(pathSeg, MemorySegment.NULL);
       if (FfmHelper.isNull(doc)) {
-        int err = (int) (long) ViewBindings.FPDF_GetLastError.invokeExact();
+        int err = (int) ViewBindings.FPDF_GetLastError.invokeExact();
         if (err == ViewBindings.FPDF_ERR_PASSWORD) return PdfProbeResult.ok(-1, true);
         return PdfProbeResult.error(
             PdfProbeResult.Status.CORRUPT, PdfErrorCode.fromCode(err), "Failed to probe document");
@@ -1057,7 +1098,7 @@ public final class PdfDocument implements AutoCloseable {
           (MemorySegment)
               ViewBindings.FPDF_LoadMemDocument.invokeExact(seg, data.length, MemorySegment.NULL);
       if (FfmHelper.isNull(doc)) {
-        int err = (int) (long) ViewBindings.FPDF_GetLastError.invokeExact();
+        int err = (int) ViewBindings.FPDF_GetLastError.invokeExact();
         if (err == ViewBindings.FPDF_ERR_PASSWORD) return PdfProbeResult.ok(-1, true);
         return PdfProbeResult.error(
             PdfProbeResult.Status.CORRUPT, PdfErrorCode.fromCode(err), "Failed to probe document");
