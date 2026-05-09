@@ -20,7 +20,7 @@ jobs:
           - os: ubuntu-latest
             platform: linux-x64
             skipTests: false
-          - os: macos-14
+          - os: macos-15-intel
             platform: darwin-x64
             skipTests: true
           - os: macos-latest
