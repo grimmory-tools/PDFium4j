@@ -41,16 +41,16 @@ static std::vector<char16_t> utf8_to_utf16(const std::string& utf8) {
     while (*p) {
         if (*p < 0x80) {
             utf16.push_back(*p++);
-        } else if ((*p & 0xE0) == 0xC0) {
+        } else if ((*p & 0xE0) == 0xC0 && (p[1] & 0xC0) == 0x80) {
             char16_t c = (*p++ & 0x1F) << 6;
             c |= (*p++ & 0x3F);
             utf16.push_back(c);
-        } else if ((*p & 0xF0) == 0xE0) {
+        } else if ((*p & 0xF0) == 0xE0 && (p[1] & 0xC0) == 0x80 && (p[2] & 0xC0) == 0x80) {
             char16_t c = (*p++ & 0x0F) << 12;
             c |= (*p++ & 0x3F) << 6;
             c |= (*p++ & 0x3F);
             utf16.push_back(c);
-        } else if ((*p & 0xF8) == 0xF0) {
+        } else if ((*p & 0xF8) == 0xF0 && (p[1] & 0xC0) == 0x80 && (p[2] & 0xC0) == 0x80 && (p[3] & 0xC0) == 0x80) {
             uint32_t cp = (*p++ & 0x07) << 18;
             cp |= (*p++ & 0x3F) << 12;
             cp |= (*p++ & 0x3F) << 6;
@@ -282,12 +282,15 @@ int pdfium4j_set_custom_xmp(FPDF_DOCUMENT doc, const char* ns_uri, const char* p
 
     int xmp_len = pdfium4j_get_xmp_metadata(doc, nullptr, 0);
     pugi::xml_document xdoc;
-    
+
     if (xmp_len > 1) {
         std::vector<char> raw(xmp_len);
         pdfium4j_get_xmp_metadata(doc, raw.data(), xmp_len);
-        xdoc.load_buffer(raw.data(), xmp_len);
-    } else {
+        if (!xdoc.load_buffer(raw.data(), xmp_len)) {
+            xmp_len = 0; // fall through to skeleton
+        }
+    }
+    if (xmp_len <= 1) {
         const char* skeleton = "<?xpacket begin=\"\xEF\xBB\xBF\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n"
                                "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\">\n"
                                "  <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n"
@@ -311,11 +314,11 @@ int pdfium4j_set_custom_xmp(FPDF_DOCUMENT doc, const char* ns_uri, const char* p
 
     
     std::vector<char16_t> utf16 = utf8_to_utf16(out);
-    
-    if (func(doc, "XMP", reinterpret_cast<FPDF_WIDESTRING>(utf16.data()))) return 0;
-    if (func(doc, "xmp", reinterpret_cast<FPDF_WIDESTRING>(utf16.data()))) return 0;
-    
-    return -1;
+
+    bool ok1 = func(doc, "XMP", reinterpret_cast<FPDF_WIDESTRING>(utf16.data()));
+    bool ok2 = func(doc, "xmp", reinterpret_cast<FPDF_WIDESTRING>(utf16.data()));
+
+    return (ok1 || ok2) ? 0 : -1;
 }
 
 int pdfium4j_set_custom_xmp_bag(FPDF_DOCUMENT doc, const char* ns_uri, const char* prefix, const char* key, const char* values_joined, const char* bag_type) {
@@ -326,12 +329,15 @@ int pdfium4j_set_custom_xmp_bag(FPDF_DOCUMENT doc, const char* ns_uri, const cha
 
     int xmp_len = pdfium4j_get_xmp_metadata(doc, nullptr, 0);
     pugi::xml_document xdoc;
-    
+
     if (xmp_len > 1) {
         std::vector<char> raw(xmp_len);
         pdfium4j_get_xmp_metadata(doc, raw.data(), xmp_len);
-        xdoc.load_buffer(raw.data(), xmp_len);
-    } else {
+        if (!xdoc.load_buffer(raw.data(), xmp_len)) {
+            xmp_len = 0; // fall through to skeleton
+        }
+    }
+    if (xmp_len <= 1) {
         const char* skeleton = "<?xpacket begin=\"\xEF\xBB\xBF\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n"
                                "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\">\n"
                                "  <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n"
@@ -368,11 +374,11 @@ int pdfium4j_set_custom_xmp_bag(FPDF_DOCUMENT doc, const char* ns_uri, const cha
 
     
     std::vector<char16_t> utf16 = utf8_to_utf16(out);
-    
-    if (func(doc, "XMP", reinterpret_cast<FPDF_WIDESTRING>(utf16.data()))) return 0;
-    if (func(doc, "xmp", reinterpret_cast<FPDF_WIDESTRING>(utf16.data()))) return 0;
-    
-    return -1;
+
+    bool ok1 = func(doc, "XMP", reinterpret_cast<FPDF_WIDESTRING>(utf16.data()));
+    bool ok2 = func(doc, "xmp", reinterpret_cast<FPDF_WIDESTRING>(utf16.data()));
+
+    return (ok1 || ok2) ? 0 : -1;
 }
 
 }

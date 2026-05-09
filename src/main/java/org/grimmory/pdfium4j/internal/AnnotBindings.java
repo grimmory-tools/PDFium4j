@@ -35,13 +35,13 @@ public final class AnnotBindings {
     Objects.requireNonNull(fpdfAnnotGetRect(), "FPDFAnnot_GetRect");
   }
 
-  /** FS_RECTF struct layout: left, bottom, right, top (all floats). */
+  /** FS_RECTF struct layout: left, top, right, bottom (all floats). */
   public static final StructLayout FS_RECTF_LAYOUT =
       MemoryLayout.structLayout(
           ValueLayout.JAVA_FLOAT.withName("left"),
-          ValueLayout.JAVA_FLOAT.withName("bottom"),
+          ValueLayout.JAVA_FLOAT.withName("top"),
           ValueLayout.JAVA_FLOAT.withName("right"),
-          ValueLayout.JAVA_FLOAT.withName("top"));
+          ValueLayout.JAVA_FLOAT.withName("bottom"));
 
   private static final StableValue<Optional<MethodHandle>> FPDFPage_GetAnnotCount_SV =
       StableValue.of();

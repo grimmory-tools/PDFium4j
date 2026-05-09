@@ -26,6 +26,7 @@ public final class TextBindings {
     Objects.requireNonNull(fpdfTextLoadPage(), "FPDFText_LoadPage");
     Objects.requireNonNull(fpdfTextClosePage(), "FPDFText_ClosePage");
     Objects.requireNonNull(fpdfTextCountChars(), "FPDFText_CountChars");
+    Objects.requireNonNull(fpdfTextGetText(), "FPDFText_GetText");
     Objects.requireNonNull(fpdfLinkLoadWebLinks(), "FPDFLink_LoadWebLinks");
     Objects.requireNonNull(fpdfLinkCountWebLinks(), "FPDFLink_CountWebLinks");
     Objects.requireNonNull(fpdfLinkGetURL(), "FPDFLink_GetURL");

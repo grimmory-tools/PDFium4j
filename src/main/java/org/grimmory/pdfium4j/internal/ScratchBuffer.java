@@ -370,9 +370,10 @@ public final class ScratchBuffer {
     private final long size;
 
     SegmentInputStream(MemorySegment segment, long size) {
+      MemorySegment checked = Objects.requireNonNull(segment, "segment");
       acquire();
-      this.segment = Objects.requireNonNull(segment, "segment");
-      if (size < 0 || size > segment.byteSize()) {
+      this.segment = checked;
+      if (size < 0 || size > checked.byteSize()) {
         release();
         throw new IllegalArgumentException("size must be between 0 and segment.byteSize()");
       }
