@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.ThreadLocalRandom;
 import org.grimmory.pdfium4j.exception.PdfCorruptException;
+import org.grimmory.pdfium4j.internal.Generators;
 import org.grimmory.pdfium4j.model.PdfDiagnostic;
 import org.grimmory.pdfium4j.model.PdfProbeResult;
 import org.junit.jupiter.api.Disabled;
@@ -21,7 +22,7 @@ public class PathologicalPdfTest {
 
   @Test
   void testProbeEmptyFile() {
-    byte[] empty = new byte[0];
+    byte[] empty = Generators.emptyByteArray();
     PdfProbeResult result = PdfDocument.probe(empty);
 
     assertFalse(result.isValid());
@@ -82,7 +83,7 @@ public class PathologicalPdfTest {
 
   @Test
   void testImageOnlyDetectionEmpty() {
-    byte[] minimal = new byte[0];
+    byte[] minimal = Generators.emptyByteArray();
     PdfProbeResult result = PdfDocument.probe(minimal);
     assertFalse(result.isValid());
   }

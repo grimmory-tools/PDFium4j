@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
+import org.grimmory.pdfium4j.internal.Generators;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -28,7 +29,7 @@ class KoReaderChecksumTest {
 
   @Test
   void returnsEmptyForEmptyBytes() {
-    assertTrue(KoReaderChecksum.calculate(new byte[0]).isEmpty());
+    assertTrue(KoReaderChecksum.calculate(Generators.emptyByteArray()).isEmpty());
   }
 
   @Test
