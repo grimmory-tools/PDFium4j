@@ -14,6 +14,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import org.grimmory.pdfium4j.PdfiumLibrary;
 import org.grimmory.pdfium4j.exception.NativeLoadException;
 
@@ -50,8 +51,17 @@ public final class NativeLoader {
         loadError = e;
         throw e;
       } catch (Throwable t) {
-        loadError = t;
-        throw new NativeLoadException("Failed to load native library", t);
+        String msg =
+            "Failed to load native library for platform "
+                + detectPlatform()
+                + " (JVM arch: "
+                + detectArch()
+                + ")";
+        if (t.getMessage() != null) {
+          msg += ": " + t.getMessage();
+        }
+        loadError = new NativeLoadException(msg, t);
+        throw (NativeLoadException) loadError;
       }
     }
   }
@@ -123,11 +133,16 @@ public final class NativeLoader {
     try {
       System.loadLibrary("pdfium");
     } catch (UnsatisfiedLinkError e) {
+      String platform = detectPlatform();
+      String arch = detectArch();
       NativeLoadException ex =
           new NativeLoadException(
-              "PDFium native library not found for "
-                  + detectPlatform()
-                  + ". Also tried System.loadLibrary(\"pdfium\") and failed. "
+              "PDFium native library not found for platform "
+                  + platform
+                  + " (JVM arch: "
+                  + arch
+                  + "). "
+                  + "Also tried System.loadLibrary(\"pdfium\") and failed. "
                   + "Set -D"
                   + PROP_LIBRARY_PATH
                   + "=/path/to/libpdfium.<ext> to load a system copy explicitly.",
@@ -137,10 +152,24 @@ public final class NativeLoader {
     }
   }
 
+  private static final Set<String> ALLOWED_LIBS =
+      Set.of(
+          "pdfium",
+          "pdfium4j_shim",
+          "libpdfium.so",
+          "libpdfium.dylib",
+          "pdfium.dll",
+          "pdfium4j_shim.so",
+          "pdfium4j_shim.dylib",
+          "pdfium4j_shim.dll");
+
   private static void tryLoadFromClasspath() {
-    String platform = detectPlatform();
+    String platform = System.getProperty("pdfium4j.platform");
+    if (platform == null || platform.isBlank()) {
+      platform = detectPlatform();
+    }
     String resourceBase = "/natives/" + platform + "/";
-    String libName = nativeFilename("pdfium");
+    String libName = nativeFilename();
 
     if (NativeLoader.class.getResource(resourceBase + libName) == null) {
       throw new NativeLoadException("No PDFium binary found on classpath for " + platform);
@@ -152,6 +181,9 @@ public final class NativeLoader {
 
       List<String> libs = readLibraryIndex(resourceBase + "native-libs.txt");
       for (String lib : libs) {
+        if (!isAllowed(lib)) {
+          throw new NativeLoadException("Refusing to load untrusted native library: " + lib);
+        }
         extractToDir(resourceBase + lib, tmpDir);
       }
 
@@ -160,7 +192,9 @@ public final class NativeLoader {
         extractLib(resourceBase + libName, tmpDir, libName);
       }
 
-      // Dependencies must be loaded before libpdfium
+      // Load main PDFium library first so dependencies (like the shim) can link against it
+      System.load(pdfiumPath.toAbsolutePath().toString());
+
       for (String lib : libs) {
         if (!lib.equals(libName)) {
           Path depPath = tmpDir.resolve(lib);
@@ -169,11 +203,18 @@ public final class NativeLoader {
           }
         }
       }
-
-      System.load(pdfiumPath.toAbsolutePath().toString());
     } catch (IOException e) {
       throw new NativeLoadException("Failed to extract native library", e);
     }
+  }
+
+  private static boolean isAllowed(String lib) {
+    if (ALLOWED_LIBS.contains(lib)) return true;
+    String base = lib;
+    if (base.startsWith("lib")) base = base.substring(3);
+    int dot = base.indexOf('.');
+    if (dot > 0) base = base.substring(0, dot);
+    return ALLOWED_LIBS.contains(base);
   }
 
   private static List<String> readLibraryIndex(String resource) {
@@ -198,22 +239,19 @@ public final class NativeLoader {
 
   private static void extractToDir(String resource, Path dir) throws IOException {
     String filename = resource.substring(resource.lastIndexOf('/') + 1);
-    extractResource(resource, dir, filename, true);
+    extractResource(resource, dir, filename);
   }
 
-  private static Path extractLib(String resource, Path dir, String filename) throws IOException {
-    return extractResource(resource, dir, filename, true);
+  private static void extractLib(String resource, Path dir, String filename) throws IOException {
+    extractResource(resource, dir, filename);
   }
 
   @CheckForNull
-  private static Path extractResource(String resource, Path dir, String filename, boolean required)
+  private static Path extractResource(String resource, Path dir, String filename)
       throws IOException {
     try (InputStream is = NativeLoader.class.getResourceAsStream(resource)) {
       if (is == null) {
-        if (required) {
-          throw new NativeLoadException("Resource not found: " + resource);
-        }
-        return null;
+        throw new NativeLoadException("Resource not found: " + resource);
       }
       Path target = dir.resolve(filename);
       Files.copy(is, target, StandardCopyOption.REPLACE_EXISTING);
@@ -278,10 +316,10 @@ public final class NativeLoader {
     throw new NativeLoadException("Unsupported architecture: " + arch);
   }
 
-  static String nativeFilename(String lib) {
+  static String nativeFilename() {
     String os = System.getProperty("os.name").toLowerCase(Locale.ROOT);
-    if (os.contains("win")) return lib + ".dll";
-    if (os.contains("mac")) return "lib" + lib + ".dylib";
-    return "lib" + lib + ".so";
+    if (os.contains("win")) return "pdfium" + ".dll";
+    if (os.contains("mac")) return "lib" + "pdfium" + ".dylib";
+    return "lib" + "pdfium" + ".so";
   }
 }
