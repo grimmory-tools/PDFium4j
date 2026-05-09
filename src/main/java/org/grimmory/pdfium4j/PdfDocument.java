@@ -127,8 +127,7 @@ public final class PdfDocument implements AutoCloseable {
   private Map<Long, int[]> textIndex = null;
 
   /** Internal metadata about the document source. */
-  record SourceInfo(
-      Path path, Path tempFile, byte[] sourceBytes, int version, Thread ownerThread) {
+  record SourceInfo(Path path, Path tempFile, byte[] sourceBytes, int version, Thread ownerThread) {
     @Override
     public boolean equals(Object o) {
       if (this == o) {
@@ -346,7 +345,8 @@ public final class PdfDocument implements AutoCloseable {
     Arena arena = Arena.ofShared();
     boolean success = false;
     try {
-      PdfDocument document = PdfDocumentOpener.open(segment, null, resolvePolicy(policy), arena, null);
+      PdfDocument document =
+          PdfDocumentOpener.open(segment, null, resolvePolicy(policy), arena, null);
       success = true;
       return document;
     } finally {
