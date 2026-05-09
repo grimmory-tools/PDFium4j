@@ -1,6 +1,7 @@
 import java.net.HttpURLConnection
 import java.net.URI
 import java.nio.file.Path
+import java.security.MessageDigest
 
 plugins {
     `java-library`
@@ -22,13 +23,13 @@ allprojects {
 }
 
 configure<CheckstyleExtension> {
-    toolVersion = "13.3.0"
+    toolVersion = "13.4.2"
     configFile = rootProject.file("config/checkstyle/checkstyle.xml")
     isShowViolations = true
 }
 
 configure<PmdExtension> {
-    toolVersion = "7.22.0"
+    toolVersion = "7.23.0"
     isConsoleOutput = true
     rulesMinimumPriority.set(5)
     ruleSetFiles = files(rootProject.file("config/pmd/ruleset.xml"))
@@ -78,7 +79,7 @@ tasks.withType<com.github.spotbugs.snom.SpotBugsTask>().configureEach {
         required.set(true)
     }
     reports.create("xml") {
-        required.set(false)
+        required.set(true)
     }
 }
 
@@ -117,17 +118,416 @@ tasks.withType<JavaCompile> {
     ))
 }
 
+tasks.named("check") {
+    dependsOn("spotlessCheck")
+}
+
+// -- PDFium native binary download & bundling --
+
+val pdfiumVersion = findProperty("pdfiumVersion")?.toString() ?: "7825"
+
+val pdfiumPlatforms = mapOf(
+    "linux-x64"        to "linux-x64",
+    "linux-arm64"      to "linux-arm64",
+    "linux-musl-x64"   to "linux-musl-x64",
+    "linux-musl-arm64" to "linux-musl-arm64",
+    "darwin-x64"       to "mac-x64",
+    "darwin-arm64"     to "mac-arm64",
+    "windows-x64"      to "win-x64"
+)
+
+val platformFilter = findProperty("pdfiumPlatformFilter")?.toString()
+val activePlatforms = if (platformFilter != null) {
+    pdfiumPlatforms.filterKeys { it == platformFilter }
+} else {
+    pdfiumPlatforms
+}
+
+val pdfiumArchiveDir = layout.buildDirectory.dir("pdfium-archives")
+val pdfiumNativesDir = layout.buildDirectory.dir("generated-natives")
+
+val hostOs = System.getProperty("os.name").lowercase()
+val hostArch = System.getProperty("os.arch").lowercase()
+val hostPlatform = when {
+    hostOs.contains("mac") && (hostArch == "aarch64" || hostArch == "arm64") -> "darwin-arm64"
+    hostOs.contains("mac") && (hostArch == "x86_64" || hostArch == "amd64") -> "darwin-x64"
+    hostOs.contains("linux") && (hostArch == "aarch64" || hostArch == "arm64") -> "linux-arm64"
+    hostOs.contains("linux") && (hostArch == "x86_64" || hostArch == "amd64") -> "linux-x64"
+    hostOs.contains("windows") && (hostArch == "x86_64" || hostArch == "amd64") -> "windows-x64"
+    else -> null
+}
+
+val pdfiumHashes = mapOf(
+    "7825" to mapOf(
+        "linux-x64"        to "ae0e276bcdf276dca2746adb4780f79949620e5c655973ca252a3994bc516a13",
+        "linux-arm64"      to "b063f5244586f5e0c025cd4d74dd10f75bbb41e28bcdc1032349ca27814a06cf",
+        "linux-musl-x64"   to "c0d70bea47c93b055d6a9334c248f6c7957df130c5478fc0277c55ee98ade4bb",
+        "linux-musl-arm64" to "5e4cc22df55498cb2f094f479869a66575b317bbc0e35d633c1e7e99b783f3d3",
+        "mac-x64"          to "1e2f0a38bd7a8c369b0a1655a527c6b5491086fe3a45d1d82432e9229ac9b40c",
+        "mac-arm64"        to "0e9692fa2063f5b5e6f6129680fe618f47efb9d728dd02e9db9b8999e386c84e",
+        "win-x64"          to "eefb48c845ab22f0945151093ce8fd611a33687796728051f9a1b2b341e1b980"
+    )
+)
+
+val downloadPdfiumBinaries by tasks.registering {
+    description = "Downloads prebuilt PDFium binaries for all supported platforms"
+    outputs.dir(pdfiumArchiveDir)
+    doLast {
+        val dir = pdfiumArchiveDir.get().asFile
+        dir.mkdirs()
+
+        val hashesForVersion = pdfiumHashes[pdfiumVersion]
+            ?: error("No hashes defined for PDFium version $pdfiumVersion. Please update pdfiumHashes in build.gradle.kts")
+
+        // Security check: ensure all supported platforms have hashes for this version
+        val missingHashes = pdfiumPlatforms.values.toSet() - hashesForVersion.keys
+        if (missingHashes.isNotEmpty()) {
+            error("Missing hashes for version $pdfiumVersion: $missingHashes")
+        }
+
+        val base = "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/$pdfiumVersion"
+        activePlatforms.forEach { (localName, remoteName) ->
+            val target = dir.resolve("pdfium-$remoteName.tgz")
+            val expectedHash = hashesForVersion[remoteName] ?: error("No hash for platform $remoteName")
+
+            if (target.exists()) {
+                val actualHash = calculateSha256(target)
+                if (actualHash == expectedHash) {
+                    logger.lifecycle("Skipping $remoteName (already downloaded and verified)")
+                    return@forEach
+                } else {
+                    logger.warn("Hash mismatch for existing $remoteName; redownloading...")
+                    target.delete()
+                }
+            }
+
+            val conn = URI("$base/pdfium-$remoteName.tgz").toURL()
+                .openConnection() as HttpURLConnection
+            conn.instanceFollowRedirects = true
+            conn.connect()
+            check(conn.responseCode == 200) {
+                "Download failed: HTTP ${conn.responseCode} for pdfium-$remoteName.tgz"
+            }
+            conn.inputStream.use { inp ->
+                target.outputStream().buffered().use { out -> inp.copyTo(out) }
+            }
+
+            val actualHash = calculateSha256(target)
+            if (actualHash != expectedHash) {
+                target.delete()
+                error("SHA-256 verification failed for pdfium-$remoteName.tgz!\nExpected: $expectedHash\nActual:   $actualHash")
+            }
+            logger.lifecycle("Verified pdfium-$remoteName.tgz")
+        }
+    }
+}
+
+fun calculateSha256(file: File): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+    file.inputStream().use { inp ->
+        val buffer = ByteArray(8192)
+        var read: Int
+        while (inp.read(buffer).also { read = it } != -1) {
+            digest.update(buffer, 0, read)
+        }
+    }
+    return digest.digest().joinToString("") { "%02x".format(it) }
+}
+
+val extractPdfiumBinaries by tasks.registering {
+    description = "Extracts PDFium native libraries for bundling into the JAR"
+    dependsOn(downloadPdfiumBinaries)
+    outputs.dir(pdfiumNativesDir)
+    val proj = project
+    doLast {
+        val nativesRoot = pdfiumNativesDir.get().asFile.resolve("natives")
+        activePlatforms.forEach { (localName, remoteName) ->
+            val archive = pdfiumArchiveDir.get().asFile.resolve("pdfium-$remoteName.tgz")
+            val platformDir = nativesRoot.resolve(localName)
+            platformDir.mkdirs()
+            val libFileName = when {
+                localName.startsWith("linux")   -> "libpdfium.so"
+                localName.startsWith("darwin")  -> "libpdfium.dylib"
+                localName.startsWith("windows") -> "pdfium.dll"
+                else -> error("Unknown platform: $localName")
+            }
+            proj.copy {
+                from(proj.tarTree(proj.resources.gzip(archive))) {
+                    include("**/*pdfium*.so*", "**/*pdfium*.dylib*", "**/*pdfium*.dll", "**/*pdfium*.lib")
+                    eachFile { relativePath = RelativePath(true, name) }
+                }
+                into(platformDir)
+                includeEmptyDirs = false
+            }
+        }
+    }
+}
+
+val pdfiumHeadersDir = layout.buildDirectory.dir("pdfium-headers")
+
+val extractPdfiumHeaders by tasks.registering {
+    description = "Extracts PDFium headers for building the shim"
+    dependsOn(downloadPdfiumBinaries)
+    outputs.dir(pdfiumHeadersDir)
+    val proj = project
+    doLast {
+        val headersDir = pdfiumHeadersDir.get().asFile
+        headersDir.deleteRecursively()
+        headersDir.mkdirs()
+        val platform = activePlatforms.values.first()
+        val archive = pdfiumArchiveDir.get().asFile.resolve("pdfium-$platform.tgz")
+        proj.copy {
+            from(proj.tarTree(proj.resources.gzip(archive))) {
+                include("**/include/**/*.h")
+                eachFile {
+                    // Preserve directory structure after 'include/'
+                    val includeIdx = relativePath.segments.indexOf("include")
+                    if (includeIdx != -1) {
+                        val newSegments = relativePath.segments.drop(includeIdx + 1).toTypedArray()
+                        relativePath = RelativePath(true, *newSegments)
+                    } else {
+                        relativePath = RelativePath(true, name)
+                    }
+                }
+            }
+            into(headersDir)
+            includeEmptyDirs = false
+        }
+    }
+}
+
+val buildShim by tasks.registering {
+    description = "Builds the C++ shim library"
+    dependsOn(extractPdfiumHeaders, extractPdfiumBinaries)
+
+    val shimDir = project.file("shim")
+    val buildDir = layout.buildDirectory.dir("shim-build")
+    val proj = project
+
+    inputs.dir(shimDir)
+    outputs.dir(buildDir)
+
+    doLast {
+        val compatiblePlatforms = activePlatforms.keys.filter { platform ->
+            (platform.startsWith("darwin") && hostOs.contains("mac")) ||
+            (platform.startsWith("linux") && hostOs.contains("linux")) ||
+            (platform.startsWith("windows") && hostOs.contains("windows"))
+        }
+
+        if (compatiblePlatforms.isEmpty()) {
+            logger.warn("No compatible platforms in activePlatforms for host OS $hostOs; skipping shim build")
+            return@doLast
+        }
+
+        compatiblePlatforms.forEach { platform ->
+            val platformBuildDir = buildDir.get().asFile.resolve(platform)
+            platformBuildDir.mkdirs()
+
+            val libDir = pdfiumNativesDir.get().asFile.resolve("natives/$platform")
+            val pdfiumRoot = layout.buildDirectory.dir("pdfium-env-$platform").get().asFile
+            pdfiumRoot.mkdirs()
+
+            proj.copy {
+                from(pdfiumHeadersDir) { into("include") }
+                from(libDir) {
+                    if (platform.startsWith("windows")) {
+                        into("bin")
+                    } else {
+                        into("lib")
+                    }
+                }
+                into(pdfiumRoot)
+            }
+
+            val isWindows = platform.startsWith("windows")
+            val cmakeConfigCmd = mutableListOf("cmake", "-S", shimDir.absolutePath, "-B", ".", "-DPDFIUM_ROOT=${pdfiumRoot.absolutePath}")
+
+            if (!isWindows) {
+                cmakeConfigCmd.addAll(listOf("-G", "Unix Makefiles"))
+            }
+
+            if (platform.startsWith("darwin")) {
+                val arch = if (platform.endsWith("arm64")) "arm64" else "x86_64"
+                cmakeConfigCmd.add("-DCMAKE_OSX_ARCHITECTURES=$arch")
+            }
+
+            fun runCommand(cmd: List<String>, stage: String) {
+                logger.lifecycle("[$platform] Executing: ${cmd.joinToString(" ")}")
+                val process = ProcessBuilder(cmd)
+                    .directory(platformBuildDir)
+                    .redirectErrorStream(true)
+                    .start()
+
+                val output = process.inputStream.bufferedReader().readText()
+                if (process.waitFor() != 0) {
+                    logger.error("[$platform] $stage output:\n$output")
+                    error("[$platform] $stage failed. Check the logs above for details.")
+                }
+            }
+
+            runCommand(cmakeConfigCmd, "CMake configuration")
+            runCommand(listOf("cmake", "--build", ".", "--config", "Release"), "CMake build")
+
+            val shimLibName = when {
+                platform.startsWith("linux")   -> "pdfium4j_shim.so"
+                platform.startsWith("darwin")  -> "pdfium4j_shim.dylib"
+                platform.startsWith("windows") -> "pdfium4j_shim.dll"
+                else -> error("Unknown platform")
+            }
+
+            val builtLib = platformBuildDir.walkTopDown().find { it.name == shimLibName }
+                ?: error("Native shim NOT FOUND after build: $shimLibName in $platformBuildDir")
+
+            if (platform.startsWith("darwin")) {
+                logger.lifecycle("[$platform] Fixing dylib linkage with install_name_tool")
+                // Fix the shim's own ID
+                runCommand(listOf("install_name_tool", "-id", "@rpath/$shimLibName", builtLib.absolutePath), "Fixing shim ID")
+                // Fix the reference to libpdfium.dylib
+                // We use both the relative name and the likely absolute path name if CMake embedded it
+                runCommand(listOf("install_name_tool", "-change", "libpdfium.dylib", "@loader_path/libpdfium.dylib", builtLib.absolutePath), "Fixing pdfium reference (short)")
+                runCommand(listOf("install_name_tool", "-change", "./libpdfium.dylib", "@loader_path/libpdfium.dylib", builtLib.absolutePath), "Fixing pdfium reference (dot)")
+
+                // Also fix libpdfium.dylib ID in its extraction dir if it exists there
+                val pdfiumLib = libDir.resolve("libpdfium.dylib")
+                if (pdfiumLib.exists()) {
+                    runCommand(listOf("install_name_tool", "-id", "@rpath/libpdfium.dylib", pdfiumLib.absolutePath), "Fixing pdfium ID")
+                }
+            }
+
+            logger.lifecycle("[$platform] Found built shim at: ${builtLib.absolutePath}")
+            proj.copy {
+                from(builtLib)
+                into(libDir)
+            }
+        }
+    }
+}
+
+val generateNativeIndex by tasks.registering {
+    description = "Generates native-libs.txt index files for all platforms"
+    dependsOn(extractPdfiumBinaries, buildShim)
+    val nativesRoot = pdfiumNativesDir.map { it.dir("natives") }
+    inputs.dir(nativesRoot)
+    outputs.dir(nativesRoot)
+
+    doLast {
+        nativesRoot.get().asFile.listFiles()?.filter { it.isDirectory }?.forEach { platformDir ->
+            val libs = platformDir.listFiles()?.filter {
+                val name = it.name
+                name.endsWith(".so") || name.endsWith(".dylib") || name.endsWith(".dll")
+            }?.map { it.name }?.sortedBy {
+                if (it.contains("pdfium") && !it.contains("shim")) 0 else 1
+            }
+            if (libs != null && libs.isNotEmpty()) {
+                platformDir.resolve("native-libs.txt").writeText(libs.joinToString("\n") + "\n")
+            }
+        }
+    }
+}
+
+val nativeJarTasks = activePlatforms.keys.map { localName ->
+    val sanitized = localName.split("-").joinToString("") { it.replaceFirstChar(Char::uppercase) }
+    tasks.register<Jar>("nativesJar$sanitized") {
+        dependsOn(generateNativeIndex)
+        group = "build"
+        description = "Packages $localName native library"
+        archiveClassifier.set("natives-$localName")
+
+        doFirst {
+            val dir = pdfiumNativesDir.get().asFile.resolve("natives/$localName")
+            val hasShim = dir.listFiles()?.any { it.name.contains("shim") } ?: false
+            if (!hasShim) {
+                throw GradleException("Cannot package nativesJar$sanitized: Native shim missing for $localName. " +
+                    "The shim must be built for this platform before packaging. " +
+                    "To build only for the host platform, use -PpdfiumPlatformFilter=$hostPlatform")
+            }
+        }
+
+        from(pdfiumNativesDir.map { it.dir("natives/$localName") }) { into("natives/$localName") }
+    }
+}
+
+tasks.register("verifyNativeJars") {
+    description = "Verifies the integrity of the generated native JARs"
+    dependsOn(nativeJarTasks)
+    doLast {
+        activePlatforms.keys.forEach { platform ->
+            val sanitized = platform.split("-").joinToString("") { it.replaceFirstChar(Char::uppercase) }
+            val jarTask = tasks.named<Jar>("nativesJar$sanitized").get()
+            val jarFile = jarTask.archiveFile.get().asFile
+
+            if (jarFile.exists()) {
+                val entries = mutableSetOf<String>()
+                project.zipTree(jarFile).visit {
+                    if (!this.isDirectory) {
+                        entries.add(this.path)
+                    }
+                }
+
+                val expectedPdfium = when {
+                    platform.startsWith("linux")   -> "natives/$platform/libpdfium.so"
+                    platform.startsWith("darwin")  -> "natives/$platform/libpdfium.dylib"
+                    platform.startsWith("windows") -> "natives/$platform/pdfium.dll"
+                    else -> error("Unknown platform type for verification: $platform")
+                }
+                val expectedShim = when {
+                    platform.startsWith("linux")   -> "natives/$platform/pdfium4j_shim.so"
+                    platform.startsWith("darwin")  -> "natives/$platform/pdfium4j_shim.dylib"
+                    platform.startsWith("windows") -> "natives/$platform/pdfium4j_shim.dll"
+                    else -> error("Unknown platform type for verification: $platform")
+                }
+
+                if (!entries.contains(expectedPdfium)) {
+                    throw GradleException("Integrity check failed: Missing $expectedPdfium in ${jarFile.name}")
+                }
+                if (!entries.contains(expectedShim)) {
+                    throw GradleException("Integrity check failed: Missing $expectedShim in ${jarFile.name}")
+                }
+                if (!entries.contains("natives/$platform/native-libs.txt")) {
+                    throw GradleException("Integrity check failed: Missing native-libs.txt in ${jarFile.name}")
+                }
+                logger.lifecycle("Successfully verified integrity of ${jarFile.name} (contains PDFium + Shim)")
+            }
+        }
+    }
+}
+
+tasks.assemble {
+    dependsOn(nativeJarTasks)
+}
+
 tasks.withType<Test> {
     useJUnitPlatform()
-    dependsOn("extractPdfiumBinaries")
+    dependsOn(generateNativeIndex)
     classpath += files(layout.buildDirectory.dir("generated-natives"))
     jvmArgs(
         "--enable-preview",
         "--enable-native-access=ALL-UNNAMED"
     )
+    if (platformFilter != null) {
+        systemProperty("pdfium4j.platform", platformFilter)
+    }
     filter {
         excludeTestsMatching("org.grimmory.pdfium4j.PathologicalPdfTest")
     }
+}
+
+tasks.named<Test>("test") {
+    exclude("**/*AllocationTest.class")
+}
+
+tasks.register<Test>("allocationTests") {
+    group = "verification"
+    description = "Runs allocation assertions for native save hot paths"
+    dependsOn(generateNativeIndex)
+    useJUnitPlatform()
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath + files(layout.buildDirectory.dir("generated-natives"))
+    include("**/*AllocationTest.class")
+    jvmArgs(
+        "--enable-preview",
+        "--enable-native-access=ALL-UNNAMED"
+    )
 }
 
 tasks.withType<Javadoc> {
@@ -138,8 +538,6 @@ tasks.withType<Javadoc> {
     }
     isFailOnError = false
 }
-
-
 
 tasks.withType<JavaExec> {
     jvmArgs(
@@ -180,17 +578,12 @@ tasks.register<JavaExec>("runCorpusProcessor") {
     group = "application"
     description = "Runs the CorpusProcessor to write metadata to PDFs"
     if (enableCorpusTools.get()) {
-        dependsOn("extractPdfiumBinaries")
+        dependsOn("buildShim")
     }
     mainClass.set("org.grimmory.pdfium4j.CorpusProcessor")
     classpath = sourceSets["test"].runtimeClasspath
     classpath += files(layout.buildDirectory.dir("generated-natives"))
-    forwardSystemProperties(
-        listOf(
-            "corpus.dir",
-            "corpus.outDir"
-        )
-    )
+    forwardSystemProperties(listOf("corpus.dir", "corpus.outDir"))
     doFirst {
         requireCorpusToolsEnabled(name)
         requireRunnerSource(name, "src/test/java/org/grimmory/pdfium4j/CorpusProcessor.java")
@@ -204,16 +597,7 @@ tasks.register<JavaExec>("runPdfBoxCorpusGenerator") {
     description = "Generates a synthetic PDF corpus using PDFBox (test scope only)"
     mainClass.set("org.grimmory.pdfium4j.PdfBoxCorpusGenerator")
     classpath = sourceSets["test"].runtimeClasspath
-    forwardSystemProperties(
-        listOf(
-            "corpus.targetCount",
-            "corpus.maxPages",
-            "corpus.seed",
-            "corpus.startIndex",
-            "corpus.clean",
-            "corpus.outDir"
-        )
-    )
+    forwardSystemProperties(listOf("corpus.targetCount", "corpus.maxPages", "corpus.seed", "corpus.startIndex", "corpus.clean", "corpus.outDir"))
     doFirst {
         requireCorpusToolsEnabled(name)
         requireRunnerSource(name, "src/test/java/org/grimmory/pdfium4j/PdfBoxCorpusGenerator.java")
@@ -226,25 +610,17 @@ tasks.register<Exec>("runPdfJsIngestion") {
     description = "Ingests Mozilla's pdf.js test corpus"
     commandLine("python3", "scripts/ingest_pdfjs.py")
 }
+
 tasks.register<JavaExec>("runCorpusMetadataStress") {
     group = "application"
     description = "Runs metadata save stress validation against corpus PDFs"
     if (enableCorpusTools.get()) {
-        dependsOn("extractPdfiumBinaries")
+        dependsOn("buildShim")
     }
     mainClass.set("org.grimmory.pdfium4j.CorpusMetadataStressRunner")
     classpath = sourceSets["test"].runtimeClasspath
     classpath += files(layout.buildDirectory.dir("generated-natives"))
-    forwardSystemProperties(
-        listOf(
-            "corpus.dir",
-            "corpus.passes",
-            "corpus.limit",
-            "corpus.seed",
-            "corpus.includeRegex",
-            "corpus.failFast"
-        )
-    )
+    forwardSystemProperties(listOf("corpus.dir", "corpus.passes", "corpus.limit", "corpus.seed", "corpus.includeRegex", "corpus.failFast"))
     doFirst {
         requireCorpusToolsEnabled(name)
         requireRunnerSource(name, "src/test/java/org/grimmory/pdfium4j/CorpusMetadataStressRunner.java")
@@ -252,153 +628,39 @@ tasks.register<JavaExec>("runCorpusMetadataStress") {
     }
 }
 
-tasks.named("check") {
-    dependsOn("spotlessCheck")
-}
-
-// -- PDFium native binary download & bundling --
-// Prebuilt binaries from https://github.com/bblanchon/pdfium-binaries
-// Exclude stale empty natives dirs from src/main/resources (if present)
-tasks.processResources { exclude("natives/**") }
-
-val pdfiumVersion = findProperty("pdfiumVersion")?.toString() ?: "7749"
-
-val pdfiumPlatforms = mapOf(
-    "linux-x64"        to "linux-x64",
-    "linux-arm64"      to "linux-arm64",
-    "linux-musl-x64"   to "linux-musl-x64",
-    "linux-musl-arm64" to "linux-musl-arm64",
-    "darwin-x64"       to "mac-x64",
-    "darwin-arm64"     to "mac-arm64",
-    "windows-x64"      to "win-x64"
-)
-
-// When set (e.g. -PpdfiumPlatformFilter=linux-musl-x64), only that platform
-// is downloaded and extracted. Useful in composite-build / container scenarios.
-val platformFilter = findProperty("pdfiumPlatformFilter")?.toString()
-val activePlatforms = if (platformFilter != null) {
-    pdfiumPlatforms.filterKeys { it == platformFilter }
-} else {
-    pdfiumPlatforms
-}
-
-val pdfiumArchiveDir = layout.buildDirectory.dir("pdfium-archives")
-val pdfiumNativesDir = layout.buildDirectory.dir("generated-natives")
-
-val downloadPdfiumBinaries by tasks.registering {
-    description = "Downloads prebuilt PDFium binaries for all supported platforms"
-    outputs.dir(pdfiumArchiveDir)
-    doLast {
-        val dir = pdfiumArchiveDir.get().asFile
-        dir.mkdirs()
-        val base = "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/$pdfiumVersion"
-        activePlatforms.values.forEach { remoteName ->
-            val target = dir.resolve("pdfium-$remoteName.tgz")
-            if (!target.exists()) {
-                logger.lifecycle("Downloading pdfium-$remoteName.tgz …")
-                val conn = URI("$base/pdfium-$remoteName.tgz").toURL()
-                    .openConnection() as HttpURLConnection
-                conn.instanceFollowRedirects = true
-                conn.connect()
-                check(conn.responseCode == 200) {
-                    "Download failed: HTTP ${conn.responseCode} for pdfium-$remoteName.tgz"
-                }
-                conn.inputStream.use { inp ->
-                    target.outputStream().buffered().use { out -> inp.copyTo(out) }
-                }
-            }
-        }
-    }
-}
-
-val extractPdfiumBinaries by tasks.registering {
-    description = "Extracts PDFium native libraries for bundling into the JAR"
-    dependsOn(downloadPdfiumBinaries)
-    outputs.dir(pdfiumNativesDir)
-    // Capture project reference at configuration time to avoid deprecated Task.project at execution time
-    val proj = project
-    doLast {
-        val nativesRoot = pdfiumNativesDir.get().asFile.resolve("natives")
-        nativesRoot.deleteRecursively()
-        activePlatforms.forEach { (localName, remoteName) ->
-            val archive = pdfiumArchiveDir.get().asFile.resolve("pdfium-$remoteName.tgz")
-            val platformDir = nativesRoot.resolve(localName)
-            platformDir.mkdirs()
-            val libFileName = when {
-                localName.startsWith("linux")   -> "libpdfium.so"
-                localName.startsWith("darwin")  -> "libpdfium.dylib"
-                localName.startsWith("windows") -> "pdfium.dll"
-                else -> error("Unknown platform: $localName")
-            }
-            proj.copy {
-                from(proj.tarTree(proj.resources.gzip(archive))) {
-                    include("lib/$libFileName", "bin/$libFileName")
-                    eachFile { relativePath = RelativePath(true, name) }
-                }
-                into(platformDir)
-                includeEmptyDirs = false
-            }
-            platformDir.resolve("native-libs.txt").writeText("$libFileName\n")
-        }
-    }
-}
-
-// Per-platform native JAR tasks, one classified JAR per supported OS/arch
-val nativeJarTasks = pdfiumPlatforms.keys.map { localName ->
-    val sanitized = localName.split("-").joinToString("") { it.replaceFirstChar(Char::uppercase) }
-    tasks.register<Jar>("nativesJar$sanitized") {
-        dependsOn(extractPdfiumBinaries)
-        group = "build"
-        description = "Packages $localName native library"
-        archiveClassifier.set("natives-$localName")
-        from(pdfiumNativesDir.map { it.dir("natives/$localName") }) { into("natives/$localName") }
-    }
-}
-
-tasks.assemble {
-    dependsOn(nativeJarTasks)
-}
-
 dependencies {
     compileOnly("com.github.spotbugs:spotbugs-annotations:4.9.8")
     testCompileOnly("com.github.spotbugs:spotbugs-annotations:4.9.8")
     testImplementation("org.apache.pdfbox:pdfbox:3.0.7")
     testImplementation("org.apache.pdfbox:xmpbox:3.0.7")
-    testImplementation("org.junit.jupiter:junit-jupiter:6.0.3")
+    testImplementation("org.junit.jupiter:junit-jupiter:5.14.4")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
-
-// -- Maven Central publishing --
 
 publishing {
     publications {
         create<MavenPublication>("mavenJava") {
             from(components["java"])
-
             nativeJarTasks.forEach { jarTask ->
                 artifact(jarTask)
             }
-
             pom {
                 name = "PDFium4j"
                 description = "Lightweight Java FFM wrapper around Google's PDFium PDF engine"
                 url = "https://github.com/grimmory-tools/PDFium4j"
                 inceptionYear = "2025"
-
                 licenses {
                     license {
                         name = "Apache License, Version 2.0"
                         url = "https://www.apache.org/licenses/LICENSE-2.0"
                     }
                 }
-
                 developers {
                     developer {
                         id = "grimmory-tools"
                         name = "Grimmory Tools"
                     }
                 }
-
                 scm {
                     connection = "scm:git:git://github.com/grimmory-tools/PDFium4j.git"
                     developerConnection = "scm:git:ssh://github.com/grimmory-tools/PDFium4j.git"
