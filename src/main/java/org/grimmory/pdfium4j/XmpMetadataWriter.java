@@ -2,10 +2,8 @@ package org.grimmory.pdfium4j;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.io.OutputStreamWriter;
 import java.io.StringWriter;
 import java.io.Writer;
-import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -18,27 +16,7 @@ import org.grimmory.pdfium4j.exception.PdfiumException;
 import org.grimmory.pdfium4j.model.XmpMetadata;
 import org.grimmory.pdfium4j.model.XmpMetadata.QualifiedIdentifier;
 
-/**
- * Serializes {@link XmpMetadata} to XMP XML packets suitable for embedding in PDF files.
- *
- * <p>Supports Dublin Core, PDF/A, Calibre, and user-registered custom namespaces.
- *
- * <pre>{@code
- * XmpMetadataWriter writer = new XmpMetadataWriter()
- *     .registerNamespace("booklore", "http://booklore.app/xmp-namespace");
- *
- * XmpMetadata meta = XmpMetadata.builder()
- *     .title("My Book")
- *     .creators(List.of("Author"))
- *     .subjects(List.of("fiction"))
- *     .language("en")
- *     .customFields(Map.of("booklore:shelf", "favorites"))
- *     .customListFields(Map.of("booklore:tags", List.of("tag1", "tag2")))
- *     .build();
- *
- * writer.write(meta, outputStream);
- * }</pre>
- */
+/** Serializes {@link XmpMetadata} to XMP XML packets suitable for embedding in PDF files. */
 public final class XmpMetadataWriter {
 
   private static final String NS_RDF = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
@@ -57,17 +35,10 @@ public final class XmpMetadataWriter {
   private static final String RDF_BAG_END = "    </rdf:Bag>\n";
   private static final String RDF_SEQ_START = "    <rdf:Seq>\n";
   private static final String RDF_SEQ_END = "    </rdf:Seq>\n";
+  private static final String ATTRIBUTE_END = "\">\n";
 
   private final Map<String, String> customNamespaces = LinkedHashMap.newLinkedHashMap(8);
 
-  /**
-   * Register a custom namespace for XMP serialization.
-   *
-   * @param prefix the XML namespace prefix (e.g. "booklore")
-   * @param uri the namespace URI (e.g. "http://booklore.app/xmp-namespace")
-   * @return this writer for chaining
-   * @throws IllegalArgumentException if prefix conflicts with reserved prefixes
-   */
   public XmpMetadataWriter registerNamespace(String prefix, String uri) {
     Objects.requireNonNull(prefix, "prefix");
     Objects.requireNonNull(uri, "uri");
@@ -81,97 +52,130 @@ public final class XmpMetadataWriter {
     return this;
   }
 
-  /**
-   * Serialize an {@link XmpMetadata} record to a complete XMP packet string.
-   *
-   * @param metadata the metadata to serialize
-   * @return a complete XMP packet string
-   */
   public String write(XmpMetadata metadata) {
     Objects.requireNonNull(metadata, "metadata");
     validate(metadata);
     StringWriter sw = new StringWriter();
     try {
-      writeToWriter(metadata, sw);
+      writeToSink(metadata, new WriterSink(sw));
     } catch (IOException e) {
       throw new PdfiumException("Unexpected I/O error writing to StringWriter", e);
     }
     return sw.toString();
   }
 
-  /**
-   * Serialize an {@link XmpMetadata} record directly to an {@link OutputStream} using UTF-8
-   * encoding to avoid intermediate String allocations.
-   *
-   * @param metadata the metadata to serialize
-   * @param out the caller-owned stream to write to (this method never closes it)
-   * @throws PdfiumException if an I/O error occurs or metadata is invalid
-   */
   public void write(XmpMetadata metadata, OutputStream out) {
     Objects.requireNonNull(metadata, "metadata");
     Objects.requireNonNull(out, "out");
     validate(metadata);
     try {
-      Writer w = new OutputStreamWriter(out, StandardCharsets.UTF_8);
-      writeToWriter(metadata, w);
-      w.flush();
+      writeToSink(metadata, new OutputStreamSink(out));
+      out.flush();
     } catch (IOException e) {
       throw new PdfiumException("I/O error writing XMP to stream", e);
     }
   }
 
-  private void validate(XmpMetadata metadata) {
-    metadata.calibreFields().keySet().forEach(XmpMetadataWriter::validateNcName);
-    metadata.customFields().keySet().forEach(this::validateCustomField);
-    metadata.customListFields().keySet().forEach(this::validateCustomField);
+  private interface Sink {
+    void write(String s) throws IOException;
+
+    void write(int cp) throws IOException;
   }
 
-  private void validateCustomField(String key) {
-    int colonIdx = key.indexOf(':');
-    if (colonIdx > 0) {
-      String prefix = key.substring(0, colonIdx);
-      String localName = key.substring(colonIdx + 1);
-      validateNcName(prefix);
-      validateNcName(localName);
-      if (!"xmp".equals(prefix) && !customNamespaces.containsKey(prefix)) {
-        throw new IllegalArgumentException("Namespace prefix '" + prefix + "' is not registered");
+  private static final class WriterSink implements Sink {
+    private final Writer writer;
+
+    WriterSink(Writer writer) {
+      this.writer = writer;
+    }
+
+    @Override
+    public void write(String s) throws IOException {
+      writer.write(s);
+    }
+
+    @Override
+    public void write(int cp) throws IOException {
+      if (Character.isSupplementaryCodePoint(cp)) {
+        writer.write(Character.highSurrogate(cp));
+        writer.write(Character.lowSurrogate(cp));
+      } else {
+        writer.write(cp);
       }
-    } else {
-      validateNcName(key);
     }
   }
 
-  /**
-   * Internal serialization logic using a {@link Writer}.
-   *
-   * @param metadata the metadata to serialize
-   * @param w the writer to use
-   * @throws IOException if an I/O error occurs
-   */
-  private void writeToWriter(XmpMetadata metadata, Writer w) throws IOException {
-    w.write("<?xpacket begin=\"\uFEFF\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n");
-    w.write("<x:xmpmeta xmlns:x=\"adobe:ns:meta/\">\n");
-    w.write("<rdf:RDF xmlns:rdf=\"");
-    w.write(NS_RDF);
-    w.write("\">\n");
+  private static final class OutputStreamSink implements Sink {
+    private final OutputStream out;
 
-    writeDescriptions(w, metadata);
+    OutputStreamSink(OutputStream out) {
+      this.out = out;
+    }
 
-    w.write("</rdf:RDF>\n");
-    w.write("</x:xmpmeta>\n");
-    writePadding(w);
-    w.write("<?xpacket end=\"w\"?>");
+    @Override
+    public void write(String s) throws IOException {
+      if (s == null) return;
+      int len = s.length();
+      int i = 0;
+      while (i < len) {
+        char c = s.charAt(i);
+        if (Character.isHighSurrogate(c) && i + 1 < len) {
+          char next = s.charAt(i + 1);
+          if (Character.isLowSurrogate(next)) {
+            write(Character.toCodePoint(c, next));
+            i += 2;
+            continue;
+          }
+        }
+        write(c);
+        i++;
+      }
+    }
+
+    @Override
+    public void write(int cp) throws IOException {
+      if (cp <= 127) {
+        out.write(cp);
+      } else if (cp <= 0x7FF) {
+        out.write(0xC0 | (cp >> 6));
+        out.write(0x80 | (cp & 0x3F));
+      } else if (cp <= 0xFFFF) {
+        out.write(0xE0 | (cp >> 12));
+        out.write(0x80 | ((cp >> 6) & 0x3F));
+        out.write(0x80 | (cp & 0x3F));
+      } else {
+        out.write(0xF0 | (cp >> 18));
+        out.write(0x80 | ((cp >> 12) & 0x3F));
+        out.write(0x80 | ((cp >> 6) & 0x3F));
+        out.write(0x80 | (cp & 0x3F));
+      }
+    }
   }
 
-  private void writeDescriptions(Writer w, XmpMetadata metadata) throws IOException {
-    writeDublinCore(w, metadata);
-    writePdfAConformance(w, metadata);
-    writeCalibreFields(w, metadata);
-    writeCustomFields(w, metadata);
-    writeXmpIdentifiers(w, metadata);
+  private void writeToSink(XmpMetadata metadata, Sink s) throws IOException {
+    s.write("<?xpacket begin=\"\uFEFF\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n");
+    s.write("<x:xmpmeta xmlns:x=\"adobe:ns:meta/\">\n");
+    s.write("<rdf:RDF xmlns:rdf=\"");
+    s.write(NS_RDF);
+    s.write(ATTRIBUTE_END);
+
+    writeDescriptions(s, metadata);
+
+    s.write("</rdf:RDF>\n");
+    s.write("</x:xmpmeta>\n");
+    writePadding(s);
+    s.write("<?xpacket end=\"w\"?>");
   }
 
-  private static void writeDublinCore(Writer w, XmpMetadata metadata) throws IOException {
+  private void writeDescriptions(Sink s, XmpMetadata metadata) throws IOException {
+    writeDublinCore(s, metadata);
+    writePdfAConformance(s, metadata);
+    writeCalibreFields(s, metadata);
+    writeCustomFields(s, metadata);
+    writeXmpIdentifiers(s, metadata);
+  }
+
+  private static void writeDublinCore(Sink s, XmpMetadata metadata) throws IOException {
     boolean hasDc =
         metadata.title().isPresent()
             || !metadata.creators().isEmpty()
@@ -184,91 +188,77 @@ public final class XmpMetadataWriter {
             || !metadata.identifiers().isEmpty();
     if (!hasDc) return;
 
-    w.write(RDF_DESCRIPTION_START);
-    w.write(XMLNS_ATTR);
-    w.write("dc=\"");
-    w.write(NS_DC);
-    w.write("\">\n");
+    s.write(RDF_DESCRIPTION_START);
+    s.write(XMLNS_ATTR);
+    s.write("dc=\"");
+    s.write(NS_DC);
+    s.write(ATTRIBUTE_END);
 
-    Optional<String> title = metadata.title();
-    if (title.isPresent()) writeAlt(w, "dc:title", title.get());
+    metadata.title().ifPresent(v -> wrapError(() -> writeAlt(s, "dc:title", v)));
+    if (!metadata.creators().isEmpty()) writeSeq(s, "dc:creator", metadata.creators());
+    metadata.description().ifPresent(v -> wrapError(() -> writeAlt(s, "dc:description", v)));
+    if (!metadata.subjects().isEmpty()) writeBag(s, "dc:subject", metadata.subjects());
+    metadata.publisher().ifPresent(v -> wrapError(() -> writeBag(s, "dc:publisher", List.of(v))));
+    metadata.language().ifPresent(v -> wrapError(() -> writeBag(s, "dc:language", List.of(v))));
+    metadata.date().ifPresent(v -> wrapError(() -> writeSeq(s, "dc:date", List.of(v))));
+    metadata.rights().ifPresent(v -> wrapError(() -> writeAlt(s, "dc:rights", v)));
+    if (!metadata.identifiers().isEmpty()) writeBag(s, "dc:identifier", metadata.identifiers());
 
-    if (!metadata.creators().isEmpty()) writeSeq(w, "dc:creator", metadata.creators());
-
-    Optional<String> description = metadata.description();
-    if (description.isPresent()) writeAlt(w, "dc:description", description.get());
-
-    if (!metadata.subjects().isEmpty()) writeBag(w, "dc:subject", metadata.subjects());
-
-    Optional<String> publisher = metadata.publisher();
-    if (publisher.isPresent()) writeBag(w, "dc:publisher", List.of(publisher.get()));
-
-    Optional<String> language = metadata.language();
-    if (language.isPresent()) writeBag(w, "dc:language", List.of(language.get()));
-
-    Optional<String> date = metadata.date();
-    if (date.isPresent()) writeSeq(w, "dc:date", List.of(date.get()));
-
-    Optional<String> rights = metadata.rights();
-    if (rights.isPresent()) writeAlt(w, "dc:rights", rights.get());
-
-    if (!metadata.identifiers().isEmpty()) writeBag(w, "dc:identifier", metadata.identifiers());
-
-    w.write(RDF_DESCRIPTION_END);
+    s.write(RDF_DESCRIPTION_END);
   }
 
-  private static void writePdfAConformance(Writer w, XmpMetadata metadata) throws IOException {
+  private static void writePdfAConformance(Sink s, XmpMetadata metadata) throws IOException {
     Optional<String> pdfaConformance = metadata.pdfaConformance();
     if (pdfaConformance.isEmpty()) return;
     String conf = pdfaConformance.get();
     if (conf.isBlank()) return;
 
-    w.write(RDF_DESCRIPTION_START);
-    w.write(XMLNS_ATTR);
-    w.write("pdfaid=\"");
-    w.write(NS_PDFA_ID);
-    w.write("\">\n");
+    s.write(RDF_DESCRIPTION_START);
+    s.write(XMLNS_ATTR);
+    s.write("pdfaid=\"");
+    s.write(NS_PDFA_ID);
+    s.write(ATTRIBUTE_END);
 
     if (conf.length() >= 2 && Character.isDigit(conf.charAt(0))) {
-      w.write("  <pdfaid:part>");
-      w.write(conf.charAt(0));
-      w.write("</pdfaid:part>\n");
-      w.write("  <pdfaid:conformance>");
-      w.write(Character.toUpperCase(conf.charAt(1)));
-      w.write("</pdfaid:conformance>\n");
+      s.write("  <pdfaid:part>");
+      s.write(conf.charAt(0));
+      s.write("</pdfaid:part>\n");
+      s.write("  <pdfaid:conformance>");
+      s.write(Character.toUpperCase(conf.charAt(1)));
+      s.write("</pdfaid:conformance>\n");
     } else {
-      w.write("  <pdfaid:conformance>");
-      w.write(escapeXml(conf));
-      w.write("</pdfaid:conformance>\n");
+      s.write("  <pdfaid:conformance>");
+      writeEscaped(s, conf);
+      s.write("</pdfaid:conformance>\n");
     }
 
-    w.write(RDF_DESCRIPTION_END);
+    s.write(RDF_DESCRIPTION_END);
   }
 
-  private static void writeCalibreFields(Writer w, XmpMetadata metadata) throws IOException {
+  private static void writeCalibreFields(Sink s, XmpMetadata metadata) throws IOException {
     if (metadata.calibreFields().isEmpty()) return;
 
-    w.write(RDF_DESCRIPTION_START);
-    w.write(XMLNS_ATTR);
-    w.write("calibre=\"");
-    w.write(NS_CALIBRE);
-    w.write("\">\n");
+    s.write(RDF_DESCRIPTION_START);
+    s.write(XMLNS_ATTR);
+    s.write("calibre=\"");
+    s.write(NS_CALIBRE);
+    s.write(ATTRIBUTE_END);
 
     for (Map.Entry<String, String> entry : metadata.calibreFields().entrySet()) {
       String key = entry.getKey();
-      w.write("  <calibre:");
-      w.write(key);
-      w.write(">");
-      w.write(escapeXml(entry.getValue()));
-      w.write("</calibre:");
-      w.write(key);
-      w.write(">\n");
+      s.write("  <calibre:");
+      s.write(key);
+      s.write(">");
+      writeEscaped(s, entry.getValue());
+      s.write("</calibre:");
+      s.write(key);
+      s.write(">\n");
     }
 
-    w.write(RDF_DESCRIPTION_END);
+    s.write(RDF_DESCRIPTION_END);
   }
 
-  private void writeCustomFields(Writer w, XmpMetadata metadata) throws IOException {
+  private void writeCustomFields(Sink s, XmpMetadata metadata) throws IOException {
     if (metadata.customFields().isEmpty() && metadata.customListFields().isEmpty()) return;
 
     Map<String, Map<String, String>> simpleGrouped = LinkedHashMap.newLinkedHashMap(8);
@@ -281,91 +271,167 @@ public final class XmpMetadataWriter {
     Set<String> allPrefixes = new LinkedHashSet<>(simpleGrouped.keySet());
     allPrefixes.addAll(listGrouped.keySet());
 
-    writePrefixedCustomDescriptions(w, allPrefixes, simpleGrouped, listGrouped);
-    writeUnprefixedCustomDescription(w, simpleUnprefixed, listUnprefixed);
-  }
-
-  private void groupCustomFields(
-      XmpMetadata metadata,
-      Map<String, Map<String, String>> simpleGrouped,
-      Map<String, Map<String, List<String>>> listGrouped,
-      Map<String, String> simpleUnprefixed,
-      Map<String, List<String>> listUnprefixed) {
-    for (Map.Entry<String, String> entry : metadata.customFields().entrySet()) {
-      processField(entry.getKey(), entry.getValue(), simpleGrouped, simpleUnprefixed);
-    }
-    for (Map.Entry<String, List<String>> entry : metadata.customListFields().entrySet()) {
-      processField(entry.getKey(), entry.getValue(), listGrouped, listUnprefixed);
-    }
-  }
-
-  private void writePrefixedCustomDescriptions(
-      Writer w,
-      Set<String> allPrefixes,
-      Map<String, Map<String, String>> simpleGrouped,
-      Map<String, Map<String, List<String>>> listGrouped)
-      throws IOException {
     for (String prefix : allPrefixes) {
       String uri = customNamespaces.get(prefix);
-      w.write(RDF_DESCRIPTION_START);
-      w.write(XMLNS_ATTR);
-      w.write(prefix);
-      w.write("=\"");
-      w.write(escapeXml(uri));
-      w.write("\">\n");
+      s.write(RDF_DESCRIPTION_START);
+      s.write(XMLNS_ATTR);
+      s.write(prefix);
+      s.write("=\"");
+      writeEscaped(s, uri);
+      s.write(ATTRIBUTE_END);
 
       Map<String, String> simples = simpleGrouped.get(prefix);
       if (simples != null) {
         for (Map.Entry<String, String> field : simples.entrySet()) {
-          writeSimpleField(w, prefix, field.getKey(), field.getValue());
+          writeSimpleField(s, prefix, field.getKey(), field.getValue());
         }
       }
 
       Map<String, List<String>> lists = listGrouped.get(prefix);
       if (lists != null) {
         for (Map.Entry<String, List<String>> field : lists.entrySet()) {
-          writeListField(w, prefix, field.getKey(), field.getValue());
+          writeListField(s, prefix, field.getKey(), field.getValue());
         }
       }
-      w.write(RDF_DESCRIPTION_END);
+      s.write(RDF_DESCRIPTION_END);
     }
+    writeUnprefixedCustomDescription(s, simpleUnprefixed, listUnprefixed);
   }
 
   private static void writeUnprefixedCustomDescription(
-      Writer w, Map<String, String> simpleUnprefixed, Map<String, List<String>> listUnprefixed)
+      Sink s, Map<String, String> simpleUnprefixed, Map<String, List<String>> listUnprefixed)
       throws IOException {
     if (simpleUnprefixed.isEmpty() && listUnprefixed.isEmpty()) return;
 
-    w.write(RDF_DESCRIPTION_START);
-    w.write(XMLNS_ATTR);
-    w.write("xmp=\"");
-    w.write(NS_XAP);
-    w.write("\">\n");
+    s.write(RDF_DESCRIPTION_START);
+    s.write(XMLNS_ATTR);
+    s.write("xmp=\"");
+    s.write(NS_XAP);
+    s.write(ATTRIBUTE_END);
     for (Map.Entry<String, String> entry : simpleUnprefixed.entrySet()) {
-      writeSimpleField(w, "xmp", stripPrefix(entry.getKey()), entry.getValue());
+      writeSimpleField(s, "xmp", stripPrefix(entry.getKey()), entry.getValue());
     }
     for (Map.Entry<String, List<String>> entry : listUnprefixed.entrySet()) {
-      writeListField(w, "xmp", stripPrefix(entry.getKey()), entry.getValue());
+      writeListField(s, "xmp", stripPrefix(entry.getKey()), entry.getValue());
     }
-    w.write(RDF_DESCRIPTION_END);
+    s.write(RDF_DESCRIPTION_END);
   }
 
-  private <T> void processField(
-      String key, T value, Map<String, Map<String, T>> grouped, Map<String, T> unprefixed) {
-    int colonIdx = key.indexOf(':');
-    if (colonIdx > 0) {
-      String prefix = key.substring(0, colonIdx);
-      String localName = key.substring(colonIdx + 1);
-      if ("xmp".equals(prefix)) {
-        unprefixed.put(key, value);
-      } else {
-        // We know prefix is registered because of validate()
-        grouped
-            .computeIfAbsent(prefix, _ -> LinkedHashMap.newLinkedHashMap(8))
-            .put(localName, value);
+  private static void writeSimpleField(Sink s, String prefix, String localName, String value)
+      throws IOException {
+    s.write("  <");
+    s.write(prefix);
+    s.write(":");
+    s.write(localName);
+    s.write(">");
+    writeEscaped(s, value);
+    s.write("</");
+    s.write(prefix);
+    s.write(":");
+    s.write(localName);
+    s.write(">\n");
+  }
+
+  private static void writeListField(Sink s, String prefix, String localName, List<String> values)
+      throws IOException {
+    writeBag(s, prefix + ":" + localName, values);
+  }
+
+  private static void writeXmpIdentifiers(Sink s, XmpMetadata metadata) throws IOException {
+    if (metadata.xmpIdentifiers().isEmpty()) return;
+
+    s.write(RDF_DESCRIPTION_START);
+    s.write(XMLNS_ATTR);
+    s.write("xmp=\"");
+    s.write(NS_XAP);
+    s.write("\"\n");
+    s.write(XMLNS_ATTR);
+    s.write("xmpidq=\"");
+    s.write(NS_XMP_IDQ);
+    s.write(ATTRIBUTE_END);
+    s.write("  <xmp:Identifier>\n");
+    s.write(RDF_BAG_START);
+    for (QualifiedIdentifier id : metadata.xmpIdentifiers()) {
+      s.write("      <rdf:li rdf:parseType=\"Resource\">\n");
+      s.write("        <xmpidq:Scheme>");
+      writeEscaped(s, id.scheme());
+      s.write("</xmpidq:Scheme>\n");
+      s.write("        <rdf:value>");
+      writeEscaped(s, id.value());
+      s.write("</rdf:value>\n");
+      s.write("      </rdf:li>\n");
+    }
+    s.write(RDF_BAG_END);
+    s.write("  </xmp:Identifier>\n");
+    s.write(RDF_DESCRIPTION_END);
+  }
+
+  private static void writeAlt(Sink s, String tag, String value) throws IOException {
+    s.write("  <");
+    s.write(tag);
+    s.write(">\n");
+    s.write("    <rdf:Alt>\n");
+    s.write("      <rdf:li xml:lang=\"x-default\">");
+    writeEscaped(s, value);
+    s.write(RDF_LI_END);
+    s.write("    </rdf:Alt>\n");
+    s.write("  </");
+    s.write(tag);
+    s.write(">\n");
+  }
+
+  private static void writeSeq(Sink s, String tag, List<String> values) throws IOException {
+    s.write("  <");
+    s.write(tag);
+    s.write(">\n");
+    s.write(RDF_SEQ_START);
+    for (String v : values) {
+      s.write(RDF_LI_START);
+      writeEscaped(s, v);
+      s.write(RDF_LI_END);
+    }
+    s.write(RDF_SEQ_END);
+    s.write("  </");
+    s.write(tag);
+    s.write(">\n");
+  }
+
+  private static void writeBag(Sink s, String tag, List<String> values) throws IOException {
+    s.write("  <");
+    s.write(tag);
+    s.write(">\n");
+    s.write(RDF_BAG_START);
+    for (String v : values) {
+      s.write(RDF_LI_START);
+      writeEscaped(s, v);
+      s.write(RDF_LI_END);
+    }
+    s.write(RDF_BAG_END);
+    s.write("  </");
+    s.write(tag);
+    s.write(">\n");
+  }
+
+  private static void writePadding(Sink s) throws IOException {
+    String padding =
+        "                                                                                \n";
+    for (int i = 0; i < 20; i++) s.write(padding);
+  }
+
+  private static void writeEscaped(Sink s, String text) throws IOException {
+    if (text == null) return;
+    final int textLength = text.length();
+    int i = 0;
+    while (i < textLength) {
+      int cp = text.codePointAt(i);
+      switch (cp) {
+        case '&' -> s.write("&amp;");
+        case '<' -> s.write("&lt;");
+        case '>' -> s.write("&gt;");
+        case '"' -> s.write("&quot;");
+        default -> s.write(cp);
       }
-    } else {
-      unprefixed.put(key, value);
+      i += Character.charCount(cp);
     }
   }
 
@@ -374,122 +440,33 @@ public final class XmpMetadataWriter {
     return colonIdx >= 0 ? key.substring(colonIdx + 1) : key;
   }
 
-  private static void writeSimpleField(Writer w, String prefix, String localName, String value)
-      throws IOException {
-    w.write("  <");
-    w.write(prefix);
-    w.write(":");
-    w.write(localName);
-    w.write(">");
-    w.write(escapeXml(value));
-    w.write("</");
-    w.write(prefix);
-    w.write(":");
-    w.write(localName);
-    w.write(">\n");
+  private void validate(XmpMetadata metadata) {
+    metadata.calibreFields().keySet().forEach(XmpMetadataWriter::validateNcName);
+    metadata.customFields().keySet().forEach(this::validateCustomField);
+    metadata.customListFields().keySet().forEach(this::validateCustomField);
   }
 
-  private static void writeListField(Writer w, String prefix, String localName, List<String> values)
-      throws IOException {
-    String tag = prefix + ":" + localName;
-    writeBag(w, tag, values);
-  }
-
-  private static void writeXmpIdentifiers(Writer w, XmpMetadata metadata) throws IOException {
-    if (metadata.xmpIdentifiers().isEmpty()) return;
-
-    w.write(RDF_DESCRIPTION_START);
-    w.write(XMLNS_ATTR);
-    w.write("xmp=\"");
-    w.write(NS_XAP);
-    w.write("\"\n");
-    w.write(XMLNS_ATTR);
-    w.write("xmpidq=\"");
-    w.write(NS_XMP_IDQ);
-    w.write("\">\n");
-    w.write("  <xmp:Identifier>\n");
-    w.write(RDF_BAG_START);
-    for (QualifiedIdentifier id : metadata.xmpIdentifiers()) {
-      w.write("      <rdf:li rdf:parseType=\"Resource\">\n");
-      w.write("        <xmpidq:Scheme>");
-      w.write(escapeXml(id.scheme()));
-      w.write("</xmpidq:Scheme>\n");
-      w.write("        <rdf:value>");
-      w.write(escapeXml(id.value()));
-      w.write("</rdf:value>\n");
-      w.write("      </rdf:li>\n");
-    }
-    w.write(RDF_BAG_END);
-    w.write("  </xmp:Identifier>\n");
-    w.write(RDF_DESCRIPTION_END);
-  }
-
-  private static void writeAlt(Writer w, String tag, String value) throws IOException {
-    w.write("  <");
-    w.write(tag);
-    w.write(">\n");
-    w.write("    <rdf:Alt>\n");
-    w.write("      <rdf:li xml:lang=\"x-default\">");
-    w.write(escapeXml(value));
-    w.write(RDF_LI_END);
-    w.write("    </rdf:Alt>\n");
-    w.write("  </");
-    w.write(tag);
-    w.write(">\n");
-  }
-
-  private static void writeSeq(Writer w, String tag, List<String> values) throws IOException {
-    w.write("  <");
-    w.write(tag);
-    w.write(">\n");
-    w.write(RDF_SEQ_START);
-    for (String v : values) {
-      w.write(RDF_LI_START);
-      w.write(escapeXml(v));
-      w.write(RDF_LI_END);
-    }
-    w.write(RDF_SEQ_END);
-    w.write("  </");
-    w.write(tag);
-    w.write(">\n");
-  }
-
-  private static void writeBag(Writer w, String tag, List<String> values) throws IOException {
-    w.write("  <");
-    w.write(tag);
-    w.write(">\n");
-    w.write(RDF_BAG_START);
-    for (String v : values) {
-      w.write(RDF_LI_START);
-      w.write(escapeXml(v));
-      w.write(RDF_LI_END);
-    }
-    w.write(RDF_BAG_END);
-    w.write("  </");
-    w.write(tag);
-    w.write(">\n");
-  }
-
-  private static void writePadding(Writer w) throws IOException {
-    String padding =
-        "                                                                                \n";
-    for (int i = 0; i < 20; i++) {
-      w.write(padding);
+  private void validateCustomField(String key) {
+    int colonIdx = key.indexOf(':');
+    if (colonIdx > 0) {
+      String prefix = key.substring(0, colonIdx);
+      validateNcName(prefix);
+      validateNcName(key.substring(colonIdx + 1));
+      if (!"xmp".equals(prefix) && !customNamespaces.containsKey(prefix)) {
+        throw new IllegalArgumentException("Namespace prefix '" + prefix + "' is not registered");
+      }
+    } else {
+      validateNcName(key);
     }
   }
 
   private static void validateNcName(String name) {
-    if (name == null || name.isEmpty()) {
-      throw new IllegalArgumentException("XML name must not be empty");
-    }
-    if (!isValidNcNameStart(name.charAt(0))) {
+    if (name == null || name.isEmpty() || !isValidNcNameStart(name.charAt(0)))
       throw new IllegalArgumentException("Invalid XML name: '" + name + "'");
-    }
-    for (int i = 1; i < name.length(); i++) {
-      if (!isValidNcNameChar(name.charAt(i))) {
+    final int nameLength = name.length();
+    for (int i = 1; i < nameLength; i++)
+      if (!isValidNcNameChar(name.charAt(i)))
         throw new IllegalArgumentException("Invalid XML name: '" + name + "'");
-      }
-    }
   }
 
   private static boolean isValidNcNameStart(char c) {
@@ -500,29 +477,38 @@ public final class XmpMetadataWriter {
     return isValidNcNameStart(c) || (c >= '0' && c <= '9') || c == '-' || c == '.';
   }
 
-  private static String escapeXml(String s) {
-    if (s == null) return "";
-    StringBuilder result = null;
-    for (int i = 0; i < s.length(); i++) {
-      char c = s.charAt(i);
-      String replacement =
-          switch (c) {
-            case '&' -> "&amp;";
-            case '<' -> "&lt;";
-            case '>' -> "&gt;";
-            case '"' -> "&quot;";
-            default -> null;
-          };
-      if (replacement != null) {
-        if (result == null) {
-          result = new StringBuilder(s.length() + 16);
-          result.append(s, 0, i);
-        }
-        result.append(replacement);
-      } else if (result != null) {
-        result.append(c);
-      }
+  private static <T> void processField(
+      String key, T value, Map<String, Map<String, T>> grouped, Map<String, T> unprefixed) {
+    int colonIdx = key.indexOf(':');
+    if (colonIdx > 0) {
+      String prefix = key.substring(0, colonIdx);
+      if ("xmp".equals(prefix)) unprefixed.put(key, value);
+      else
+        grouped
+            .computeIfAbsent(prefix, _ -> LinkedHashMap.newLinkedHashMap(8))
+            .put(key.substring(colonIdx + 1), value);
+    } else unprefixed.put(key, value);
+  }
+
+  private static void groupCustomFields(
+      XmpMetadata metadata,
+      Map<String, Map<String, String>> simpleGrouped,
+      Map<String, Map<String, List<String>>> listGrouped,
+      Map<String, String> simpleUnprefixed,
+      Map<String, List<String>> listUnprefixed) {
+    metadata.customFields().forEach((k, v) -> processField(k, v, simpleGrouped, simpleUnprefixed));
+    metadata.customListFields().forEach((k, v) -> processField(k, v, listGrouped, listUnprefixed));
+  }
+
+  private interface ThrowingRunnable {
+    void run() throws IOException;
+  }
+
+  private static void wrapError(ThrowingRunnable r) {
+    try {
+      r.run();
+    } catch (IOException e) {
+      throw new PdfiumException("XMP serialization error", e);
     }
-    return result != null ? result.toString() : s;
   }
 }
