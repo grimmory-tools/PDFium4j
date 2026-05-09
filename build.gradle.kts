@@ -237,6 +237,7 @@ fun calculateSha256(file: File): String {
 val extractPdfiumBinaries by tasks.registering {
     description = "Extracts PDFium native libraries for bundling into the JAR"
     dependsOn(downloadPdfiumBinaries)
+    inputs.property("activePlatforms", activePlatforms.keys)
     outputs.dir(pdfiumNativesDir)
     val proj = project
     doLast {
@@ -268,6 +269,7 @@ val pdfiumHeadersDir = layout.buildDirectory.dir("pdfium-headers")
 val extractPdfiumHeaders by tasks.registering {
     description = "Extracts PDFium headers for building the shim"
     dependsOn(downloadPdfiumBinaries)
+    inputs.property("activePlatforms", activePlatforms.keys)
     outputs.dir(pdfiumHeadersDir)
     val proj = project
     doLast {
@@ -305,6 +307,7 @@ val buildShim by tasks.registering {
     val proj = project
 
     inputs.dir(shimDir)
+    inputs.property("activePlatforms", activePlatforms.keys)
     outputs.dir(buildDir)
 
     doLast {
@@ -406,6 +409,7 @@ val buildShim by tasks.registering {
 val generateNativeIndex by tasks.registering {
     description = "Generates native-libs.txt index files for all platforms"
     dependsOn(extractPdfiumBinaries, buildShim)
+    inputs.property("activePlatforms", activePlatforms.keys)
     val nativesRoot = pdfiumNativesDir.map { it.dir("natives") }
     inputs.dir(nativesRoot)
     outputs.dir(nativesRoot)

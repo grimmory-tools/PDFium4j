@@ -9,7 +9,6 @@ Compact Java PDF engine on top of Java 25 FFM.
 - Render pages to RGBA buffers at custom DPI
 - Render bounded previews and thumbnails with memory caps
 - Extract plain text and per character bounds
-- **Zero-allocation data access** for metadata and text via functional callbacks or streams
 - Read page size, page count, labels, rotation, permissions, encryption state
 - Read and write metadata from Info dictionary
 - Extract raw XMP and parse structured XMP metadata
