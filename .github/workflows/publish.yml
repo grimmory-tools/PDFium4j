@@ -100,6 +100,27 @@ jobs:
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
+      - name: Stage unique native release assets
+        run: |
+          set -euo pipefail
+          rm -rf build/release-natives
+          mkdir -p build/release-natives
+
+          for platform_dir in build/generated-natives/natives/*; do
+            if [[ ! -d "$platform_dir" ]]; then
+              continue
+            fi
+            platform="$(basename "$platform_dir")"
+
+            for asset in "$platform_dir"/*; do
+              if [[ ! -f "$asset" ]]; then
+                continue
+              fi
+              base="$(basename "$asset")"
+              cp "$asset" "build/release-natives/${platform}-${base}"
+            done
+          done
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v2.3.2
         with:
@@ -111,7 +132,4 @@ jobs:
           files: |
             build/libs/*.jar
             build/pdfium-archives/*.tgz
-            build/generated-natives/natives/**/*.so
-            build/generated-natives/natives/**/*.dylib
-            build/generated-natives/natives/**/*.dll
-            build/generated-natives/natives/**/native-libs.txt
+            build/release-natives/*
