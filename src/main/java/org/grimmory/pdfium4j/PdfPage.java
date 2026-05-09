@@ -143,11 +143,13 @@ public final class PdfPage implements AutoCloseable {
       throw new IllegalArgumentException("Invalid dimensions: " + w + "x" + h);
     }
 
-    int stride = w * 4;
+    ensureRenderBudget(w, h);
+    int stride = Math.multiplyExact(w, BYTES_PER_PIXEL);
     // NativeBitmap owns its own arena as it may be passed across threads or have a longer lifecycle
     Arena arena = Arena.ofShared();
     try {
-      MemorySegment dest = arena.allocate((long) stride * h);
+      long sizeBytes = Math.multiplyExact((long) stride, (long) h);
+      MemorySegment dest = arena.allocate(sizeBytes);
       renderTo(dest, w, h, stride, flags.value(), OPAQUE_WHITE);
       return new NativeBitmap(w, h, stride, dest, arena);
     } catch (Exception t) {
@@ -443,9 +445,9 @@ public final class PdfPage implements AutoCloseable {
     ensureOpen();
     ensureRenderBudget(w, h);
 
-    int stride = w * 4;
+    int stride = Math.multiplyExact(w, BYTES_PER_PIXEL);
     try (var _ = ScratchBuffer.acquireScope()) {
-      MemorySegment dest = ScratchBuffer.get((long) stride * h);
+      MemorySegment dest = ScratchBuffer.get(Math.multiplyExact((long) stride, (long) h));
       renderTo(dest, w, h, stride, flags.value(), background);
 
       byte[] rgba = dest.toArray(JAVA_BYTE);

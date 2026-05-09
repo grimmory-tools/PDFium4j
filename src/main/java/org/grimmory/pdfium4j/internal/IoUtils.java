@@ -1,6 +1,5 @@
 package org.grimmory.pdfium4j.internal;
 
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.FileSystems;
@@ -51,21 +50,22 @@ public final class IoUtils {
     return path;
   }
 
-  @SuppressFBWarnings(
-      value = "RV_RETURN_VALUE_IGNORED_BAD_PRACTICE",
-      justification = "Best-effort on non-POSIX")
   private static void enforceOwnerOnlyPermissions(Path path, boolean executable) {
     File file = path.toFile();
     // On non-POSIX systems (Windows), these calls are best-effort.
     // We don't fail the build/load if they return false, as default temp dirs
     // are usually already restricted to the current user.
-    file.setReadable(false, false);
-    file.setReadable(true, true);
-    file.setWritable(false, false);
-    file.setWritable(true, true);
-    file.setExecutable(false, false);
+    boolean success = file.setReadable(false, false);
+    success &= file.setReadable(true, true);
+    success &= file.setWritable(false, false);
+    success &= file.setWritable(true, true);
+    success &= file.setExecutable(false, false);
     if (executable) {
-      file.setExecutable(true, true);
+      success &= file.setExecutable(true, true);
+    }
+
+    if (!success) {
+      InternalLogger.warn("Could not enforce owner-only permissions on: " + path);
     }
   }
 }

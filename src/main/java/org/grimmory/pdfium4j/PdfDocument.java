@@ -28,6 +28,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
@@ -99,8 +100,8 @@ public final class PdfDocument implements AutoCloseable {
   private final List<PdfPage> openPages = new ArrayList<>(8);
   private volatile boolean closed = false;
   private volatile boolean structurallyModified = false;
-  private MemorySegment sourceSegment;
-  private Arena sourceSegmentArena;
+  MemorySegment sourceSegment;
+  Arena sourceSegmentArena;
 
   MemorySegment handle() {
     return handle;
@@ -117,7 +118,7 @@ public final class PdfDocument implements AutoCloseable {
   private final Map<MetadataTag, String> pendingMetadata = new EnumMap<>(MetadataTag.class);
   private XmpUpdate pendingXmp = null;
   private final PdfSaver.MetadataProvider nativeMetadataProvider = this::metadataString;
-  private final CleanupState state;
+  final CleanupState state;
   private final Cleaner.Cleanable cleanable;
 
   private final IntObjectCache<PdfPage> pageCache;
@@ -125,25 +126,25 @@ public final class PdfDocument implements AutoCloseable {
   private final IntObjectCache<Integer> rotationCache;
   private Map<Long, int[]> textIndex = null;
 
-  private PdfDocument(
+  PdfDocument(
       MemorySegment handle,
       Arena docArena,
-      Path sourcePath,
+      Path path,
       Path tempFile,
       byte[] sourceBytes,
       PdfProcessingPolicy policy,
-      int sourceFileVersion,
+      int version,
       Thread ownerThread) {
     this.handle = handle.reinterpret(ValueLayout.ADDRESS.byteSize());
     this.docArena = docArena;
     this.docSourceChannel = null;
     this.channelId = 0L;
-    this.sourcePath = sourcePath;
+    this.sourcePath = path;
     this.sourceBytes = sourceBytes;
     this.sourceSegment = sourceBytes != null ? MemorySegment.ofArray(sourceBytes) : null;
     this.sourceSegmentArena = null;
     this.policy = policy;
-    this.sourceFileVersion = sourceFileVersion;
+    this.sourceFileVersion = version;
     this.ownerThread = ownerThread;
     this.state = new CleanupState(handle, 0L, null, tempFile, docArena, null);
     this.cleanable = CLEANER.register(this, state);
@@ -154,7 +155,7 @@ public final class PdfDocument implements AutoCloseable {
     PdfiumLibrary.incrementDocumentCount();
   }
 
-  private static final class CleanupState implements Runnable {
+  static final class CleanupState implements Runnable {
     private final MemorySegment handle;
     private final long channelId;
     private final AtomicReference<SeekableByteChannel> sourceChannelRef = new AtomicReference<>();
@@ -261,36 +262,16 @@ public final class PdfDocument implements AutoCloseable {
    * @throws PdfiumException if creation fails
    */
   public static PdfDocument create() {
-    PdfiumLibrary.ensureInitialized();
-    try {
-      MemorySegment h = (MemorySegment) EditBindings.fpdfCreateNewDocument().invokeExact();
-      if (FfmHelper.isNull(h)) {
-        throw new PdfiumException(
-            "Failed to create new document", PdfErrorCode.UNKNOWN, "create", null);
-      }
-      return new PdfDocument(
-          h, null, null, null, null, resolvePolicy(null), 0, Thread.currentThread());
-    } catch (Throwable t) {
-      throw new PdfiumException("Failed to create new document", t);
-    }
+    return PdfDocumentOpener.create(resolvePolicy(null));
   }
 
   public static PdfDocument open(Path path) {
-    return open(path, null, resolvePolicy(null));
+    return PdfDocumentOpener.open(path, null, resolvePolicy(null));
   }
 
   @SuppressWarnings("resource")
   public static PdfDocument open(Path path, String password, PdfProcessingPolicy policy) {
-    PdfProcessingPolicy resolvedPolicy = resolvePolicy(policy);
-    PdfiumLibrary.ensureInitialized();
-    try {
-      return openFromNativePath(path, password, resolvedPolicy, null);
-    } catch (PdfCorruptException e) {
-      if (resolvedPolicy.mode() == PdfProcessingPolicy.Mode.RECOVER) {
-        return openWithRepair(path, password, resolvedPolicy);
-      }
-      throw e;
-    }
+    return PdfDocumentOpener.open(path, password, resolvePolicy(policy));
   }
 
   /**
@@ -304,7 +285,7 @@ public final class PdfDocument implements AutoCloseable {
    * @throws PdfiumException if the document is corrupt, password protected, or if buffering fails
    */
   public static PdfDocument open(InputStream in) {
-    return open(in, null, resolvePolicy(null));
+    return PdfDocumentOpener.open(in, null, resolvePolicy(null));
   }
 
   /**
@@ -316,177 +297,24 @@ public final class PdfDocument implements AutoCloseable {
    * @return a new PdfDocument instance
    */
   public static PdfDocument open(InputStream in, String password, PdfProcessingPolicy policy) {
-    PdfProcessingPolicy resolvedPolicy = resolvePolicy(policy);
-    if (in == null) {
-      throw new IllegalArgumentException("InputStream must not be null");
-    }
-    PdfiumLibrary.ensureInitialized();
-    Path temp = null;
-    try {
-      temp = IoUtils.createTempFile("pdfium4j-stream-", ".pdf");
-      try (InputStream input = in) {
-        Files.copy(input, temp, StandardCopyOption.REPLACE_EXISTING);
-      }
-      return openFromNativePath(temp, password, resolvedPolicy, temp);
-    } catch (PdfiumException e) {
-      if (temp != null) {
-        try {
-          Files.deleteIfExists(temp);
-        } catch (IOException ex) {
-          PdfiumLibrary.ignore(ex);
-        }
-      }
-      throw e;
-    } catch (IOException e) {
-      if (temp != null) {
-        try {
-          Files.deleteIfExists(temp);
-        } catch (IOException ex) {
-          PdfiumLibrary.ignore(ex);
-        }
-      }
-      throw new PdfiumException("Failed to buffer InputStream to temporary file", e);
-    }
-  }
-
-  private static PdfDocument openFromNativePath(
-      Path path, String password, PdfProcessingPolicy policy, Path tempFile) {
-    Arena docArena = Arena.ofShared();
-    try {
-      MemorySegment pathSeg = docArena.allocateFrom(path.toString());
-      MemorySegment pwdSeg =
-          (password != null) ? docArena.allocateFrom(password) : MemorySegment.NULL;
-      MemorySegment doc =
-          (MemorySegment) ViewBindings.fpdfLoadDocument().invokeExact(pathSeg, pwdSeg);
-      if (FfmHelper.isNull(doc)) {
-        int err = (int) ViewBindings.fpdfGetLastError().invokeExact();
-        throw mapOpenError("Failed to open document: " + path, err);
-      }
-      PdfDocument pdfDoc =
-          new PdfDocument(
-              doc,
-              docArena,
-              path,
-              tempFile,
-              null,
-              policy,
-              readFileVersion(doc),
-              Thread.currentThread());
-
-      pdfDoc.sourceSegmentArena = Arena.ofShared();
-      pdfDoc.sourceSegment = mapSourceSegment(path, pdfDoc.sourceSegmentArena);
-      pdfDoc.state.updateSourceSegmentArena(pdfDoc.sourceSegmentArena);
-
-      if (policy.mode() == PdfProcessingPolicy.Mode.RECOVER
-          && !pdfDoc.hasValidCrossReferenceTable()) {
-        pdfDoc.close();
-        return openWithRepair(path, password, policy);
-      }
-      return pdfDoc;
-    } catch (PdfiumException e) {
-      docArena.close();
-      throw e;
-    } catch (Throwable t) {
-      docArena.close();
-      throw new PdfiumException("Failed to open file: " + path, t);
-    }
-  }
-
-  private static PdfDocument openWithRepair(
-      Path path, String password, PdfProcessingPolicy resolvedPolicy) {
-    if (LOGGER.isLoggable(Level.WARNING)) {
-      LOGGER.log(
-          Level.WARNING,
-          "Document corruption detected for {0}. Attempting automatic repair...",
-          path);
-    }
-    Path temp;
-    try {
-      temp = IoUtils.createTempFile("pdfium4j-autorepair-", ".pdf");
-      try (OutputStream out = Files.newOutputStream(temp)) {
-        PdfSaver.repair(path, out);
-      }
-      // Reopen the repaired file. We use STRICT mode to avoid infinite loops if repair still fails.
-      return openFromNativePath(
-          temp, password, resolvedPolicy.withMode(PdfProcessingPolicy.Mode.STRICT), temp);
-    } catch (Exception e) {
-      if (LOGGER.isLoggable(Level.SEVERE)) {
-        LOGGER.log(Level.SEVERE, "Automatic repair failed for {0}", path);
-      }
-      throw new PdfCorruptException(
-          "Automatic repair failed for " + path, PdfErrorCode.FORMAT, "open", path.toString(), e);
-    }
+    return PdfDocumentOpener.open(in, password, resolvePolicy(policy));
   }
 
   public static PdfDocument open(byte[] data) {
-    return open(data, null, resolvePolicy(null));
+    return PdfDocumentOpener.open(data, null, resolvePolicy(null));
   }
 
   public static PdfDocument open(byte[] data, String password, PdfProcessingPolicy policy) {
-    PdfProcessingPolicy resolvedPolicy = resolvePolicy(policy);
-    if (data == null || data.length == 0)
-      throw new IllegalArgumentException("data is null or empty");
-    PdfiumLibrary.ensureInitialized();
-    Arena arena = Arena.ofShared();
-    try {
-      MemorySegment memSeg = arena.allocate(data.length);
-      memSeg.copyFrom(MemorySegment.ofArray(data));
-
-      PdfDocument pdfDoc = open(memSeg, password, resolvedPolicy, arena, data);
-
-      if (resolvedPolicy.mode() == PdfProcessingPolicy.Mode.RECOVER
-          && !pdfDoc.hasValidCrossReferenceTable()) {
-        pdfDoc.close();
-        byte[] repaired = PdfSaver.repair(data);
-        return open(repaired, password, resolvedPolicy.withMode(PdfProcessingPolicy.Mode.STRICT));
-      }
-      return pdfDoc;
-    } catch (PdfiumException e) {
-      arena.close();
-      throw e;
-    } catch (Exception t) {
-      arena.close();
-      throw new PdfiumException("Unexpected error opening document from bytes", t);
-    }
+    return PdfDocumentOpener.open(data, password, resolvePolicy(policy));
   }
 
   static PdfDocument open(MemorySegment segment, PdfProcessingPolicy policy) {
-    return open(segment, null, policy, Arena.ofShared(), null);
-  }
-
-  private static PdfDocument open(
-      MemorySegment segment,
-      String password,
-      PdfProcessingPolicy policy,
-      Arena arena,
-      byte[] sourceBytes) {
-    PdfProcessingPolicy resolvedPolicy =
-        policy != null ? policy : PdfProcessingPolicy.defaultPolicy();
+    Arena arena = Arena.ofShared();
     try {
-      MemorySegment pwdSeg = password == null ? MemorySegment.NULL : arena.allocateFrom(password);
-
-      MemorySegment docHandle =
-          (MemorySegment)
-              ViewBindings.fpdfLoadMemDocument64().invokeExact(segment, segment.byteSize(), pwdSeg);
-
-      if (FfmHelper.isNull(docHandle)) {
-        int err = (int) ViewBindings.fpdfGetLastError().invokeExact();
-        throw mapOpenError("Failed to open document from segment", err);
-      }
-
-      return new PdfDocument(
-          docHandle,
-          arena,
-          null,
-          null,
-          sourceBytes,
-          resolvedPolicy,
-          readFileVersion(docHandle),
-          Thread.currentThread());
-    } catch (PdfiumException e) {
+      return PdfDocumentOpener.open(segment, null, resolvePolicy(policy), arena, null);
+    } catch (RuntimeException | Error e) {
+      arena.close();
       throw e;
-    } catch (Throwable t) {
-      throw new PdfiumException("Unexpected error opening document from segment", t);
     }
   }
 
@@ -1125,6 +953,8 @@ public final class PdfDocument implements AutoCloseable {
 
     @Override
     public int read(byte[] b, int off, int len) throws IOException {
+      Objects.checkFromIndexSize(off, len, b.length);
+      if (len == 0) return 0;
       if (pos >= segment.byteSize()) return -1;
       int toRead = (int) Math.min(len, segment.byteSize() - pos);
       MemorySegment.copy(segment, pos, MemorySegment.ofArray(b), off, toRead);
@@ -1333,17 +1163,6 @@ public final class PdfDocument implements AutoCloseable {
     throw new PdfiumException("Failed to save to source path: " + path, e);
   }
 
-  private static void cleanupTempFile(Path temp) {
-    if (temp == null) {
-      return;
-    }
-    try {
-      Files.deleteIfExists(temp);
-    } catch (IOException e) {
-      PdfiumLibrary.ignore(e);
-    }
-  }
-
   private void saveToNewPath(Path path) {
     try (OutputStream out = Files.newOutputStream(path)) {
       save(out, true);
@@ -1499,13 +1318,13 @@ public final class PdfDocument implements AutoCloseable {
     }
   }
 
-  private static int readFileVersion(MemorySegment doc) {
-    try (Arena arena = Arena.ofConfined()) {
-      MemorySegment version = arena.allocate(JAVA_INT.byteSize(), JAVA_INT.byteAlignment());
-      int ok = (int) DocBindings.fpdfGetFileVersion().invokeExact(doc, version);
-      return ok != 0 ? version.get(JAVA_INT, 0) : 0;
-    } catch (Throwable _) {
-      return 0;
+  private static void cleanupTempFile(Path temp) {
+    if (temp != null) {
+      try {
+        Files.deleteIfExists(temp);
+      } catch (IOException e) {
+        PdfiumLibrary.ignore(e);
+      }
     }
   }
 
