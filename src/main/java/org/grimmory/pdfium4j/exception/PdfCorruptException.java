@@ -20,4 +20,9 @@ public class PdfCorruptException extends PdfiumException {
       String message, PdfErrorCode errorCode, String operation, String filePath) {
     super(message, errorCode, operation, filePath);
   }
+
+  public PdfCorruptException(
+      String message, PdfErrorCode errorCode, String operation, String filePath, Throwable cause) {
+    super(message, errorCode, operation, filePath, cause);
+  }
 }
