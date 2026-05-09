@@ -6,6 +6,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
 import javax.imageio.ImageWriteParam;
@@ -32,6 +33,36 @@ public record RenderResult(int width, int height, byte[] rgba) {
   @Override
   public byte[] rgba() {
     return rgba.clone();
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (!(o instanceof RenderResult other)) {
+      return false;
+    }
+    return width == other.width && height == other.height && Arrays.equals(rgba, other.rgba);
+  }
+
+  @Override
+  public int hashCode() {
+    int result = Integer.hashCode(width);
+    result = 31 * result + Integer.hashCode(height);
+    result = 31 * result + Arrays.hashCode(rgba);
+    return result;
+  }
+
+  @Override
+  public String toString() {
+    return "RenderResult[width="
+        + width
+        + ", height="
+        + height
+        + ", rgba="
+        + Arrays.toString(rgba)
+        + "]";
   }
 
   /**

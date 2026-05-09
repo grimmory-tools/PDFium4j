@@ -128,7 +128,44 @@ public final class PdfDocument implements AutoCloseable {
 
   /** Internal metadata about the document source. */
   record SourceInfo(
-      Path path, Path tempFile, byte[] sourceBytes, int version, Thread ownerThread) {}
+      Path path, Path tempFile, byte[] sourceBytes, int version, Thread ownerThread) {
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (!(o instanceof SourceInfo other)) {
+        return false;
+      }
+      return Objects.equals(path, other.path)
+          && Objects.equals(tempFile, other.tempFile)
+          && Arrays.equals(sourceBytes, other.sourceBytes)
+          && version == other.version
+          && Objects.equals(ownerThread, other.ownerThread);
+    }
+
+    @Override
+    public int hashCode() {
+      int result = Objects.hash(path, tempFile, version, ownerThread);
+      result = 31 * result + Arrays.hashCode(sourceBytes);
+      return result;
+    }
+
+    @Override
+    public String toString() {
+      return "SourceInfo[path="
+          + path
+          + ", tempFile="
+          + tempFile
+          + ", sourceBytes="
+          + Arrays.toString(sourceBytes)
+          + ", version="
+          + version
+          + ", ownerThread="
+          + ownerThread
+          + "]";
+    }
+  }
 
   PdfDocument(MemorySegment handle, Arena docArena, PdfProcessingPolicy policy, SourceInfo source) {
     this.handle = handle.reinterpret(ValueLayout.ADDRESS.byteSize());
@@ -307,11 +344,15 @@ public final class PdfDocument implements AutoCloseable {
 
   static PdfDocument open(MemorySegment segment, PdfProcessingPolicy policy) {
     Arena arena = Arena.ofShared();
+    boolean success = false;
     try {
-      return PdfDocumentOpener.open(segment, null, resolvePolicy(policy), arena, null);
-    } catch (Throwable t) {
-      arena.close();
-      throw t;
+      PdfDocument document = PdfDocumentOpener.open(segment, null, resolvePolicy(policy), arena, null);
+      success = true;
+      return document;
+    } finally {
+      if (!success) {
+        arena.close();
+      }
     }
   }
 
