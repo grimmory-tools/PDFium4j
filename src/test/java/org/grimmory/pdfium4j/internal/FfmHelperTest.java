@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.lang.foreign.MemorySegment;
+import java.util.Arrays;
 import org.junit.jupiter.api.Test;
 
 class FfmHelperTest {
@@ -35,27 +36,27 @@ class FfmHelperTest {
     MemorySegment seg = MemorySegment.ofArray(new byte[10]);
     seg.set(JAVA_BYTE, 8, (byte) 0);
     seg.set(JAVA_BYTE, 9, (byte) 0);
-    assertEquals(10, FfmHelper.normalizeWideByteLength(seg, 11, 10));
-    assertEquals(0, FfmHelper.normalizeWideByteLength(seg, 2, 10));
-    assertEquals(0, FfmHelper.normalizeWideByteLength(seg, 100, 2));
-    assertEquals(8, FfmHelper.normalizeWideByteLength(seg, 8, 8));
+    assertEquals(10L, FfmHelper.normalizeWideByteLength(seg, 11, 10));
+    assertEquals(0L, FfmHelper.normalizeWideByteLength(seg, 2, 10));
+    assertEquals(0L, FfmHelper.normalizeWideByteLength(seg, 100, 2));
+    assertEquals(8L, FfmHelper.normalizeWideByteLength(seg, 8, 8));
   }
 
   @Test
   void normalizeWideByteLengthFindsTerminatorWhenReportedExcludesIt() {
     byte[] bytes = new byte[12];
-    java.util.Arrays.fill(bytes, (byte) 1);
+    Arrays.fill(bytes, (byte) 1);
     MemorySegment seg = MemorySegment.ofArray(bytes);
     seg.set(JAVA_BYTE, 10, (byte) 0);
     seg.set(JAVA_BYTE, 11, (byte) 0);
-    assertEquals(12, FfmHelper.normalizeWideByteLength(seg, 10, 12));
+    assertEquals(12L, FfmHelper.normalizeWideByteLength(seg, 10, 12));
   }
 
   @Test
   void normalizeWideByteLengthRejectsMissingTerminator() {
     byte[] bytes = new byte[12];
-    java.util.Arrays.fill(bytes, (byte) 1);
+    Arrays.fill(bytes, (byte) 1);
     MemorySegment seg = MemorySegment.ofArray(bytes);
-    assertEquals(0, FfmHelper.normalizeWideByteLength(seg, 10, 12));
+    assertEquals(0L, FfmHelper.normalizeWideByteLength(seg, 10, 12));
   }
 }

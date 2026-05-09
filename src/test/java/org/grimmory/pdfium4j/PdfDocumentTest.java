@@ -12,10 +12,12 @@ import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
+import org.grimmory.pdfium4j.internal.Generators;
 import org.grimmory.pdfium4j.internal.ScratchBuffer;
 import org.grimmory.pdfium4j.model.*;
 import org.junit.jupiter.api.Test;
@@ -539,7 +541,7 @@ class PdfDocumentTest {
 
     // Verify the raw file contains the xpacket marker
     byte[] rawBytes = Files.readAllBytes(pdf);
-    String rawStr = new String(rawBytes, java.nio.charset.StandardCharsets.ISO_8859_1);
+    String rawStr = new String(rawBytes, StandardCharsets.ISO_8859_1);
     assertTrue(rawStr.contains("<?xpacket begin="), "Saved file should contain xpacket marker");
     assertTrue(rawStr.contains("ExistingXmpSeries"), "Saved file should contain our XMP content");
 
@@ -630,7 +632,7 @@ class PdfDocumentTest {
   @Test
   @EnabledIf("pdfiumAvailable")
   void probeEmptyData() {
-    PdfProbeResult result = PdfDocument.probe(new byte[0]);
+    PdfProbeResult result = PdfDocument.probe(Generators.emptyByteArray());
     assertFalse(result.isValid());
     assertEquals(PdfProbeResult.Status.UNREADABLE, result.status());
   }
@@ -826,8 +828,9 @@ class PdfDocumentTest {
     if (testPdf == null) return;
 
     try (PdfDocument doc = PdfDocument.open(testPdf)) {
+      int count = doc.pageCount();
       assertThrows(IllegalArgumentException.class, () -> doc.deletePage(-1));
-      assertThrows(IllegalArgumentException.class, () -> doc.deletePage(doc.pageCount()));
+      assertThrows(IllegalArgumentException.class, () -> doc.deletePage(count));
     }
   }
 
@@ -924,9 +927,6 @@ class PdfDocumentTest {
     }
   }
 
-  // --- Tests for new APIs (metadata(String), renderPageToBytes, RenderResult encoding, image
-  // extraction, isBlank) ---
-
   @Test
   @EnabledIf("pdfiumAvailable")
   void metadataByStringKeyReadsStandardTag(@TempDir Path tempDir) throws IOException {
@@ -940,7 +940,7 @@ class PdfDocumentTest {
     }
 
     try (PdfDocument doc = PdfDocument.open(output)) {
-      // Read via String key (same underlying FPDF_GetMetaText call)
+      // Read via String key (same underlying fpdfGetMetaText call)
       Optional<String> title = doc.metadata("Title");
       assertTrue(title.isPresent(), "Title should be readable via string key");
       assertEquals("StringKeyTest", title.get());
@@ -1188,8 +1188,6 @@ class PdfDocumentTest {
                 """;
     return pdf.getBytes(StandardCharsets.US_ASCII);
   }
-
-  // --- Metadata save correctness tests ---
 
   @Test
   @EnabledIf("pdfiumAvailable")
@@ -1594,8 +1592,6 @@ class PdfDocumentTest {
     }
   }
 
-  // --- Cross-reference stream (§7.5.8) tests ---
-
   /**
    * Create a minimal valid PDF that uses a cross-reference stream instead of a traditional xref
    * table. This is the format used by many modern PDF generators (e.g., Stirling-PDF, Chrome
@@ -1604,7 +1600,7 @@ class PdfDocumentTest {
   @SuppressWarnings("PMD.UnusedAssignment")
   private static byte[] minimalXrefStreamPdf() {
     ByteArrayOutputStream out = new ByteArrayOutputStream();
-    List<Integer> offsets = new java.util.ArrayList<>();
+    List<Integer> offsets = new ArrayList<>(3);
 
     writeBytes(out, "%PDF-1.5\n");
 

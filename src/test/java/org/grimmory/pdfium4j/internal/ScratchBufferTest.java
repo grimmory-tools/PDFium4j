@@ -2,6 +2,7 @@ package org.grimmory.pdfium4j.internal;
 
 import static java.lang.foreign.ValueLayout.JAVA_BYTE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -17,6 +18,7 @@ class ScratchBufferTest {
 
   @BeforeEach
   void setup() {
+    ScratchBuffer.purge();
     ScratchBuffer.acquire();
   }
 
@@ -128,14 +130,17 @@ class ScratchBufferTest {
   }
 
   @Test
-  void releaseClosesAllArenas() {
+  void purgeClosesAllArenas() {
     MemorySegment first = ScratchBuffer.get(4096);
     ScratchBuffer.get(2L * 1024L * 1024L); // force grow -> new arena
 
-    ScratchBuffer.release();
+    ScratchBuffer.purge();
 
     // both arenas should now be closed
     assertThrows(IllegalStateException.class, () -> first.get(JAVA_BYTE, 0));
+
+    // Restore state for cleanup()
+    ScratchBuffer.acquire();
   }
 
   @Test
@@ -195,8 +200,8 @@ class ScratchBufferTest {
     t1.join();
     t2.join();
 
-    assertTrue(address1.get() != 0);
-    assertTrue(address2.get() != 0);
-    assertTrue(address1.get() != address2.get());
+    assertNotEquals(0, address1.get());
+    assertNotEquals(0, address2.get());
+    assertNotEquals(address1.get(), address2.get());
   }
 }
