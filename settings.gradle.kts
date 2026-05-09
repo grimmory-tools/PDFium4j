@@ -1,4 +1,5 @@
 rootProject.name = "pdfium4j"
+include("benchmarks")
 
 plugins {
     id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"

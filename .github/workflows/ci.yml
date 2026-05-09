@@ -11,16 +11,36 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    name: Build on ${{ matrix.os }} (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux-x64
+            skipTests: false
+          - os: macos-14
+            platform: darwin-x64
+            skipTests: true
+          - os: macos-latest
+            platform: darwin-arm64
+            skipTests: false
+          - os: windows-latest
+            platform: windows-x64
+            skipTests: true
+
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+      - name: Setup Java
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
         with:
           distribution: temurin
           java-version: 25
 
-      - uses: gradle/actions/setup-gradle@6f229686ee4375cc4a86b2514c89bac4930e82c4 # v5.0.0
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@6f229686ee4375cc4a86b2514c89bac4930e82c4 # v5.0.0
 
       - name: Cache PDFium binaries
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
@@ -28,10 +48,12 @@ jobs:
           path: build/pdfium-archives
           key: pdfium-${{ hashFiles('build.gradle.kts') }}
 
-      - run: ./gradlew clean check --warning-mode all
+      - name: Build, Test and Verify
+        run: ./gradlew clean check verifyNativeJars -PpdfiumPlatformFilter=${{ matrix.platform }} --warning-mode all ${{ matrix.skipTests && '-x test' || '' }}
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - name: Upload Test Results
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: test-results
+          name: test-results-${{ matrix.platform }}
           path: '**/build/reports/tests/**'
