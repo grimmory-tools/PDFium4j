@@ -93,7 +93,7 @@ final class PdfDocumentOpener {
       }
     } catch (IOException e) {
       cleanupTempFile(temp);
-      throw new PdfiumException("Failed to buffer InputStream to temporary file", e);
+      throw new PdfiumException("Failed to open document: failed to buffer input stream", e);
     }
   }
 
@@ -114,7 +114,7 @@ final class PdfDocumentOpener {
         try {
           byte[] repaired = PdfSaver.repair(data);
           return open(repaired, password, policy.withMode(PdfProcessingPolicy.Mode.STRICT));
-        } catch (IOException e) {
+        } catch (IOException | IllegalArgumentException e) {
           throw new PdfCorruptException(
               "Failed to open document: corruption detected and repair failed",
               PdfErrorCode.FORMAT,
@@ -130,7 +130,7 @@ final class PdfDocumentOpener {
         try {
           byte[] repaired = PdfSaver.repair(data);
           return open(repaired, password, policy.withMode(PdfProcessingPolicy.Mode.STRICT));
-        } catch (IOException ex) {
+        } catch (IOException | IllegalArgumentException ex) {
           throw new PdfCorruptException(
               "Failed to open document: corruption detected and repair failed",
               PdfErrorCode.FORMAT,
@@ -145,7 +145,8 @@ final class PdfDocumentOpener {
       throw e;
     } catch (Exception t) {
       arena.close();
-      throw new PdfiumException("Unexpected error opening document from bytes", t);
+      throw new PdfiumException(
+          "Failed to open document: unexpected corruption or processing error", t);
     }
   }
 
@@ -163,7 +164,7 @@ final class PdfDocumentOpener {
 
       if (FfmHelper.isNull(docHandle)) {
         int err = (int) ViewBindings.fpdfGetLastError().invokeExact();
-        throw PdfDocument.mapOpenError("Failed to open document from segment", err);
+        throw PdfDocument.mapOpenError("Failed to open document: corruption detected", err);
       }
 
       return new PdfDocument(
@@ -178,7 +179,8 @@ final class PdfDocumentOpener {
     } catch (PdfiumException e) {
       throw e;
     } catch (Throwable t) {
-      throw new PdfiumException("Unexpected error opening document from segment", t);
+      throw new PdfiumException(
+          "Failed to open document: unexpected corruption or processing error", t);
     }
   }
 
@@ -194,7 +196,7 @@ final class PdfDocumentOpener {
 
       if (FfmHelper.isNull(doc)) {
         int err = (int) ViewBindings.fpdfGetLastError().invokeExact();
-        throw PdfDocument.mapOpenError("Failed to open document: " + path, err);
+        throw PdfDocument.mapOpenError("Failed to open document: corruption detected", err);
       }
 
       PdfDocument pdfDoc =
@@ -223,7 +225,7 @@ final class PdfDocumentOpener {
       throw e;
     } catch (Throwable t) {
       docArena.close();
-      throw new PdfiumException("Failed to open file: " + path, t);
+      throw new PdfiumException("Failed to open document: corruption detected for " + path, t);
     }
   }
 

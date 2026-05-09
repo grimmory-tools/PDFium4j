@@ -391,7 +391,7 @@ final class PdfSaver {
   static byte[] repair(byte[] data) throws IOException {
     // Phase 1: Try native repair
     byte[] nativeRepaired = nativeRepair(data);
-    if (nativeRepaired != null) {
+    if (nativeRepaired != null && nativeRepaired.length > 0) {
       return nativeRepaired;
     }
 
@@ -458,7 +458,7 @@ final class PdfSaver {
       }
     } catch (Exception e) {
       PdfiumLibrary.ignore(e);
-      return Generators.emptyByteArray();
+      return null;
     }
   }
 
