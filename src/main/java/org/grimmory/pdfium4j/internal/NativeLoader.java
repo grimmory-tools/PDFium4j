@@ -156,12 +156,22 @@ public final class NativeLoader {
       Set.of(
           "pdfium",
           "pdfium4j_shim",
+          "zlib",
+          "z",
+          "jpeg",
+          "libjpeg",
           "libpdfium.so",
           "libpdfium.dylib",
           "pdfium.dll",
           "pdfium4j_shim.so",
           "pdfium4j_shim.dylib",
-          "pdfium4j_shim.dll");
+          "pdfium4j_shim.dll",
+          "zlib.dll",
+          "zlib1.dll",
+          "libjpeg.so",
+          "libjpeg.dylib",
+          "libjpeg.dll",
+          "jpeg.dll");
 
   private static void tryLoadFromClasspath() {
     String platform = System.getProperty("pdfium4j.platform");
@@ -182,7 +192,12 @@ public final class NativeLoader {
       List<String> libs = readLibraryIndex(resourceBase + "native-libs.txt");
       for (String lib : libs) {
         if (!isAllowed(lib)) {
-          throw new NativeLoadException("Refusing to load untrusted native library: " + lib);
+          throw new NativeLoadException(
+              "Refusing to load untrusted native library '"
+                  + lib
+                  + "' from platform "
+                  + platform
+                  + ". If this is a required dependency, it must be added to the ALLOWED_LIBS set in NativeLoader.java.");
         }
         extractToDir(resourceBase + lib, tmpDir);
       }
@@ -193,13 +208,13 @@ public final class NativeLoader {
       }
 
       // Load main PDFium library first so dependencies (like the shim) can link against it
-      System.load(pdfiumPath.toAbsolutePath().toString());
+      loadLibraryFile(pdfiumPath);
 
       for (String lib : libs) {
         if (!lib.equals(libName)) {
           Path depPath = tmpDir.resolve(lib);
           if (Files.exists(depPath)) {
-            System.load(depPath.toAbsolutePath().toString());
+            loadLibraryFile(depPath);
           }
         }
       }
@@ -208,7 +223,21 @@ public final class NativeLoader {
     }
   }
 
+  private static void loadLibraryFile(Path path) {
+    try {
+      System.load(path.toAbsolutePath().toString());
+    } catch (UnsatisfiedLinkError e) {
+      throw new NativeLoadException(
+          "Failed to load native library: " + path.getFileName() + ". Error: " + e.getMessage(), e);
+    }
+  }
+
   private static boolean isAllowed(String lib) {
+    String lower = lib.toLowerCase(Locale.ROOT);
+    if (lower.contains("pdfium") || lower.contains("shim")) return true;
+    if (lower.contains("zlib") || lower.contains("libz")) return true;
+    if (lower.contains("jpeg")) return true;
+
     if (ALLOWED_LIBS.contains(lib)) return true;
     String base = lib;
     if (base.startsWith("lib")) base = base.substring(3);

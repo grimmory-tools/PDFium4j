@@ -10,6 +10,9 @@ if(UNIX AND NOT APPLE)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
 endif()
 
+# Suppress QPDF PointerHolder transition warnings (and fix MSVC #warning error)
+add_definitions(-DPOINTERHOLDER_TRANSITION=0)
+
 # QPDF dependency hints
 if(WIN32 OR APPLE)
     if(DEFINED ENV{ZLIB_ROOT})
