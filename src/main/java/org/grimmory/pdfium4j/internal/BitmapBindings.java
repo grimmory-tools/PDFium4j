@@ -1,6 +1,7 @@
 package org.grimmory.pdfium4j.internal;
 
 import static org.grimmory.pdfium4j.internal.FfmHelper.C_INT;
+import static org.grimmory.pdfium4j.internal.FfmHelper.C_LONG;
 import static org.grimmory.pdfium4j.internal.FfmHelper.C_POINTER;
 import static org.grimmory.pdfium4j.internal.FfmHelper.LINKER;
 import static org.grimmory.pdfium4j.internal.FfmHelper.LOOKUP;
@@ -67,7 +68,7 @@ public final class BitmapBindings {
                 Optional.ofNullable(
                     find(
                         "FPDFBitmap_FillRect",
-                        FunctionDescriptor.ofVoid(C_POINTER, C_INT, C_INT, C_INT, C_INT, C_INT),
+                        FunctionDescriptor.ofVoid(C_POINTER, C_INT, C_INT, C_INT, C_INT, C_LONG),
                         false)))
         .orElse(null);
   }

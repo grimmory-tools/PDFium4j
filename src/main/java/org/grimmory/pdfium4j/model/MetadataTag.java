@@ -11,7 +11,8 @@ public enum MetadataTag {
   CREATOR("Creator"),
   PRODUCER("Producer"),
   CREATION_DATE("CreationDate"),
-  MOD_DATE("ModDate");
+  MOD_DATE("ModDate"),
+  LANGUAGE("Language");
 
   private final String pdfKey;
   private final byte[] pdfKeyBytes;

@@ -37,6 +37,7 @@ public final class ViewBindings {
     Objects.requireNonNull(fpdfLoadPage(), "FPDF_LoadPage");
     Objects.requireNonNull(fpdfClosePage(), "FPDF_ClosePage");
     Objects.requireNonNull(fpdfRenderPageBitmap(), "FPDF_RenderPageBitmap");
+    Objects.requireNonNull(fpdfGetTrailerEnds(), "FPDF_GetTrailerEnds");
   }
 
   public static final StructLayout LIBRARY_CONFIG_LAYOUT =

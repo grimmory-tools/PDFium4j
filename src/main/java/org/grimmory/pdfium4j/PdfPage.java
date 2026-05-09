@@ -184,7 +184,7 @@ public final class PdfPage implements AutoCloseable {
         throw new PdfiumRenderException("fpdfbitmapCreateEx failed");
       }
 
-      BitmapBindings.fpdfBitmapFillRect().invokeExact(bitmap, 0, 0, w, h, background);
+      BitmapBindings.fpdfBitmapFillRect().invokeExact(bitmap, 0, 0, w, h, (long) background);
 
       ViewBindings.fpdfRenderPageBitmap().invokeExact(bitmap, handle, 0, 0, w, h, 0, flags);
     } catch (Throwable t) {

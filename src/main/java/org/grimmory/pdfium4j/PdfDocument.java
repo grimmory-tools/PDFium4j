@@ -126,27 +126,24 @@ public final class PdfDocument implements AutoCloseable {
   private final IntObjectCache<Integer> rotationCache;
   private Map<Long, int[]> textIndex = null;
 
-  PdfDocument(
-      MemorySegment handle,
-      Arena docArena,
-      Path path,
-      Path tempFile,
-      byte[] sourceBytes,
-      PdfProcessingPolicy policy,
-      int version,
-      Thread ownerThread) {
+  /** Internal metadata about the document source. */
+  record SourceInfo(
+      Path path, Path tempFile, byte[] sourceBytes, int version, Thread ownerThread) {}
+
+  PdfDocument(MemorySegment handle, Arena docArena, PdfProcessingPolicy policy, SourceInfo source) {
     this.handle = handle.reinterpret(ValueLayout.ADDRESS.byteSize());
     this.docArena = docArena;
     this.docSourceChannel = null;
     this.channelId = 0L;
-    this.sourcePath = path;
-    this.sourceBytes = sourceBytes;
-    this.sourceSegment = sourceBytes != null ? MemorySegment.ofArray(sourceBytes) : null;
+    this.sourcePath = source.path();
+    this.sourceBytes = source.sourceBytes();
+    this.sourceSegment =
+        source.sourceBytes() != null ? MemorySegment.ofArray(source.sourceBytes()) : null;
     this.sourceSegmentArena = null;
     this.policy = policy;
-    this.sourceFileVersion = version;
-    this.ownerThread = ownerThread;
-    this.state = new CleanupState(handle, 0L, null, tempFile, docArena, null);
+    this.sourceFileVersion = source.version();
+    this.ownerThread = source.ownerThread();
+    this.state = new CleanupState(handle, 0L, null, source.tempFile(), docArena, null);
     this.cleanable = CLEANER.register(this, state);
     this.pageCache = new IntObjectCache<>(policy.maxPageCacheBytes(), PdfPage::release);
     // PageSize and rotation caches are small, so we use a 1MB budget which is plenty
@@ -312,9 +309,9 @@ public final class PdfDocument implements AutoCloseable {
     Arena arena = Arena.ofShared();
     try {
       return PdfDocumentOpener.open(segment, null, resolvePolicy(policy), arena, null);
-    } catch (RuntimeException | Error e) {
+    } catch (Throwable t) {
       arena.close();
-      throw e;
+      throw t;
     }
   }
 
@@ -330,11 +327,12 @@ public final class PdfDocument implements AutoCloseable {
   }
 
   /** Marks the document as structurally modified and invalidates the cached page count. */
-  private void markStructurallyModified() {
+  private synchronized void markStructurallyModified() {
     cachedPageCount = -1;
     pageCache.clear();
     pageSizeCache.clear();
     rotationCache.clear();
+    textIndex = null;
     structurallyModified = true;
   }
 
@@ -376,6 +374,9 @@ public final class PdfDocument implements AutoCloseable {
 
   public synchronized PageSize pageSize(int index) {
     ensureOpen();
+    if (index < 0 || index >= pageCount()) {
+      throw new IllegalArgumentException("Index out of bounds: " + index);
+    }
     PageSize cached = pageSizeCache.get(index);
     if (cached != null) return cached;
 
@@ -713,6 +714,15 @@ public final class PdfDocument implements AutoCloseable {
    */
   public InputStream metadataStream(MetadataTag tag) {
     ensureOpen();
+    if (pendingMetadata.containsKey(tag)) {
+      String pending = pendingMetadata.get(tag);
+      if (pending == null || pending.isEmpty()) {
+        return InputStream.nullInputStream();
+      }
+      byte[] data = new byte[wideStringByteLength(pending)];
+      writeWideString(MemorySegment.ofArray(data), pending);
+      return new ByteArrayInputStream(data);
+    }
     try (var _ = ScratchBuffer.acquireScope()) {
       long needed =
           (long)
@@ -841,7 +851,7 @@ public final class PdfDocument implements AutoCloseable {
                               }
                             })),
         xmp.isbns().stream().findFirst().or(() -> metadata("ISBN")),
-        xmp.language().or(() -> metadata(MetadataTag.SUBJECT)),
+        xmp.language().or(() -> metadata(MetadataTag.LANGUAGE)),
         xmp.date()
             .flatMap(
                 d -> {

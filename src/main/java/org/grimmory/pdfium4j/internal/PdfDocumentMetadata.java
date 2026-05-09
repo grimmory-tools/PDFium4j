@@ -87,6 +87,8 @@ public final class PdfDocumentMetadata {
       if (copied <= 2) return fallback.get(tag).orElse(null);
 
       return FfmHelper.fromWideString(buf, copied);
+    } catch (Error e) {
+      throw e;
     } catch (Throwable _) {
       return fallback.get(tag).orElse(null);
     }

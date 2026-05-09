@@ -429,10 +429,23 @@ public final class XmpMetadataWriter {
         case '<' -> s.write("&lt;");
         case '>' -> s.write("&gt;");
         case '"' -> s.write("&quot;");
-        default -> s.write(cp);
+        default -> {
+          if (isValidXml10CodePoint(cp)) {
+            s.write(cp);
+          }
+        }
       }
       i += Character.charCount(cp);
     }
+  }
+
+  private static boolean isValidXml10CodePoint(int cp) {
+    return cp == 0x9
+        || cp == 0xA
+        || cp == 0xD
+        || (cp >= 0x20 && cp <= 0xD7FF)
+        || (cp >= 0xE000 && cp <= 0xFFFD)
+        || (cp >= 0x10000 && cp <= 0x10FFFF);
   }
 
   private static String stripPrefix(String key) {

@@ -42,7 +42,10 @@ final class PdfDocumentOpener {
         throw new PdfiumException(
             "Failed to create new document", PdfErrorCode.UNKNOWN, "create", null);
       }
-      return new PdfDocument(h, null, null, null, null, policy, 0, Thread.currentThread());
+      return new PdfDocument(
+          h, null, policy, new PdfDocument.SourceInfo(null, null, null, 0, Thread.currentThread()));
+    } catch (PdfiumException e) {
+      throw e;
     } catch (Throwable t) {
       throw new PdfiumException("Failed to create new document", t);
     }
@@ -69,31 +72,32 @@ final class PdfDocumentOpener {
       try (InputStream input = in) {
         Files.copy(input, temp, StandardCopyOption.REPLACE_EXISTING);
       }
-
-      // In RECOVER mode, we need to preserve the temp file if initial open fails,
-      // so we can use it for repair. We pass null as tempFile to avoid deletion in pdfDoc.close()
-      // during the repair transition.
-      boolean recover = policy.mode() == PdfProcessingPolicy.Mode.RECOVER;
-      Path cleanupPath = temp;
-      try {
-        return openFromNativePath(temp, password, policy, recover ? null : cleanupPath);
-      } catch (PdfCorruptException e) {
-        if (recover) {
-          try {
-            return openWithRepair(cleanupPath, password, policy);
-          } finally {
-            cleanupTempFile(cleanupPath);
-          }
-        }
-        cleanupTempFile(cleanupPath);
-        throw e;
-      } catch (Throwable t) {
-        cleanupTempFile(cleanupPath);
-        throw t;
-      }
+      return openStreamWithPossibleRepair(temp, password, policy);
     } catch (IOException e) {
       cleanupTempFile(temp);
       throw new PdfiumException("Failed to open document: failed to buffer input stream", e);
+    }
+  }
+
+  private static PdfDocument openStreamWithPossibleRepair(
+      Path temp, String password, PdfProcessingPolicy policy) {
+    Path cleanupPath = temp;
+    try {
+      // Always hand temp ownership to the resulting document so it is removed on close().
+      return openFromNativePath(temp, password, policy, cleanupPath);
+    } catch (PdfCorruptException e) {
+      if (policy.mode() == PdfProcessingPolicy.Mode.RECOVER) {
+        try {
+          return openWithRepair(cleanupPath, password, policy);
+        } finally {
+          cleanupTempFile(cleanupPath);
+        }
+      }
+      cleanupTempFile(cleanupPath);
+      throw e;
+    } catch (Exception t) {
+      cleanupTempFile(cleanupPath);
+      throw t;
     }
   }
 
@@ -111,33 +115,13 @@ final class PdfDocumentOpener {
       if (policy.mode() == PdfProcessingPolicy.Mode.RECOVER
           && !pdfDoc.hasValidCrossReferenceTable()) {
         pdfDoc.close();
-        try {
-          byte[] repaired = PdfSaver.repair(data);
-          return open(repaired, password, policy.withMode(PdfProcessingPolicy.Mode.STRICT));
-        } catch (IOException | IllegalArgumentException e) {
-          throw new PdfCorruptException(
-              "Failed to open document: corruption detected and repair failed",
-              PdfErrorCode.FORMAT,
-              "open",
-              null,
-              e);
-        }
+        return repairAndReopenFromBytes(data, password, policy);
       }
       return pdfDoc;
     } catch (PdfCorruptException e) {
       arena.close();
       if (policy.mode() == PdfProcessingPolicy.Mode.RECOVER) {
-        try {
-          byte[] repaired = PdfSaver.repair(data);
-          return open(repaired, password, policy.withMode(PdfProcessingPolicy.Mode.STRICT));
-        } catch (IOException | IllegalArgumentException ex) {
-          throw new PdfCorruptException(
-              "Failed to open document: corruption detected and repair failed",
-              PdfErrorCode.FORMAT,
-              "open",
-              null,
-              ex);
-        }
+        return repairAndReopenFromBytes(data, password, policy);
       }
       throw e;
     } catch (PdfiumException e) {
@@ -147,6 +131,21 @@ final class PdfDocumentOpener {
       arena.close();
       throw new PdfiumException(
           "Failed to open document: unexpected corruption or processing error", t);
+    }
+  }
+
+  private static PdfDocument repairAndReopenFromBytes(
+      byte[] data, String password, PdfProcessingPolicy policy) {
+    try {
+      byte[] repaired = PdfSaver.repair(data);
+      return open(repaired, password, policy.withMode(PdfProcessingPolicy.Mode.STRICT));
+    } catch (IOException | IllegalArgumentException e) {
+      throw new PdfCorruptException(
+          "Failed to open document: corruption detected and repair failed",
+          PdfErrorCode.FORMAT,
+          "open",
+          null,
+          e);
     }
   }
 
@@ -170,12 +169,9 @@ final class PdfDocumentOpener {
       return new PdfDocument(
           docHandle,
           arena,
-          null,
-          null,
-          sourceBytes,
           policy,
-          readFileVersion(docHandle),
-          Thread.currentThread());
+          new PdfDocument.SourceInfo(
+              null, null, sourceBytes, readFileVersion(docHandle), Thread.currentThread()));
     } catch (PdfiumException e) {
       throw e;
     } catch (Throwable t) {
@@ -203,12 +199,9 @@ final class PdfDocumentOpener {
           new PdfDocument(
               doc,
               docArena,
-              path,
-              tempFile,
-              null,
               policy,
-              readFileVersion(doc),
-              Thread.currentThread());
+              new PdfDocument.SourceInfo(
+                  path, tempFile, null, readFileVersion(doc), Thread.currentThread()));
 
       pdfDoc.sourceSegmentArena = Arena.ofShared();
       pdfDoc.sourceSegment = mapSourceSegment(path, pdfDoc.sourceSegmentArena);

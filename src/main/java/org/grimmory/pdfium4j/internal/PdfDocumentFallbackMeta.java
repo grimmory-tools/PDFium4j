@@ -168,35 +168,55 @@ public final class PdfDocumentFallbackMeta {
 
   private static String unescape(byte[] raw) {
     ByteArrayOutputStream out = new ByteArrayOutputStream(raw.length);
-    for (int i = 0; i < raw.length; i++) {
+    int i = 0;
+    while (i < raw.length) {
       byte b = raw[i];
       if (b == '\\' && i + 1 < raw.length) {
-        byte next = raw[++i];
-        switch (next) {
-          case 'n' -> out.write('\n');
-          case 'r' -> out.write('\r');
-          case 't' -> out.write('\t');
-          case 'b' -> out.write('\b');
-          case 'f' -> out.write('\f');
-          case '(', ')', '\\' -> out.write(next);
-          default -> {
-            if (next >= '0' && next <= '7') {
-              int octal = next - '0';
-              if (i + 1 < raw.length && raw[i + 1] >= '0' && raw[i + 1] <= '7') {
-                octal = octal * 8 + (raw[++i] - '0');
-                if (i + 1 < raw.length && raw[i + 1] >= '0' && raw[i + 1] <= '7') {
-                  octal = octal * 8 + (raw[++i] - '0');
-                }
-              }
-              out.write(octal);
-            }
-          }
-        }
+        i = processEscape(raw, i + 1, out);
       } else {
         out.write(b);
+        i++;
       }
     }
     return new String(out.toByteArray(), StandardCharsets.ISO_8859_1);
+  }
+
+  private static int processEscape(byte[] raw, int nextIdx, ByteArrayOutputStream out) {
+    byte next = raw[nextIdx];
+    int currentIdx = nextIdx;
+    switch (next) {
+      case 'n' -> out.write('\n');
+      case 'r' -> out.write('\r');
+      case 't' -> out.write('\t');
+      case 'b' -> out.write('\b');
+      case 'f' -> out.write('\f');
+      case '(', ')', '\\' -> out.write(next);
+      default -> {
+        if (next >= '0' && next <= '7') {
+          return processOctalEscape(raw, currentIdx, out);
+        }
+        // Unknown escape, treat as literal (PDF spec behavior)
+        out.write(next);
+      }
+    }
+    return currentIdx + 1;
+  }
+
+  private static int processOctalEscape(byte[] raw, int startIdx, ByteArrayOutputStream out) {
+    int octal = raw[startIdx] - '0';
+    int currentIdx = startIdx + 1;
+    // Up to 3 octal digits
+    for (int count = 0; count < 2 && currentIdx < raw.length; count++) {
+      byte b = raw[currentIdx];
+      if (b >= '0' && b <= '7') {
+        octal = octal * 8 + (b - '0');
+        currentIdx++;
+      } else {
+        break;
+      }
+    }
+    out.write(octal);
+    return currentIdx;
   }
 
   private static long parseHexString(
