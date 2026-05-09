@@ -53,7 +53,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: native-dir-${{ matrix.platform }}
-          path: build/generated-natives/natives
+          path: build/generated-natives/natives/${{ matrix.platform }}
           if-no-files-found: error
 
   publish:
@@ -73,8 +73,30 @@ jobs:
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: native-dir-*
-          path: build/generated-natives/natives
-          merge-multiple: true
+          path: build/native-artifacts
+
+      - name: Normalize native artifact layout
+        run: |
+          set -euo pipefail
+          rm -rf build/generated-natives/natives
+          mkdir -p build/generated-natives/natives
+
+          found=0
+          for artifact_dir in build/native-artifacts/native-dir-*; do
+            if [[ ! -d "$artifact_dir" ]]; then
+              continue
+            fi
+            found=1
+            platform="${artifact_dir##*native-dir-}"
+            target="build/generated-natives/natives/$platform"
+            mkdir -p "$target"
+            cp -a "$artifact_dir"/. "$target"/
+          done
+
+          if [[ "$found" -eq 0 ]]; then
+            echo "::error::No native artifacts were downloaded"
+            exit 1
+          fi
 
       - name: Cache PDFium binaries
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
