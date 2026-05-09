@@ -319,7 +319,7 @@ val buildShim by tasks.registering {
 
             when {
                 platform.startsWith("darwin") && hostOs.contains("mac") ->
-                    platformIsArm64 || platformIsX64
+                    (hostIsArm64 && platformIsArm64) || (hostIsX64 && platformIsX64)
                 platform.startsWith("linux") && hostOs.contains("linux") ->
                     (hostIsArm64 && platformIsArm64) || (hostIsX64 && platformIsX64)
                 platform.startsWith("windows") && hostOs.contains("windows") ->
