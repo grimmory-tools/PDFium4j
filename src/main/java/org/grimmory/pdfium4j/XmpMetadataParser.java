@@ -149,25 +149,35 @@ public final class XmpMetadataParser {
    * Nitro PDF UTF-16 BOM in text elements, null bytes, and XML declaration encoding mismatches.
    */
   private static String sanitizeXmpString(String xmp) {
-    String s = xmp;
-    if (!s.isEmpty() && s.charAt(0) == '\uFEFF') {
-      s = s.substring(1);
+    if (xmp == null || xmp.isEmpty()) {
+      return xmp;
     }
 
-    // Some corrupt producers embed null bytes
-    if (s.indexOf('\0') >= 0) {
-      s = s.replace("\0", "");
+    // Fast path: check if any modifications are needed
+    int xmlDeclStart = xmp.indexOf("<?xml");
+    boolean needsClean = xmlDeclStart > 0 || xmp.indexOf('\0') >= 0 || xmp.indexOf('\uFEFF') >= 0;
+
+    if (!needsClean) {
+      return xmp;
     }
 
-    // Some tools embed garbage before the XML declaration
-    int xmlDeclStart = s.indexOf("<?xml");
-    if (xmlDeclStart > 0) {
-      s = s.substring(xmlDeclStart);
+    // Single-pass copy, skipping invalid characters
+    char[] buffer = new char[xmp.length()];
+    int len = 0;
+    for (int i = 0; i < xmp.length(); i++) {
+      char c = xmp.charAt(i);
+      if (c != '\0' && c != '\uFEFF') {
+        buffer[len++] = c;
+      }
     }
 
-    // Nitro PDF embeds stray BOMs inside element text
-
-    return s.replace("\uFEFF", "");
+    // Construct final string and find XML start
+    String cleaned = new String(buffer, 0, len);
+    int cleanXmlStart = cleaned.indexOf("<?xml");
+    if (cleanXmlStart > 0) {
+      return cleaned.substring(cleanXmlStart);
+    }
+    return cleaned;
   }
 
   private static XmpMetadata extractFromDocument(Document doc) {
@@ -236,7 +246,7 @@ public final class XmpMetadataParser {
           listFields.put(key, rdfValues);
         } else {
           String text = getDirectTextContent(childElem);
-          if (text != null && !text.isBlank()) {
+          if (!text.isBlank()) {
             simpleFields.put(key, text.trim());
           }
         }
@@ -340,8 +350,8 @@ public final class XmpMetadataParser {
 
   /** Extract PDF/A conformance level from pdfaid:part and pdfaid:conformance. */
   private static Optional<String> extractPdfAConformance(Document doc) {
-    String part = getElementText(doc, NS_PDFA_ID, "part");
-    String conformance = getElementText(doc, NS_PDFA_ID, "conformance");
+    String part = getElementText(doc, "part");
+    String conformance = getElementText(doc, "conformance");
     if (part != null && !part.isBlank()) {
       String level = part + (conformance != null ? conformance.toLowerCase(Locale.ROOT) : "");
       return Optional.of(level);
@@ -389,7 +399,7 @@ public final class XmpMetadataParser {
             } else {
               // Get only direct text content, not descendants
               String text = getDirectTextContent(childElem);
-              if (text != null && !text.isBlank()) {
+              if (!text.isBlank()) {
                 fields.put(child.getLocalName(), text.trim());
               }
             }
@@ -448,8 +458,8 @@ public final class XmpMetadataParser {
   }
 
   @CheckForNull
-  private static String getElementText(Document doc, String namespaceURI, String localName) {
-    NodeList nodes = doc.getElementsByTagNameNS(namespaceURI, localName);
+  private static String getElementText(Document doc, String localName) {
+    NodeList nodes = doc.getElementsByTagNameNS(XmpMetadataParser.NS_PDFA_ID, localName);
     int len = nodes.getLength();
     if (len > 0) {
       return nodes.item(0).getTextContent();
