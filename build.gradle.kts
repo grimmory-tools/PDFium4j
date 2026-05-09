@@ -143,6 +143,10 @@ val activePlatforms = if (platformFilter != null) {
     pdfiumPlatforms
 }
 
+// Optional directory containing pre-built shim artifacts (one sub-dir per platform named native-dir-<platform>).
+// When set, buildShim will copy shims from here instead of compiling for non-host-compatible platforms.
+val prebuiltShimsDir = findProperty("prebuiltShimsDir")?.toString()?.let { project.file(it) }
+
 val pdfiumArchiveDir = layout.buildDirectory.dir("pdfium-archives")
 val pdfiumNativesDir = layout.buildDirectory.dir("generated-natives")
 
@@ -311,13 +315,21 @@ val buildShim by tasks.registering {
     outputs.dir(buildDir)
 
     doLast {
-        val compatiblePlatforms = activePlatforms.keys.filter { platform ->
-            val hostIsArm64 = hostArch == "aarch64" || hostArch == "arm64"
-            val hostIsX64 = hostArch == "x86_64" || hostArch == "amd64"
+        val hostIsArm64 = hostArch == "aarch64" || hostArch == "arm64"
+        val hostIsX64 = hostArch == "x86_64" || hostArch == "amd64"
+
+        activePlatforms.keys.forEach { platform ->
             val platformIsArm64 = platform.endsWith("arm64")
             val platformIsX64 = platform.endsWith("x64")
+            val libDir = pdfiumNativesDir.get().asFile.resolve("natives/$platform")
+            val shimLibName = when {
+                platform.startsWith("linux")   -> "pdfium4j_shim.so"
+                platform.startsWith("darwin")  -> "pdfium4j_shim.dylib"
+                platform.startsWith("windows") -> "pdfium4j_shim.dll"
+                else -> error("Unknown platform: $platform")
+            }
 
-            when {
+            val isHostCompatible = when {
                 platform.startsWith("darwin") && hostOs.contains("mac") ->
                     (hostIsArm64 && platformIsArm64) || (hostIsX64 && platformIsX64)
                 platform.startsWith("linux") && hostOs.contains("linux") ->
@@ -326,18 +338,25 @@ val buildShim by tasks.registering {
                     hostIsX64 && platformIsX64
                 else -> false
             }
-        }
 
-        if (compatiblePlatforms.isEmpty()) {
-            logger.warn("No compatible platforms in activePlatforms for host OS $hostOs; skipping shim build")
-            return@doLast
-        }
-
-        compatiblePlatforms.forEach { platform ->
+            if (!isHostCompatible) {
+                val prebuilt = prebuiltShimsDir
+                if (prebuilt != null) {
+                    val shimFile = prebuilt.resolve("native-dir-$platform/$shimLibName")
+                    if (shimFile.exists()) {
+                        logger.lifecycle("[$platform] Restoring pre-built shim from ${shimFile.absolutePath}")
+                        proj.copy { from(shimFile); into(libDir) }
+                    } else {
+                        logger.warn("[$platform] Pre-built shim not found at ${shimFile.absolutePath}; skipping")
+                    }
+                } else {
+                    logger.warn("[$platform] Platform not compatible with host OS $hostOs; skipping shim build")
+                }
+                return@forEach
+            }
             val platformBuildDir = buildDir.get().asFile.resolve(platform)
             platformBuildDir.mkdirs()
 
-            val libDir = pdfiumNativesDir.get().asFile.resolve("natives/$platform")
             val pdfiumRoot = layout.buildDirectory.dir("pdfium-env-$platform").get().asFile
             pdfiumRoot.mkdirs()
 
@@ -381,13 +400,6 @@ val buildShim by tasks.registering {
 
             runCommand(cmakeConfigCmd, "CMake configuration")
             runCommand(listOf("cmake", "--build", ".", "--config", "Release"), "CMake build")
-
-            val shimLibName = when {
-                platform.startsWith("linux")   -> "pdfium4j_shim.so"
-                platform.startsWith("darwin")  -> "pdfium4j_shim.dylib"
-                platform.startsWith("windows") -> "pdfium4j_shim.dll"
-                else -> error("Unknown platform")
-            }
 
             val builtLib = platformBuildDir.walkTopDown().find { it.name == shimLibName }
                 ?: error("Native shim NOT FOUND after build: $shimLibName in $platformBuildDir")
