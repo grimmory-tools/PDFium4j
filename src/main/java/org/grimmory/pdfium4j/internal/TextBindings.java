@@ -1,119 +1,158 @@
 package org.grimmory.pdfium4j.internal;
 
-import static java.lang.foreign.ValueLayout.ADDRESS;
-import static java.lang.foreign.ValueLayout.JAVA_DOUBLE;
-import static java.lang.foreign.ValueLayout.JAVA_INT;
+import static org.grimmory.pdfium4j.internal.FfmHelper.C_INT;
+import static org.grimmory.pdfium4j.internal.FfmHelper.C_POINTER;
+import static org.grimmory.pdfium4j.internal.FfmHelper.LINKER;
+import static org.grimmory.pdfium4j.internal.FfmHelper.LOOKUP;
 
 import java.lang.foreign.FunctionDescriptor;
-import java.lang.foreign.Linker;
-import java.lang.foreign.SymbolLookup;
 import java.lang.invoke.MethodHandle;
 import java.util.Objects;
+import java.util.Optional;
 
 /** FFM bindings for PDFium text extraction functions from {@code fpdf_text.h}. */
 public final class TextBindings {
 
-  private static final Linker LINKER = Linker.nativeLinker();
-  private static final SymbolLookup LOOKUP = SymbolLookup.loaderLookup();
-
   private TextBindings() {}
 
-  private static MethodHandle downcall(String name, FunctionDescriptor desc) {
-    return LOOKUP.find(name).map(addr -> LINKER.downcallHandle(addr, desc)).orElse(null);
-  }
-
-  private static MethodHandle downcallCritical(String name, FunctionDescriptor desc) {
-    return LOOKUP
-        .find(name)
-        .map(addr -> LINKER.downcallHandle(addr, desc, Linker.Option.critical(false)))
-        .orElse(null);
+  private static MethodHandle find(String name, FunctionDescriptor desc, boolean critical) {
+    java.lang.foreign.MemorySegment addr = LOOKUP.find(name).orElse(null);
+    if (addr == null) return null;
+    return LINKER.downcallHandle(
+        addr, desc, critical ? FfmHelper.CRITICAL_OPTIONS : FfmHelper.NO_OPTIONS);
   }
 
   public static void checkRequired() {
-    Objects.requireNonNull(FPDFText_LoadPage, "FPDFText_LoadPage");
-    Objects.requireNonNull(FPDFText_ClosePage, "FPDFText_ClosePage");
-    Objects.requireNonNull(FPDFText_CountChars, "FPDFText_CountChars");
-    Objects.requireNonNull(FPDFLink_LoadWebLinks, "FPDFLink_LoadWebLinks");
-    Objects.requireNonNull(FPDFLink_CountWebLinks, "FPDFLink_CountWebLinks");
-    Objects.requireNonNull(FPDFLink_GetURL, "FPDFLink_GetURL");
-    Objects.requireNonNull(FPDFLink_CountRects, "FPDFLink_CountRects");
-    Objects.requireNonNull(FPDFLink_GetRect, "FPDFLink_GetRect");
-    Objects.requireNonNull(FPDFLink_CloseWebLinks, "FPDFLink_CloseWebLinks");
+    Objects.requireNonNull(fpdfTextLoadPage(), "FPDFText_LoadPage");
+    Objects.requireNonNull(fpdfTextClosePage(), "FPDFText_ClosePage");
+    Objects.requireNonNull(fpdfTextCountChars(), "FPDFText_CountChars");
+    Objects.requireNonNull(fpdfLinkLoadWebLinks(), "FPDFLink_LoadWebLinks");
+    Objects.requireNonNull(fpdfLinkCountWebLinks(), "FPDFLink_CountWebLinks");
+    Objects.requireNonNull(fpdfLinkGetURL(), "FPDFLink_GetURL");
+    Objects.requireNonNull(fpdfLinkCountRects(), "FPDFLink_CountRects");
+    Objects.requireNonNull(fpdfLinkGetRect(), "FPDFLink_GetRect");
+    Objects.requireNonNull(fpdfLinkCloseWebLinks(), "FPDFLink_CloseWebLinks");
   }
 
-  /** Load a text page from a page handle. Returns FPDF_TEXTPAGE (NULL on failure). */
-  public static final MethodHandle FPDFText_LoadPage =
-      downcall("FPDFText_LoadPage", FunctionDescriptor.of(ADDRESS, ADDRESS));
+  private static final StableValue<Optional<MethodHandle>> FPDFText_LoadPage_SV = StableValue.of();
 
-  /** Close a text page handle. */
-  public static final MethodHandle FPDFText_ClosePage =
-      downcallCritical("FPDFText_ClosePage", FunctionDescriptor.ofVoid(ADDRESS));
+  public static MethodHandle fpdfTextLoadPage() {
+    return FPDFText_LoadPage_SV.orElseSet(
+            () ->
+                Optional.ofNullable(
+                    find("FPDFText_LoadPage", FunctionDescriptor.of(C_POINTER, C_POINTER), false)))
+        .orElse(null);
+  }
 
-  /** Count characters on the text page. Returns -1 on error. */
-  public static final MethodHandle FPDFText_CountChars =
-      downcallCritical("FPDFText_CountChars", FunctionDescriptor.of(JAVA_INT, ADDRESS));
+  private static final StableValue<Optional<MethodHandle>> FPDFText_ClosePage_SV = StableValue.of();
 
-  /**
-   * Get text in a character range (UTF-16LE output). Returns number of characters written
-   * (including null terminator).
-   *
-   * <p>Parameters: textPage (FPDF_TEXTPAGE handle), startIndex (0-based), count (number of
-   * characters to extract), result (UTF-16LE output buffer, must hold (count+1)*2 bytes).
-   */
-  public static final MethodHandle FPDFText_GetText =
-      downcall(
-          "FPDFText_GetText",
-          FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_INT, JAVA_INT, ADDRESS));
+  public static MethodHandle fpdfTextClosePage() {
+    return FPDFText_ClosePage_SV.orElseSet(
+            () ->
+                Optional.ofNullable(
+                    find("FPDFText_ClosePage", FunctionDescriptor.ofVoid(C_POINTER), false)))
+        .orElse(null);
+  }
 
-  /** Get unicode code point of a character by index. Returns 0 on error. */
-  public static final MethodHandle FPDFText_GetUnicode =
-      downcallCritical("FPDFText_GetUnicode", FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_INT));
+  private static final StableValue<Optional<MethodHandle>> FPDFText_CountChars_SV =
+      StableValue.of();
 
-  /**
-   * Get character bounding box by index. Writes left, right, bottom, top to the output pointers
-   * (doubles). Returns 1 on success, 0 on failure.
-   */
-  public static final MethodHandle FPDFText_GetCharBox =
-      downcall(
-          "FPDFText_GetCharBox",
-          FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_INT, ADDRESS, ADDRESS, ADDRESS, ADDRESS));
+  public static MethodHandle fpdfTextCountChars() {
+    return FPDFText_CountChars_SV.orElseSet(
+            () ->
+                Optional.ofNullable(
+                    find("FPDFText_CountChars", FunctionDescriptor.of(C_INT, C_POINTER), true)))
+        .orElse(null);
+  }
 
-  /** Get font size of character at given index. Returns font size as double. */
-  public static final MethodHandle FPDFText_GetFontSize =
-      downcallCritical(
-          "FPDFText_GetFontSize", FunctionDescriptor.of(JAVA_DOUBLE, ADDRESS, JAVA_INT));
+  private static final StableValue<Optional<MethodHandle>> FPDFText_GetText_SV = StableValue.of();
 
-  /** Load web links from a text page. Returns FPDF_PAGELINK handle. */
-  public static final MethodHandle FPDFLink_LoadWebLinks =
-      downcall("FPDFLink_LoadWebLinks", FunctionDescriptor.of(ADDRESS, ADDRESS));
+  public static MethodHandle fpdfTextGetText() {
+    return FPDFText_GetText_SV.orElseSet(
+            () ->
+                Optional.ofNullable(
+                    find(
+                        "FPDFText_GetText",
+                        FunctionDescriptor.of(C_INT, C_POINTER, C_INT, C_INT, C_POINTER),
+                        false)))
+        .orElse(null);
+  }
 
-  /** Count detected web links. */
-  public static final MethodHandle FPDFLink_CountWebLinks =
-      downcallCritical("FPDFLink_CountWebLinks", FunctionDescriptor.of(JAVA_INT, ADDRESS));
+  private static final StableValue<Optional<MethodHandle>> FPDFLink_LoadWebLinks_SV =
+      StableValue.of();
 
-  /**
-   * Get URL of a web link (UTF-16LE, double-call pattern). Returns number of characters (including
-   * null terminator).
-   */
-  public static final MethodHandle FPDFLink_GetURL =
-      downcall(
-          "FPDFLink_GetURL", FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_INT, ADDRESS, JAVA_INT));
+  public static MethodHandle fpdfLinkLoadWebLinks() {
+    return FPDFLink_LoadWebLinks_SV.orElseSet(
+            () ->
+                Optional.ofNullable(
+                    find(
+                        "FPDFLink_LoadWebLinks",
+                        FunctionDescriptor.of(C_POINTER, C_POINTER),
+                        false)))
+        .orElse(null);
+  }
 
-  /** Count rectangles for a web link. */
-  public static final MethodHandle FPDFLink_CountRects =
-      downcallCritical("FPDFLink_CountRects", FunctionDescriptor.of(JAVA_INT, ADDRESS, JAVA_INT));
+  private static final StableValue<Optional<MethodHandle>> FPDFLink_CountWebLinks_SV =
+      StableValue.of();
 
-  /**
-   * Get a bounding rectangle for a web link. Writes left, top, right, bottom to output pointers
-   * (doubles). Returns 1 on success.
-   */
-  public static final MethodHandle FPDFLink_GetRect =
-      downcall(
-          "FPDFLink_GetRect",
-          FunctionDescriptor.of(
-              JAVA_INT, ADDRESS, JAVA_INT, JAVA_INT, ADDRESS, ADDRESS, ADDRESS, ADDRESS));
+  public static MethodHandle fpdfLinkCountWebLinks() {
+    return FPDFLink_CountWebLinks_SV.orElseSet(
+            () ->
+                Optional.ofNullable(
+                    find("FPDFLink_CountWebLinks", FunctionDescriptor.of(C_INT, C_POINTER), true)))
+        .orElse(null);
+  }
 
-  /** Close web links handle. */
-  public static final MethodHandle FPDFLink_CloseWebLinks =
-      downcallCritical("FPDFLink_CloseWebLinks", FunctionDescriptor.ofVoid(ADDRESS));
+  private static final StableValue<Optional<MethodHandle>> FPDFLink_GetURL_SV = StableValue.of();
+
+  public static MethodHandle fpdfLinkGetURL() {
+    return FPDFLink_GetURL_SV.orElseSet(
+            () ->
+                Optional.ofNullable(
+                    find(
+                        "FPDFLink_GetURL",
+                        FunctionDescriptor.of(C_INT, C_POINTER, C_INT, C_POINTER, C_INT),
+                        false)))
+        .orElse(null);
+  }
+
+  private static final StableValue<Optional<MethodHandle>> FPDFLink_CountRects_SV =
+      StableValue.of();
+
+  public static MethodHandle fpdfLinkCountRects() {
+    return FPDFLink_CountRects_SV.orElseSet(
+            () ->
+                Optional.ofNullable(
+                    find(
+                        "FPDFLink_CountRects",
+                        FunctionDescriptor.of(C_INT, C_POINTER, C_INT),
+                        true)))
+        .orElse(null);
+  }
+
+  private static final StableValue<Optional<MethodHandle>> FPDFLink_GetRect_SV = StableValue.of();
+
+  public static MethodHandle fpdfLinkGetRect() {
+    return FPDFLink_GetRect_SV.orElseSet(
+            () ->
+                Optional.ofNullable(
+                    find(
+                        "FPDFLink_GetRect",
+                        FunctionDescriptor.of(
+                            C_INT, C_POINTER, C_INT, C_INT, C_POINTER, C_POINTER, C_POINTER,
+                            C_POINTER),
+                        false)))
+        .orElse(null);
+  }
+
+  private static final StableValue<Optional<MethodHandle>> FPDFLink_CloseWebLinks_SV =
+      StableValue.of();
+
+  public static MethodHandle fpdfLinkCloseWebLinks() {
+    return FPDFLink_CloseWebLinks_SV.orElseSet(
+            () ->
+                Optional.ofNullable(
+                    find("FPDFLink_CloseWebLinks", FunctionDescriptor.ofVoid(C_POINTER), false)))
+        .orElse(null);
+  }
 }

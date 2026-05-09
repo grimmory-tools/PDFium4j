@@ -1,6 +1,6 @@
 package org.grimmory.pdfium4j.model;
 
-/** PDFium error codes returned by FPDF_GetLastError(). */
+/** PDFium error codes returned by fpdfGetLastError(). */
 public enum PdfErrorCode {
   SUCCESS(0, "No error"),
   UNKNOWN(1, "Unknown error"),

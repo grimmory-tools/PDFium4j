@@ -26,20 +26,13 @@ public record RenderFlags(int value) {
 
   public static final class Builder {
     private boolean annotations = true;
-    private boolean lcdText = false;
-    private boolean grayscale = false;
-    private boolean printing = false;
+    private static final boolean PRINTING = false;
     private boolean antiAlias = true;
 
     private Builder() {}
 
     public Builder annotations(boolean v) {
       this.annotations = v;
-      return this;
-    }
-
-    public Builder printing(boolean v) {
-      this.printing = v;
       return this;
     }
 
@@ -51,9 +44,8 @@ public record RenderFlags(int value) {
     public RenderFlags build() {
       int flags = ViewBindings.FPDF_REVERSE_BYTE_ORDER; // always RGBA for Java
       if (annotations) flags |= ViewBindings.FPDF_ANNOT;
-      if (lcdText) flags |= ViewBindings.FPDF_LCD_TEXT;
-      if (grayscale) flags |= ViewBindings.FPDF_GRAYSCALE;
-      if (printing) flags |= ViewBindings.FPDF_PRINTING;
+
+      if (PRINTING) flags |= ViewBindings.FPDF_PRINTING;
       if (!antiAlias) {
         flags |= ViewBindings.FPDF_RENDER_NO_SMOOTHTEXT;
         flags |= ViewBindings.FPDF_RENDER_NO_SMOOTHIMAGE;

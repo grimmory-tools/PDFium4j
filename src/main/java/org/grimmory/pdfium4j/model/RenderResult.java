@@ -29,18 +29,18 @@ public record RenderResult(int width, int height, byte[] rgba) {
     rgba = rgba.clone();
   }
 
-  /**
-   * Returns a read-only view of the pixel data.
-   *
-   * @return a read-only ByteBuffer wrapping the rgba array
-   */
-  public ByteBuffer asReadOnlyBuffer() {
-    return ByteBuffer.wrap(rgba).asReadOnlyBuffer();
-  }
-
   @Override
   public byte[] rgba() {
     return rgba.clone();
+  }
+
+  /**
+   * Returns a read-only view of the pixel data.
+   *
+   * @return a read-only {@link ByteBuffer} wrapping the internal array
+   */
+  public ByteBuffer asReadOnlyBuffer() {
+    return ByteBuffer.wrap(rgba).asReadOnlyBuffer();
   }
 
   /**
