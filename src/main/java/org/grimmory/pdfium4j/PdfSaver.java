@@ -35,7 +35,6 @@ import java.util.zip.Inflater;
 import org.grimmory.pdfium4j.exception.PdfiumException;
 import org.grimmory.pdfium4j.internal.EditBindings;
 import org.grimmory.pdfium4j.internal.FfmHelper;
-import org.grimmory.pdfium4j.internal.Generators;
 import org.grimmory.pdfium4j.internal.ScratchBuffer;
 import org.grimmory.pdfium4j.internal.ShimBindings;
 import org.grimmory.pdfium4j.internal.XmpUpdate;
