@@ -68,7 +68,7 @@ public final class FfmHelper {
     if (C_LONG instanceof ValueLayout.OfLong ofLong) {
       seg.set(ofLong, offset, value);
     } else {
-      seg.set((ValueLayout.OfInt) C_LONG, offset, (int) value);
+      seg.set((ValueLayout.OfInt) C_LONG, offset, Math.toIntExact(value));
     }
   }
 
@@ -213,7 +213,7 @@ public final class FfmHelper {
   /** Decode an ASCII/UTF-8 buffer into a Java String. */
   public static String readAsciiString(MemorySegment seg, long byteLen) {
     if (byteLen <= 1) return "";
-    long lenLong = byteLen - 1; // remove null terminator
+    long lenLong = Math.min(byteLen - 1, seg.byteSize()); // remove null terminator
     int len = (int) Math.min(lenLong, Integer.MAX_VALUE);
     byte[] arr = ScratchBuffer.getByteArray(len);
     MemorySegment.copy(seg, JAVA_BYTE, 0, arr, 0, len);
@@ -223,7 +223,7 @@ public final class FfmHelper {
   /** Decode a UTF-8 buffer into a Java String. */
   public static String fromUtf8String(MemorySegment seg, int byteLen) {
     if (byteLen <= 1) return "";
-    int len = byteLen - 1;
+    int len = (int) Math.min((long) byteLen - 1, seg.byteSize());
     byte[] arr = ScratchBuffer.getByteArray(len);
     MemorySegment.copy(seg, JAVA_BYTE, 0, arr, 0, len);
     return new String(arr, 0, len, StandardCharsets.UTF_8);

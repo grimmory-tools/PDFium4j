@@ -19,6 +19,38 @@ public final class ShimBindings {
   /** Ensures all required shim symbols are available. */
   public static void checkRequired() {
     Objects.requireNonNull(pdfium4jPageCount(), "pdfium4j_page_count");
+    Objects.requireNonNull(pdfium4jGetMetaUtf8(), "pdfium4j_get_meta_utf8");
+    Objects.requireNonNull(pdfium4jSetMetaUtf8(), "pdfium4j_set_meta_utf8");
+    Objects.requireNonNull(pdfium4jGetXmpMetadata(), "pdfium4j_get_xmp_metadata");
+    Objects.requireNonNull(pdfium4jPageLabel(), "pdfium4j_page_label");
+    Objects.requireNonNull(pdfium4jPageWidth(), "pdfium4j_page_width");
+    Objects.requireNonNull(pdfium4jPageHeight(), "pdfium4j_page_height");
+    Objects.requireNonNull(pdfium4jBookmarkFirst(), "pdfium4j_bookmark_first");
+    Objects.requireNonNull(pdfium4jBookmarkNext(), "pdfium4j_bookmark_next");
+    Objects.requireNonNull(pdfium4jBookmarkFirstChild(), "pdfium4j_bookmark_first_child");
+    Objects.requireNonNull(pdfium4jBookmarkTitle(), "pdfium4j_bookmark_title");
+    Objects.requireNonNull(pdfium4jBookmarkPageIndex(), "pdfium4j_bookmark_page_index");
+    Objects.requireNonNull(pdfium4jStructTreeGet(), "pdfium4j_struct_tree_get");
+    Objects.requireNonNull(pdfium4jStructTreeClose(), "pdfium4j_struct_tree_close");
+    Objects.requireNonNull(
+        pdfium4jStructTreeCountChildren(), "pdfium4j_struct_tree_count_children");
+    Objects.requireNonNull(pdfium4jStructTreeGetChild(), "pdfium4j_struct_tree_get_child");
+    Objects.requireNonNull(
+        pdfium4jStructElementCountChildren(), "pdfium4j_struct_element_count_children");
+    Objects.requireNonNull(pdfium4jStructElementGetChild(), "pdfium4j_struct_element_get_child");
+    Objects.requireNonNull(pdfium4jStructElementGetMcid(), "pdfium4j_struct_element_get_mcid");
+    Objects.requireNonNull(pdfium4jStructElementGetType(), "pdfium4j_struct_element_get_type");
+    Objects.requireNonNull(pdfium4jStructElementGetTitle(), "pdfium4j_struct_element_get_title");
+    Objects.requireNonNull(
+        pdfium4jStructElementGetAltText(), "pdfium4j_struct_element_get_alt_text");
+    Objects.requireNonNull(
+        pdfium4jStructElementGetActualText(), "pdfium4j_struct_element_get_actual_text");
+    Objects.requireNonNull(pdfium4jStructElementGetLang(), "pdfium4j_struct_element_get_lang");
+    Objects.requireNonNull(
+        pdfium4jStructElementGetAttributeCount(), "pdfium4j_struct_element_get_attribute_count");
+    Objects.requireNonNull(pdfium4jTextGetCharsWithBounds(), "pdfium4j_text_get_chars_with_bounds");
+    Objects.requireNonNull(pdfium4jSaveIncremental(), "pdfium4j_save_incremental");
+    Objects.requireNonNull(pdfium4jSaveCopy(), "pdfium4j_save_copy");
   }
 
   private static MethodHandle find(String name, FunctionDescriptor desc, boolean critical) {

@@ -2,6 +2,7 @@ package org.grimmory.pdfium4j.internal;
 
 import static java.lang.foreign.ValueLayout.JAVA_BYTE;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
@@ -158,13 +159,44 @@ public final class PdfDocumentFallbackMeta {
       MemorySegment pdf, String key, long start, long limit, Map<String, String> result) {
     long valEnd = findClosingParen(pdf, start, limit);
     if (valEnd >= 0) {
-      result.put(
-          key,
-          new String(
-              pdf.asSlice(start, valEnd - start).toArray(JAVA_BYTE), StandardCharsets.ISO_8859_1));
+      byte[] raw = pdf.asSlice(start, valEnd - start).toArray(JAVA_BYTE);
+      result.put(key, unescape(raw));
       return valEnd + 1;
     }
     return start;
+  }
+
+  private static String unescape(byte[] raw) {
+    ByteArrayOutputStream out = new ByteArrayOutputStream(raw.length);
+    for (int i = 0; i < raw.length; i++) {
+      byte b = raw[i];
+      if (b == '\\' && i + 1 < raw.length) {
+        byte next = raw[++i];
+        switch (next) {
+          case 'n' -> out.write('\n');
+          case 'r' -> out.write('\r');
+          case 't' -> out.write('\t');
+          case 'b' -> out.write('\b');
+          case 'f' -> out.write('\f');
+          case '(', ')', '\\' -> out.write(next);
+          default -> {
+            if (next >= '0' && next <= '7') {
+              int octal = next - '0';
+              if (i + 1 < raw.length && raw[i + 1] >= '0' && raw[i + 1] <= '7') {
+                octal = octal * 8 + (raw[++i] - '0');
+                if (i + 1 < raw.length && raw[i + 1] >= '0' && raw[i + 1] <= '7') {
+                  octal = octal * 8 + (raw[++i] - '0');
+                }
+              }
+              out.write(octal);
+            }
+          }
+        }
+      } else {
+        out.write(b);
+      }
+    }
+    return new String(out.toByteArray(), StandardCharsets.ISO_8859_1);
   }
 
   private static long parseHexString(
@@ -193,26 +225,20 @@ public final class PdfDocumentFallbackMeta {
       byte b = pdf.get(JAVA_BYTE, curr);
       if (b == '(') {
         curr = skipLiteralString(pdf, curr, size);
-        if (curr < 0) return -1;
-        continue;
-      }
-      if (b == '<') {
-        if (pdf.get(JAVA_BYTE, curr + 1) == '<') {
-          depth++;
-          curr += 2;
-        } else {
-          curr = skipHexString(pdf, curr);
-        }
-        if (curr < 0) return -1;
-        continue;
-      }
-      if (b == '>' && pdf.get(JAVA_BYTE, curr + 1) == '>') {
+      } else if (b == '<' && pdf.get(JAVA_BYTE, curr + 1) == '<') {
+        depth++;
+        curr += 2;
+      } else if (b == '<') {
+        curr = skipHexString(pdf, curr);
+      } else if (b == '>' && pdf.get(JAVA_BYTE, curr + 1) == '>') {
         depth--;
         if (depth == 0) return curr + 2;
         curr += 2;
-        continue;
+      } else {
+        curr++;
       }
-      curr++;
+
+      if (curr < 0) return -1;
     }
     return -1;
   }

@@ -168,7 +168,7 @@ public final class ViewBindings {
                 Optional.ofNullable(
                     find(
                         "FPDF_GetTrailerEnds",
-                        FunctionDescriptor.of(C_LONG, C_POINTER, C_POINTER, C_SIZE_T),
+                        FunctionDescriptor.of(C_LONG, C_POINTER, C_POINTER, C_LONG),
                         false)))
         .orElse(null);
   }

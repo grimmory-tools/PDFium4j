@@ -371,7 +371,11 @@ public final class ScratchBuffer {
 
     SegmentInputStream(MemorySegment segment, long size) {
       acquire();
-      this.segment = segment;
+      this.segment = Objects.requireNonNull(segment, "segment");
+      if (size < 0 || size > segment.byteSize()) {
+        release();
+        throw new IllegalArgumentException("size must be between 0 and segment.byteSize()");
+      }
       this.size = size;
       this.pos = 0;
     }
@@ -385,6 +389,7 @@ public final class ScratchBuffer {
     @Override
     public int read(byte[] b, int off, int len) {
       Objects.checkFromIndexSize(off, len, b.length);
+      if (len == 0) return 0;
       if (segment == null || pos >= size) return -1;
       long n = Math.min(len, size - pos);
       MemorySegment.copy(segment, pos, MemorySegment.ofArray(b), off, n);

@@ -5,6 +5,7 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.io.OutputStream;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
+import java.util.Objects;
 
 /**
  * An OutputStream that writes directly to a MemorySegment.
@@ -30,7 +31,8 @@ public final class SegmentOutputStream extends OutputStream {
 
   @Override
   public void write(@NonNull byte[] b, int off, int len) {
-    if (len <= 0) return;
+    Objects.checkFromIndexSize(off, len, b.length);
+    if (len == 0) return;
     ensureCapacity(len);
     MemorySegment.copy(b, off, segment, ValueLayout.JAVA_BYTE, pos, len);
     pos += len;

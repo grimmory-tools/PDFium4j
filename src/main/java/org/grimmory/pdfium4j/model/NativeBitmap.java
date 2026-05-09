@@ -6,11 +6,12 @@ import java.awt.color.ColorSpace;
 import java.awt.image.BufferedImage;
 import java.awt.image.ComponentColorModel;
 import java.awt.image.DataBuffer;
+import java.awt.image.DataBufferByte;
 import java.awt.image.Raster;
 import java.awt.image.WritableRaster;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
-import java.nio.ByteBuffer;
+import java.lang.foreign.ValueLayout;
 
 /** A zero-copy representation of a rendered PDF page in native off-heap memory. */
 public final class NativeBitmap implements AutoCloseable {
@@ -48,23 +49,20 @@ public final class NativeBitmap implements AutoCloseable {
   }
 
   /**
-   * Wraps the native memory segment into a {@link BufferedImage} without copying data.
+   * Creates a managed {@link BufferedImage} from the native memory.
    *
-   * <p>The resulting image depends on the native memory staying valid. Closing this {@code
-   * NativeBitmap} will invalidate the image.
+   * <p>This method performs a one-time copy of the native pixels into a managed Java {@code
+   * byte[]}. The resulting image is safe to use even after this {@code NativeBitmap} is closed.
    *
-   * @return a BufferedImage wrapping the off-heap memory
+   * @return a new managed BufferedImage
    */
   public BufferedImage asBufferedImage() {
-    // PDFium BGRA format matches Java's TYPE_4BYTE_ABGR with some adjustments
-    // or we can use a custom ComponentColorModel
+    // PDFium BGRA format
+    int capacity = Math.toIntExact(segment.byteSize());
+    byte[] data = new byte[capacity];
+    MemorySegment.copy(segment, ValueLayout.JAVA_BYTE, 0, data, 0, capacity);
 
-    ByteBuffer buffer = segment.asByteBuffer();
-    return createZeroCopyBufferedImage(buffer, width, height, stride);
-  }
-
-  private static BufferedImage createZeroCopyBufferedImage(
-      ByteBuffer buffer, int width, int height, int stride) {
+    DataBufferByte dataBuffer = new DataBufferByte(data, capacity);
     ColorSpace cs = ColorSpace.getInstance(ColorSpace.CS_sRGB);
     int[] nBits = {8, 8, 8, 8};
     int[] bOffs = {2, 1, 0, 3}; // BGRA to RGBA mapping for ComponentColorModel
@@ -73,24 +71,7 @@ public final class NativeBitmap implements AutoCloseable {
             cs, nBits, true, false, Transparency.TRANSLUCENT, DataBuffer.TYPE_BYTE);
 
     WritableRaster raster =
-        Raster.createInterleavedRaster(
-            new DataBuffer(DataBuffer.TYPE_BYTE, buffer.capacity()) {
-              @Override
-              public int getElem(int bank, int i) {
-                return buffer.get(i) & 0xFF;
-              }
-
-              @Override
-              public void setElem(int bank, int i, int val) {
-                buffer.put(i, (byte) val);
-              }
-            },
-            width,
-            height,
-            stride,
-            4,
-            bOffs,
-            null);
+        Raster.createInterleavedRaster(dataBuffer, width, height, stride, 4, bOffs, null);
 
     return new BufferedImage(colorModel, raster, false, null);
   }
