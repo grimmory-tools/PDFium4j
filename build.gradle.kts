@@ -124,7 +124,7 @@ tasks.named("check") {
 
 // -- PDFium native binary download & bundling --
 
-val pdfiumVersion = findProperty("pdfiumVersion")?.toString() ?: "7825"
+val pdfiumVersion = findProperty("pdfiumVersion")?.toString() ?: "7834"
 
 val pdfiumPlatforms = mapOf(
     "linux-x64"        to "linux-x64",
@@ -170,6 +170,15 @@ val pdfiumHashes = mapOf(
         "mac-x64"          to "1e2f0a38bd7a8c369b0a1655a527c6b5491086fe3a45d1d82432e9229ac9b40c",
         "mac-arm64"        to "0e9692fa2063f5b5e6f6129680fe618f47efb9d728dd02e9db9b8999e386c84e",
         "win-x64"          to "eefb48c845ab22f0945151093ce8fd611a33687796728051f9a1b2b341e1b980"
+    ),
+    "7834" to mapOf(
+        "linux-x64"        to "e10b18234af3e988b3021547786e574b8905a24511067f14773f29c9cac12365",
+        "linux-arm64"      to "5381c1e7436dc6811ba86f4444fdcaccadd90fdb2a06f12ee81bfba96689ee36",
+        "linux-musl-x64"   to "b6c5c8f0ff24fc09bf19f3572620294938bd4a35efd97630bec1669984a407c3",
+        "linux-musl-arm64" to "1737a6f0d26f16ec46bb82ad4a31cfaf92ba7709686121306be4d0245f867d20",
+        "mac-x64"          to "fcfed5eaf8fe9a761577d626dff651227600a52fc5f933c461447564361bb036",
+        "mac-arm64"        to "2b733774416de02482281c0abc7589b08dc908896ecef2bfc31a85c5b5ffd572",
+        "win-x64"          to "0abfacf8aacc919f98eff2c3efa2927c3dc9faf07e31f22558a1f1cf93809612"
     )
 )
 
@@ -242,6 +251,8 @@ val extractPdfiumBinaries by tasks.registering {
     description = "Extracts PDFium native libraries for bundling into the JAR"
     dependsOn(downloadPdfiumBinaries)
     inputs.property("activePlatforms", activePlatforms.keys)
+    inputs.property("zlibRoot", System.getenv("ZLIB_ROOT") ?: "")
+    inputs.property("jpegRoot", System.getenv("JPEG_ROOT") ?: "")
     outputs.dir(pdfiumNativesDir)
     val proj = project
     doLast {
@@ -249,20 +260,36 @@ val extractPdfiumBinaries by tasks.registering {
         activePlatforms.forEach { (localName, remoteName) ->
             val archive = pdfiumArchiveDir.get().asFile.resolve("pdfium-$remoteName.tgz")
             val platformDir = nativesRoot.resolve(localName)
-            platformDir.mkdirs()
-            val libFileName = when {
-                localName.startsWith("linux")   -> "libpdfium.so"
-                localName.startsWith("darwin")  -> "libpdfium.dylib"
-                localName.startsWith("windows") -> "pdfium.dll"
-                else -> error("Unknown platform: $localName")
+            if (platformDir.exists()) {
+                platformDir.deleteRecursively()
             }
+            platformDir.mkdirs()
+
+            // Copy PDFium binaries
             proj.copy {
+                duplicatesStrategy = DuplicatesStrategy.EXCLUDE
                 from(proj.tarTree(proj.resources.gzip(archive))) {
                     include("**/*pdfium*.so*", "**/*pdfium*.dylib*", "**/*pdfium*.dll", "**/*pdfium*.lib")
                     eachFile { relativePath = RelativePath(true, name) }
                 }
                 into(platformDir)
                 includeEmptyDirs = false
+            }
+
+            // Copy extra dependencies if roots are provided (CI environment)
+            val zlibRoot = System.getenv("ZLIB_ROOT")
+            val jpegRoot = System.getenv("JPEG_ROOT")
+
+            listOfNotNull(zlibRoot, jpegRoot).map { proj.file(it) }.filter { it.exists() }.forEach { root ->
+                proj.copy {
+                    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+                    from(root) {
+                        include("bin/*.dll", "lib/*.so*", "lib/*.dylib*")
+                        eachFile { relativePath = RelativePath(true, name) }
+                    }
+                    into(platformDir)
+                    includeEmptyDirs = false
+                }
             }
         }
     }
@@ -413,6 +440,11 @@ val buildShim by tasks.registering {
                 runCommand(listOf("install_name_tool", "-change", "libpdfium.dylib", "@loader_path/libpdfium.dylib", builtLib.absolutePath), "Fixing pdfium reference (short)")
                 runCommand(listOf("install_name_tool", "-change", "./libpdfium.dylib", "@loader_path/libpdfium.dylib", builtLib.absolutePath), "Fixing pdfium reference (dot)")
 
+                // Fix references to libjpeg variants if they were linked
+                runCommand(listOf("install_name_tool", "-change", "libjpeg.dylib", "@loader_path/libjpeg.dylib", builtLib.absolutePath), "Fixing jpeg reference")
+                runCommand(listOf("install_name_tool", "-change", "libjpeg.8.dylib", "@loader_path/libjpeg.8.dylib", builtLib.absolutePath), "Fixing jpeg reference (v8)")
+                runCommand(listOf("install_name_tool", "-change", "libjpeg.9.dylib", "@loader_path/libjpeg.9.dylib", builtLib.absolutePath), "Fixing jpeg reference (v9)")
+
                 // Also fix libpdfium.dylib ID in its extraction dir if it exists there
                 val pdfiumLib = libDir.resolve("libpdfium.dylib")
                 if (pdfiumLib.exists()) {
@@ -443,7 +475,12 @@ val generateNativeIndex by tasks.registering {
                 val name = it.name
                 name.endsWith(".so") || name.endsWith(".dylib") || name.endsWith(".dll")
             }?.map { it.name }?.sortedBy {
-                if (it.contains("pdfium") && !it.contains("shim")) 0 else 1
+                when {
+                    it.contains("pdfium") && !it.contains("shim") -> 0
+                    it.contains("zlib") || it.contains("jpeg") || it.contains("z") -> 1
+                    it.contains("shim") -> 2
+                    else -> 3
+                }
             }
             if (libs != null && libs.isNotEmpty()) {
                 platformDir.resolve("native-libs.txt").writeText(libs.joinToString("\n") + "\n")

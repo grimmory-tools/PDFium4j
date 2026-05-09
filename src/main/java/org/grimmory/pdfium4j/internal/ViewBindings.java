@@ -14,7 +14,6 @@ import java.lang.foreign.StructLayout;
 import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandle;
 import java.util.Objects;
-import java.util.Optional;
 
 /** FFM bindings for PDFium core functions from {@code fpdfview.h}. */
 public final class ViewBindings {
@@ -29,16 +28,20 @@ public final class ViewBindings {
   }
 
   public static void checkRequired() {
-    Objects.requireNonNull(fpdfInitLibraryWithConfig(), "FPDF_InitLibraryWithConfig");
-    Objects.requireNonNull(fpdfDestroyLibrary(), "FPDF_DestroyLibrary");
-    Objects.requireNonNull(fpdfLoadDocument(), "FPDF_LoadDocument");
-    Objects.requireNonNull(fpdfCloseDocument(), "FPDF_CloseDocument");
-    Objects.requireNonNull(fpdfGetLastError(), "FPDF_GetLastError");
-    Objects.requireNonNull(fpdfGetPageCount(), "FPDF_GetPageCount");
-    Objects.requireNonNull(fpdfLoadPage(), "FPDF_LoadPage");
-    Objects.requireNonNull(fpdfClosePage(), "FPDF_ClosePage");
-    Objects.requireNonNull(fpdfRenderPageBitmap(), "FPDF_RenderPageBitmap");
-    Objects.requireNonNull(fpdfGetTrailerEnds(), "FPDF_GetTrailerEnds");
+    try {
+      Objects.requireNonNull(fpdfInitLibraryWithConfig(), "FPDF_InitLibraryWithConfig");
+      Objects.requireNonNull(fpdfDestroyLibrary(), "FPDF_DestroyLibrary");
+      Objects.requireNonNull(fpdfLoadDocument(), "FPDF_LoadDocument");
+      Objects.requireNonNull(fpdfCloseDocument(), "FPDF_CloseDocument");
+      Objects.requireNonNull(fpdfGetLastError(), "FPDF_GetLastError");
+      Objects.requireNonNull(fpdfGetPageCount(), "FPDF_GetPageCount");
+      Objects.requireNonNull(fpdfLoadPage(), "FPDF_LoadPage");
+      Objects.requireNonNull(fpdfClosePage(), "FPDF_ClosePage");
+      Objects.requireNonNull(fpdfRenderPageBitmap(), "FPDF_RenderPageBitmap");
+      Objects.requireNonNull(fpdfGetTrailerEnds(), "FPDF_GetTrailerEnds");
+    } catch (NullPointerException e) {
+      throw new RuntimeException("Missing required PDFium symbol: " + e.getMessage(), e);
+    }
   }
 
   public static final StructLayout LIBRARY_CONFIG_LAYOUT =
@@ -64,215 +67,314 @@ public final class ViewBindings {
               C_POINTER.withName("m_Param"));
   public static final FunctionDescriptor GET_BLOCK_DESC =
       FunctionDescriptor.of(C_INT, C_POINTER, C_LONG, C_POINTER, C_LONG);
-  private static final StableValue<Optional<MethodHandle>> FPDF_InitLibraryWithConfig_SV =
-      StableValue.of();
+
+  private static volatile MethodHandle FPDF_InitLibraryWithConfig_MH = null;
 
   public static MethodHandle fpdfInitLibraryWithConfig() {
-    return FPDF_InitLibraryWithConfig_SV.orElseSet(
-            () ->
-                Optional.ofNullable(
-                    find(
-                        "FPDF_InitLibraryWithConfig", FunctionDescriptor.ofVoid(C_POINTER), false)))
-        .orElse(null);
+    MethodHandle mh = FPDF_InitLibraryWithConfig_MH;
+    if (mh == null) {
+      synchronized (ViewBindings.class) {
+        mh = FPDF_InitLibraryWithConfig_MH;
+        if (mh == null) {
+          mh = find("FPDF_InitLibraryWithConfig", FunctionDescriptor.ofVoid(C_POINTER), false);
+          FPDF_InitLibraryWithConfig_MH = mh;
+        }
+      }
+    }
+    return mh;
   }
 
-  private static final StableValue<Optional<MethodHandle>> FPDF_DestroyLibrary_SV =
-      StableValue.of();
+  private static volatile MethodHandle FPDF_DestroyLibrary_MH = null;
 
   public static MethodHandle fpdfDestroyLibrary() {
-    return FPDF_DestroyLibrary_SV.orElseSet(
-            () ->
-                Optional.ofNullable(
-                    find("FPDF_DestroyLibrary", FunctionDescriptor.ofVoid(), false)))
-        .orElse(null);
+    MethodHandle mh = FPDF_DestroyLibrary_MH;
+    if (mh == null) {
+      synchronized (ViewBindings.class) {
+        mh = FPDF_DestroyLibrary_MH;
+        if (mh == null) {
+          mh = find("FPDF_DestroyLibrary", FunctionDescriptor.ofVoid(), false);
+          FPDF_DestroyLibrary_MH = mh;
+        }
+      }
+    }
+    return mh;
   }
 
-  private static final StableValue<Optional<MethodHandle>> FPDF_LoadDocument_SV = StableValue.of();
+  private static volatile MethodHandle FPDF_LoadDocument_MH = null;
 
   public static MethodHandle fpdfLoadDocument() {
-    return FPDF_LoadDocument_SV.orElseSet(
-            () ->
-                Optional.ofNullable(
-                    find(
-                        "FPDF_LoadDocument",
-                        FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER),
-                        false)))
-        .orElse(null);
+    MethodHandle mh = FPDF_LoadDocument_MH;
+    if (mh == null) {
+      synchronized (ViewBindings.class) {
+        mh = FPDF_LoadDocument_MH;
+        if (mh == null) {
+          mh =
+              find(
+                  "FPDF_LoadDocument",
+                  FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER),
+                  false);
+          FPDF_LoadDocument_MH = mh;
+        }
+      }
+    }
+    return mh;
   }
 
-  private static final StableValue<Optional<MethodHandle>> FPDF_LoadMemDocument_SV =
-      StableValue.of();
+  private static volatile MethodHandle FPDF_LoadMemDocument_MH = null;
 
   public static MethodHandle fpdfLoadMemDocument() {
-    return FPDF_LoadMemDocument_SV.orElseSet(
-            () ->
-                Optional.ofNullable(
-                    find(
-                        "FPDF_LoadMemDocument",
-                        FunctionDescriptor.of(C_POINTER, C_POINTER, C_INT, C_POINTER),
-                        false)))
-        .orElse(null);
+    MethodHandle mh = FPDF_LoadMemDocument_MH;
+    if (mh == null) {
+      synchronized (ViewBindings.class) {
+        mh = FPDF_LoadMemDocument_MH;
+        if (mh == null) {
+          mh =
+              find(
+                  "FPDF_LoadMemDocument",
+                  FunctionDescriptor.of(C_POINTER, C_POINTER, C_INT, C_POINTER),
+                  false);
+          FPDF_LoadMemDocument_MH = mh;
+        }
+      }
+    }
+    return mh;
   }
 
-  private static final StableValue<Optional<MethodHandle>> FPDF_LoadCustomDocument_SV =
-      StableValue.of();
+  private static volatile MethodHandle FPDF_LoadCustomDocument_MH = null;
 
   public static MethodHandle fpdfLoadCustomDocument() {
-    return FPDF_LoadCustomDocument_SV.orElseSet(
-            () ->
-                Optional.ofNullable(
-                    find(
-                        "FPDF_LoadCustomDocument",
-                        FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER),
-                        false)))
-        .orElse(null);
+    MethodHandle mh = FPDF_LoadCustomDocument_MH;
+    if (mh == null) {
+      synchronized (ViewBindings.class) {
+        mh = FPDF_LoadCustomDocument_MH;
+        if (mh == null) {
+          mh =
+              find(
+                  "FPDF_LoadCustomDocument",
+                  FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER),
+                  false);
+          FPDF_LoadCustomDocument_MH = mh;
+        }
+      }
+    }
+    return mh;
   }
 
-  private static final StableValue<Optional<MethodHandle>> FPDF_CloseDocument_SV = StableValue.of();
+  private static volatile MethodHandle FPDF_CloseDocument_MH = null;
 
   public static MethodHandle fpdfCloseDocument() {
-    return FPDF_CloseDocument_SV.orElseSet(
-            () ->
-                Optional.ofNullable(
-                    find("FPDF_CloseDocument", FunctionDescriptor.ofVoid(C_POINTER), false)))
-        .orElse(null);
+    MethodHandle mh = FPDF_CloseDocument_MH;
+    if (mh == null) {
+      synchronized (ViewBindings.class) {
+        mh = FPDF_CloseDocument_MH;
+        if (mh == null) {
+          mh = find("FPDF_CloseDocument", FunctionDescriptor.ofVoid(C_POINTER), false);
+          FPDF_CloseDocument_MH = mh;
+        }
+      }
+    }
+    return mh;
   }
 
-  private static final StableValue<Optional<MethodHandle>> FPDF_GetLastError_SV = StableValue.of();
+  private static volatile MethodHandle FPDF_GetLastError_MH = null;
 
   public static MethodHandle fpdfGetLastError() {
-    return FPDF_GetLastError_SV.orElseSet(
-            () ->
-                Optional.ofNullable(find("FPDF_GetLastError", FunctionDescriptor.of(C_INT), true)))
-        .orElse(null);
+    MethodHandle mh = FPDF_GetLastError_MH;
+    if (mh == null) {
+      synchronized (ViewBindings.class) {
+        mh = FPDF_GetLastError_MH;
+        if (mh == null) {
+          mh = find("FPDF_GetLastError", FunctionDescriptor.of(C_INT), true);
+          FPDF_GetLastError_MH = mh;
+        }
+      }
+    }
+    return mh;
   }
 
-  private static final StableValue<Optional<MethodHandle>>
-      FPDF_DocumentHasValidCrossReferenceTable_SV = StableValue.of();
+  private static volatile MethodHandle FPDF_DocumentHasValidCrossReferenceTable_MH = null;
 
   public static MethodHandle fpdfDocumentHasValidCrossReferenceTable() {
-    return FPDF_DocumentHasValidCrossReferenceTable_SV.orElseSet(
-            () ->
-                Optional.ofNullable(
-                    find(
-                        "FPDF_DocumentHasValidCrossReferenceTable",
-                        FunctionDescriptor.of(C_INT, C_POINTER),
-                        true)))
-        .orElse(null);
+    MethodHandle mh = FPDF_DocumentHasValidCrossReferenceTable_MH;
+    if (mh == null) {
+      synchronized (ViewBindings.class) {
+        mh = FPDF_DocumentHasValidCrossReferenceTable_MH;
+        if (mh == null) {
+          mh =
+              find(
+                  "FPDF_DocumentHasValidCrossReferenceTable",
+                  FunctionDescriptor.of(C_INT, C_POINTER),
+                  true);
+          FPDF_DocumentHasValidCrossReferenceTable_MH = mh;
+        }
+      }
+    }
+    return mh;
   }
 
-  private static final StableValue<Optional<MethodHandle>> FPDF_GetTrailerEnds_SV =
-      StableValue.of();
+  private static volatile MethodHandle FPDF_GetTrailerEnds_MH = null;
 
   public static MethodHandle fpdfGetTrailerEnds() {
-    return FPDF_GetTrailerEnds_SV.orElseSet(
-            () ->
-                Optional.ofNullable(
-                    find(
-                        "FPDF_GetTrailerEnds",
-                        FunctionDescriptor.of(C_LONG, C_POINTER, C_POINTER, C_LONG),
-                        false)))
-        .orElse(null);
+    MethodHandle mh = FPDF_GetTrailerEnds_MH;
+    if (mh == null) {
+      synchronized (ViewBindings.class) {
+        mh = FPDF_GetTrailerEnds_MH;
+        if (mh == null) {
+          mh =
+              find(
+                  "FPDF_GetTrailerEnds",
+                  FunctionDescriptor.of(C_LONG, C_POINTER, C_POINTER, C_LONG),
+                  false);
+          FPDF_GetTrailerEnds_MH = mh;
+        }
+      }
+    }
+    return mh;
   }
 
-  private static final StableValue<Optional<MethodHandle>> FPDF_GetPageCount_SV = StableValue.of();
+  private static volatile MethodHandle FPDF_GetPageCount_MH = null;
 
   public static MethodHandle fpdfGetPageCount() {
-    return FPDF_GetPageCount_SV.orElseSet(
-            () ->
-                Optional.ofNullable(
-                    find("FPDF_GetPageCount", FunctionDescriptor.of(C_INT, C_POINTER), true)))
-        .orElse(null);
+    MethodHandle mh = FPDF_GetPageCount_MH;
+    if (mh == null) {
+      synchronized (ViewBindings.class) {
+        mh = FPDF_GetPageCount_MH;
+        if (mh == null) {
+          mh = find("FPDF_GetPageCount", FunctionDescriptor.of(C_INT, C_POINTER), true);
+          FPDF_GetPageCount_MH = mh;
+        }
+      }
+    }
+    return mh;
   }
 
-  private static final StableValue<Optional<MethodHandle>> FPDF_LoadPage_SV = StableValue.of();
+  private static volatile MethodHandle FPDF_LoadPage_MH = null;
 
   public static MethodHandle fpdfLoadPage() {
-    return FPDF_LoadPage_SV.orElseSet(
-            () ->
-                Optional.ofNullable(
-                    find(
-                        "FPDF_LoadPage",
-                        FunctionDescriptor.of(C_POINTER, C_POINTER, C_INT),
-                        false)))
-        .orElse(null);
+    MethodHandle mh = FPDF_LoadPage_MH;
+    if (mh == null) {
+      synchronized (ViewBindings.class) {
+        mh = FPDF_LoadPage_MH;
+        if (mh == null) {
+          mh = find("FPDF_LoadPage", FunctionDescriptor.of(C_POINTER, C_POINTER, C_INT), false);
+          FPDF_LoadPage_MH = mh;
+        }
+      }
+    }
+    return mh;
   }
 
-  private static final StableValue<Optional<MethodHandle>> FPDF_ClosePage_SV = StableValue.of();
+  private static volatile MethodHandle FPDF_ClosePage_MH = null;
 
   public static MethodHandle fpdfClosePage() {
-    return FPDF_ClosePage_SV.orElseSet(
-            () ->
-                Optional.ofNullable(
-                    find("FPDF_ClosePage", FunctionDescriptor.ofVoid(C_POINTER), false)))
-        .orElse(null);
+    MethodHandle mh = FPDF_ClosePage_MH;
+    if (mh == null) {
+      synchronized (ViewBindings.class) {
+        mh = FPDF_ClosePage_MH;
+        if (mh == null) {
+          mh = find("FPDF_ClosePage", FunctionDescriptor.ofVoid(C_POINTER), false);
+          FPDF_ClosePage_MH = mh;
+        }
+      }
+    }
+    return mh;
   }
 
-  private static final StableValue<Optional<MethodHandle>> FPDF_GetPageWidthF_SV = StableValue.of();
+  private static volatile MethodHandle FPDF_GetPageWidthF_MH = null;
 
   public static MethodHandle fpdfGetPageWidthF() {
-    return FPDF_GetPageWidthF_SV.orElseSet(
-            () ->
-                Optional.ofNullable(
-                    find(
-                        "FPDF_GetPageWidthF",
-                        FunctionDescriptor.of(ValueLayout.JAVA_FLOAT, C_POINTER),
-                        true)))
-        .orElse(null);
+    MethodHandle mh = FPDF_GetPageWidthF_MH;
+    if (mh == null) {
+      synchronized (ViewBindings.class) {
+        mh = FPDF_GetPageWidthF_MH;
+        if (mh == null) {
+          mh =
+              find(
+                  "FPDF_GetPageWidthF",
+                  FunctionDescriptor.of(ValueLayout.JAVA_FLOAT, C_POINTER),
+                  true);
+          FPDF_GetPageWidthF_MH = mh;
+        }
+      }
+    }
+    return mh;
   }
 
-  private static final StableValue<Optional<MethodHandle>> FPDF_GetPageHeightF_SV =
-      StableValue.of();
+  private static volatile MethodHandle FPDF_GetPageHeightF_MH = null;
 
   public static MethodHandle fpdfGetPageHeightF() {
-    return FPDF_GetPageHeightF_SV.orElseSet(
-            () ->
-                Optional.ofNullable(
-                    find(
-                        "FPDF_GetPageHeightF",
-                        FunctionDescriptor.of(ValueLayout.JAVA_FLOAT, C_POINTER),
-                        true)))
-        .orElse(null);
+    MethodHandle mh = FPDF_GetPageHeightF_MH;
+    if (mh == null) {
+      synchronized (ViewBindings.class) {
+        mh = FPDF_GetPageHeightF_MH;
+        if (mh == null) {
+          mh =
+              find(
+                  "FPDF_GetPageHeightF",
+                  FunctionDescriptor.of(ValueLayout.JAVA_FLOAT, C_POINTER),
+                  true);
+          FPDF_GetPageHeightF_MH = mh;
+        }
+      }
+    }
+    return mh;
   }
 
-  private static final StableValue<Optional<MethodHandle>> FPDF_RenderPageBitmap_SV =
-      StableValue.of();
+  private static volatile MethodHandle FPDF_RenderPageBitmap_MH = null;
 
   public static MethodHandle fpdfRenderPageBitmap() {
-    return FPDF_RenderPageBitmap_SV.orElseSet(
-            () ->
-                Optional.ofNullable(
-                    find(
-                        "FPDF_RenderPageBitmap",
-                        FunctionDescriptor.ofVoid(
-                            C_POINTER, C_POINTER, C_INT, C_INT, C_INT, C_INT, C_INT, C_INT),
-                        false)))
-        .orElse(null);
+    MethodHandle mh = FPDF_RenderPageBitmap_MH;
+    if (mh == null) {
+      synchronized (ViewBindings.class) {
+        mh = FPDF_RenderPageBitmap_MH;
+        if (mh == null) {
+          mh =
+              find(
+                  "FPDF_RenderPageBitmap",
+                  FunctionDescriptor.ofVoid(
+                      C_POINTER, C_POINTER, C_INT, C_INT, C_INT, C_INT, C_INT, C_INT),
+                  false);
+          FPDF_RenderPageBitmap_MH = mh;
+        }
+      }
+    }
+    return mh;
   }
 
-  private static final StableValue<Optional<MethodHandle>> FPDF_SetRendererType_SV =
-      StableValue.of();
+  private static volatile MethodHandle FPDF_SetRendererType_MH = null;
 
   public static MethodHandle fpdfSetRendererType() {
-    return FPDF_SetRendererType_SV.orElseSet(
-            () ->
-                Optional.ofNullable(
-                    find("FPDF_SetRendererType", FunctionDescriptor.ofVoid(C_INT), false)))
-        .orElse(null);
+    MethodHandle mh = FPDF_SetRendererType_MH;
+    if (mh == null) {
+      synchronized (ViewBindings.class) {
+        mh = FPDF_SetRendererType_MH;
+        if (mh == null) {
+          mh = find("FPDF_SetRendererType", FunctionDescriptor.ofVoid(C_INT), false);
+          FPDF_SetRendererType_MH = mh;
+        }
+      }
+    }
+    return mh;
   }
 
-  private static final StableValue<Optional<MethodHandle>> FPDF_LoadMemDocument64_SV =
-      StableValue.of();
+  private static volatile MethodHandle FPDF_LoadMemDocument64_MH = null;
 
   public static MethodHandle fpdfLoadMemDocument64() {
-    return FPDF_LoadMemDocument64_SV.orElseSet(
-            () ->
-                Optional.ofNullable(
-                    find(
-                        "FPDF_LoadMemDocument64",
-                        FunctionDescriptor.of(C_POINTER, C_POINTER, C_SIZE_T, C_POINTER),
-                        false)))
-        .orElse(null);
+    MethodHandle mh = FPDF_LoadMemDocument64_MH;
+    if (mh == null) {
+      synchronized (ViewBindings.class) {
+        mh = FPDF_LoadMemDocument64_MH;
+        if (mh == null) {
+          mh =
+              find(
+                  "FPDF_LoadMemDocument64",
+                  FunctionDescriptor.of(C_POINTER, C_POINTER, C_SIZE_T, C_POINTER),
+                  false);
+          FPDF_LoadMemDocument64_MH = mh;
+        }
+      }
+    }
+    return mh;
   }
 
   public static final int FPDF_RENDERER_TYPE_SKIA = 1;

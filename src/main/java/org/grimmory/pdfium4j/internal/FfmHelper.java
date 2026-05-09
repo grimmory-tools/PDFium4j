@@ -25,7 +25,7 @@ public final class FfmHelper {
   public static final Linker LINKER = Linker.nativeLinker();
   public static final SymbolLookup LOOKUP = SymbolLookup.loaderLookup();
 
-  private static final StableValue<Map<String, MemoryLayout>> CANONICAL_LAYOUTS = StableValue.of();
+  private static volatile Map<String, MemoryLayout> CANONICAL_LAYOUTS = null;
 
   private static Map<String, MemoryLayout> getCanonicalLayoutsSafe() {
     try {
@@ -37,7 +37,17 @@ public final class FfmHelper {
   }
 
   private static Map<String, MemoryLayout> layouts() {
-    return CANONICAL_LAYOUTS.orElseSet(FfmHelper::getCanonicalLayoutsSafe);
+    Map<String, MemoryLayout> l = CANONICAL_LAYOUTS;
+    if (l == null) {
+      synchronized (FfmHelper.class) {
+        l = CANONICAL_LAYOUTS;
+        if (l == null) {
+          l = getCanonicalLayoutsSafe();
+          CANONICAL_LAYOUTS = l;
+        }
+      }
+    }
+    return l;
   }
 
   public static final ValueLayout.OfInt C_INT =

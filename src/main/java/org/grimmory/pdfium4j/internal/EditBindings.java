@@ -13,7 +13,6 @@ import java.lang.foreign.StructLayout;
 import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandle;
 import java.util.Objects;
-import java.util.Optional;
 
 /**
  * FFM bindings for PDFium page editing and document saving functions from {@code fpdf_edit.h} and
@@ -31,44 +30,60 @@ public final class EditBindings {
   }
 
   public static void checkRequired() {
-    Objects.requireNonNull(fpdfSaveAsCopy(), "FPDF_SaveAsCopy");
-    Objects.requireNonNull(fpdfCreateNewDocument(), "FPDF_CreateNewDocument");
+    try {
+      Objects.requireNonNull(fpdfSaveAsCopy(), "FPDF_SaveAsCopy");
+      Objects.requireNonNull(fpdfCreateNewDocument(), "FPDF_CreateNewDocument");
+    } catch (NullPointerException e) {
+      throw new RuntimeException("Missing required PDFium edit symbol: " + e.getMessage(), e);
+    }
   }
 
-  private static final StableValue<Optional<MethodHandle>> FPDF_CreateNewDocument_SV =
-      StableValue.of();
+  private static volatile MethodHandle FPDF_CreateNewDocument_MH = null;
 
   public static MethodHandle fpdfCreateNewDocument() {
-    return FPDF_CreateNewDocument_SV.orElseSet(
-            () ->
-                Optional.ofNullable(
-                    find("FPDF_CreateNewDocument", FunctionDescriptor.of(C_POINTER), false)))
-        .orElse(null);
+    MethodHandle mh = FPDF_CreateNewDocument_MH;
+    if (mh == null) {
+      synchronized (EditBindings.class) {
+        mh = FPDF_CreateNewDocument_MH;
+        if (mh == null) {
+          mh = find("FPDF_CreateNewDocument", FunctionDescriptor.of(C_POINTER), false);
+          FPDF_CreateNewDocument_MH = mh;
+        }
+      }
+    }
+    return mh;
   }
 
-  private static final StableValue<Optional<MethodHandle>> FPDFPage_GetRotation_SV =
-      StableValue.of();
+  private static volatile MethodHandle FPDFPage_GetRotation_MH = null;
 
   public static MethodHandle fpdfPageGetRotation() {
-    return FPDFPage_GetRotation_SV.orElseSet(
-            () ->
-                Optional.ofNullable(
-                    find("FPDFPage_GetRotation", FunctionDescriptor.of(C_INT, C_POINTER), true)))
-        .orElse(null);
+    MethodHandle mh = FPDFPage_GetRotation_MH;
+    if (mh == null) {
+      synchronized (EditBindings.class) {
+        mh = FPDFPage_GetRotation_MH;
+        if (mh == null) {
+          mh = find("FPDFPage_GetRotation", FunctionDescriptor.of(C_INT, C_POINTER), true);
+          FPDFPage_GetRotation_MH = mh;
+        }
+      }
+    }
+    return mh;
   }
 
-  private static final StableValue<Optional<MethodHandle>> FPDFPage_SetRotation_SV =
-      StableValue.of();
+  private static volatile MethodHandle FPDFPage_SetRotation_MH = null;
 
   public static MethodHandle fpdfPageSetRotation() {
-    return FPDFPage_SetRotation_SV.orElseSet(
-            () ->
-                Optional.ofNullable(
-                    find(
-                        "FPDFPage_SetRotation",
-                        FunctionDescriptor.ofVoid(C_POINTER, C_INT),
-                        false)))
-        .orElse(null);
+    MethodHandle mh = FPDFPage_SetRotation_MH;
+    if (mh == null) {
+      synchronized (EditBindings.class) {
+        mh = FPDFPage_SetRotation_MH;
+        if (mh == null) {
+          mh = find("FPDFPage_SetRotation", FunctionDescriptor.ofVoid(C_POINTER, C_INT), false);
+          FPDFPage_SetRotation_MH = mh;
+        }
+      }
+    }
+    return mh;
   }
 
   /** FPDF_FILEWRITE struct layout. */
@@ -83,113 +98,159 @@ public final class EditBindings {
   public static final FunctionDescriptor WRITE_BLOCK_DESC =
       FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_LONG);
 
-  private static final StableValue<Optional<MethodHandle>> FPDF_SaveAsCopy_SV = StableValue.of();
+  private static volatile MethodHandle FPDF_SaveAsCopy_MH = null;
 
   public static MethodHandle fpdfSaveAsCopy() {
-    return FPDF_SaveAsCopy_SV.orElseSet(
-            () ->
-                Optional.ofNullable(
-                    find(
-                        "FPDF_SaveAsCopy",
-                        FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_INT),
-                        false)))
-        .orElse(null);
+    MethodHandle mh = FPDF_SaveAsCopy_MH;
+    if (mh == null) {
+      synchronized (EditBindings.class) {
+        mh = FPDF_SaveAsCopy_MH;
+        if (mh == null) {
+          mh =
+              find(
+                  "FPDF_SaveAsCopy",
+                  FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_INT),
+                  false);
+          FPDF_SaveAsCopy_MH = mh;
+        }
+      }
+    }
+    return mh;
   }
 
-  private static final StableValue<Optional<MethodHandle>> FPDF_SaveWithVersion_SV =
-      StableValue.of();
+  private static volatile MethodHandle FPDF_SaveWithVersion_MH = null;
 
   public static MethodHandle fpdfSaveWithVersion() {
-    return FPDF_SaveWithVersion_SV.orElseSet(
-            () ->
-                Optional.ofNullable(
-                    find(
-                        "FPDF_SaveWithVersion",
-                        FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_INT, C_INT),
-                        false)))
-        .orElse(null);
+    MethodHandle mh = FPDF_SaveWithVersion_MH;
+    if (mh == null) {
+      synchronized (EditBindings.class) {
+        mh = FPDF_SaveWithVersion_MH;
+        if (mh == null) {
+          mh =
+              find(
+                  "FPDF_SaveWithVersion",
+                  FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_INT, C_INT),
+                  false);
+          FPDF_SaveWithVersion_MH = mh;
+        }
+      }
+    }
+    return mh;
   }
 
   public static final int FPDF_NO_INCREMENTAL = 1 << 1;
-  private static final StableValue<Optional<MethodHandle>> FPDFPage_New_SV = StableValue.of();
+  private static volatile MethodHandle FPDFPage_New_MH = null;
 
   public static MethodHandle fpdfPageNew() {
-    return FPDFPage_New_SV.orElseSet(
-            () ->
-                Optional.ofNullable(
-                    find(
-                        "FPDFPage_New",
-                        FunctionDescriptor.of(
-                            C_POINTER,
-                            C_POINTER,
-                            C_INT,
-                            ValueLayout.JAVA_DOUBLE,
-                            ValueLayout.JAVA_DOUBLE),
-                        false)))
-        .orElse(null);
+    MethodHandle mh = FPDFPage_New_MH;
+    if (mh == null) {
+      synchronized (EditBindings.class) {
+        mh = FPDFPage_New_MH;
+        if (mh == null) {
+          mh =
+              find(
+                  "FPDFPage_New",
+                  FunctionDescriptor.of(
+                      C_POINTER,
+                      C_POINTER,
+                      C_INT,
+                      ValueLayout.JAVA_DOUBLE,
+                      ValueLayout.JAVA_DOUBLE),
+                  false);
+          FPDFPage_New_MH = mh;
+        }
+      }
+    }
+    return mh;
   }
 
-  private static final StableValue<Optional<MethodHandle>> FPDF_ImportPages_SV = StableValue.of();
+  private static volatile MethodHandle FPDF_ImportPages_MH = null;
 
   public static MethodHandle fpdfImportPages() {
-    return FPDF_ImportPages_SV.orElseSet(
-            () ->
-                Optional.ofNullable(
-                    find(
-                        "FPDF_ImportPages",
-                        FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER, C_INT),
-                        false)))
-        .orElse(null);
+    MethodHandle mh = FPDF_ImportPages_MH;
+    if (mh == null) {
+      synchronized (EditBindings.class) {
+        mh = FPDF_ImportPages_MH;
+        if (mh == null) {
+          mh =
+              find(
+                  "FPDF_ImportPages",
+                  FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER, C_INT),
+                  false);
+          FPDF_ImportPages_MH = mh;
+        }
+      }
+    }
+    return mh;
   }
 
-  private static final StableValue<Optional<MethodHandle>> FPDFPage_CountObjects_SV =
-      StableValue.of();
+  private static volatile MethodHandle FPDFPage_CountObjects_MH = null;
 
   public static MethodHandle fpdfPageCountObjects() {
-    return FPDFPage_CountObjects_SV.orElseSet(
-            () ->
-                Optional.ofNullable(
-                    find("FPDFPage_CountObjects", FunctionDescriptor.of(C_INT, C_POINTER), true)))
-        .orElse(null);
+    MethodHandle mh = FPDFPage_CountObjects_MH;
+    if (mh == null) {
+      synchronized (EditBindings.class) {
+        mh = FPDFPage_CountObjects_MH;
+        if (mh == null) {
+          mh = find("FPDFPage_CountObjects", FunctionDescriptor.of(C_INT, C_POINTER), true);
+          FPDFPage_CountObjects_MH = mh;
+        }
+      }
+    }
+    return mh;
   }
 
-  private static final StableValue<Optional<MethodHandle>> FPDFPage_GetObject_SV = StableValue.of();
+  private static volatile MethodHandle FPDFPage_GetObject_MH = null;
 
   public static MethodHandle fpdfPageGetObject() {
-    return FPDFPage_GetObject_SV.orElseSet(
-            () ->
-                Optional.ofNullable(
-                    find(
-                        "FPDFPage_GetObject",
-                        FunctionDescriptor.of(C_POINTER, C_POINTER, C_INT),
-                        true)))
-        .orElse(null);
+    MethodHandle mh = FPDFPage_GetObject_MH;
+    if (mh == null) {
+      synchronized (EditBindings.class) {
+        mh = FPDFPage_GetObject_MH;
+        if (mh == null) {
+          mh = find("FPDFPage_GetObject", FunctionDescriptor.of(C_POINTER, C_POINTER, C_INT), true);
+          FPDFPage_GetObject_MH = mh;
+        }
+      }
+    }
+    return mh;
   }
 
-  private static final StableValue<Optional<MethodHandle>> FPDFPageObj_GetType_SV =
-      StableValue.of();
+  private static volatile MethodHandle FPDFPageObj_GetType_MH = null;
 
   public static MethodHandle fpdfPageObjGetType() {
-    return FPDFPageObj_GetType_SV.orElseSet(
-            () ->
-                Optional.ofNullable(
-                    find("FPDFPageObj_GetType", FunctionDescriptor.of(C_INT, C_POINTER), true)))
-        .orElse(null);
+    MethodHandle mh = FPDFPageObj_GetType_MH;
+    if (mh == null) {
+      synchronized (EditBindings.class) {
+        mh = FPDFPageObj_GetType_MH;
+        if (mh == null) {
+          mh = find("FPDFPageObj_GetType", FunctionDescriptor.of(C_INT, C_POINTER), true);
+          FPDFPageObj_GetType_MH = mh;
+        }
+      }
+    }
+    return mh;
   }
 
   public static final int FPDF_PAGEOBJ_IMAGE = 3;
-  private static final StableValue<Optional<MethodHandle>> FPDFImageObj_GetImageMetadata_SV =
-      StableValue.of();
+  private static volatile MethodHandle FPDFImageObj_GetImageMetadata_MH = null;
 
   public static MethodHandle fpdfImageObjGetImageMetadata() {
-    return FPDFImageObj_GetImageMetadata_SV.orElseSet(
-            () ->
-                Optional.ofNullable(
-                    find(
-                        "FPDFImageObj_GetImageMetadata",
-                        FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER),
-                        false)))
-        .orElse(null);
+    MethodHandle mh = FPDFImageObj_GetImageMetadata_MH;
+    if (mh == null) {
+      synchronized (EditBindings.class) {
+        mh = FPDFImageObj_GetImageMetadata_MH;
+        if (mh == null) {
+          mh =
+              find(
+                  "FPDFImageObj_GetImageMetadata",
+                  FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER),
+                  false);
+          FPDFImageObj_GetImageMetadata_MH = mh;
+        }
+      }
+    }
+    return mh;
   }
 
   public static final StructLayout IMAGE_METADATA_LAYOUT =

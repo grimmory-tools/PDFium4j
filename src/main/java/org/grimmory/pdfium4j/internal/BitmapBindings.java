@@ -10,7 +10,6 @@ import java.lang.foreign.FunctionDescriptor;
 import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandle;
 import java.util.Objects;
-import java.util.Optional;
 
 /** FFM bindings for PDFium bitmap functions from {@code fpdfview.h}. */
 public final class BitmapBindings {
@@ -25,109 +24,155 @@ public final class BitmapBindings {
   }
 
   public static void checkRequired() {
-    Objects.requireNonNull(fpdfBitmapCreate(), "FPDFBitmap_Create");
-    Objects.requireNonNull(fpdfBitmapDestroy(), "FPDFBitmap_Destroy");
-    Objects.requireNonNull(fpdfBitmapGetBuffer(), "FPDFBitmap_GetBuffer");
-    Objects.requireNonNull(fpdfBitmapGetWidth(), "FPDFBitmap_GetWidth");
-    Objects.requireNonNull(fpdfBitmapGetHeight(), "FPDFBitmap_GetHeight");
-    Objects.requireNonNull(fpdfBitmapGetStride(), "FPDFBitmap_GetStride");
+    try {
+      Objects.requireNonNull(fpdfBitmapCreate(), "FPDFBitmap_Create");
+      Objects.requireNonNull(fpdfBitmapDestroy(), "FPDFBitmap_Destroy");
+      Objects.requireNonNull(fpdfBitmapGetBuffer(), "FPDFBitmap_GetBuffer");
+      Objects.requireNonNull(fpdfBitmapGetWidth(), "FPDFBitmap_GetWidth");
+      Objects.requireNonNull(fpdfBitmapGetHeight(), "FPDFBitmap_GetHeight");
+      Objects.requireNonNull(fpdfBitmapGetStride(), "FPDFBitmap_GetStride");
+    } catch (NullPointerException e) {
+      throw new RuntimeException("Missing required PDFium bitmap symbol: " + e.getMessage(), e);
+    }
   }
 
-  private static final StableValue<Optional<MethodHandle>> FPDFBitmap_Create_SV = StableValue.of();
+  private static volatile MethodHandle FPDFBitmap_Create_MH = null;
 
   public static MethodHandle fpdfBitmapCreate() {
-    return FPDFBitmap_Create_SV.orElseSet(
-            () ->
-                Optional.ofNullable(
-                    find(
-                        "FPDFBitmap_Create",
-                        FunctionDescriptor.of(C_POINTER, C_INT, C_INT, C_INT),
-                        false)))
-        .orElse(null);
+    MethodHandle mh = FPDFBitmap_Create_MH;
+    if (mh == null) {
+      synchronized (BitmapBindings.class) {
+        mh = FPDFBitmap_Create_MH;
+        if (mh == null) {
+          mh =
+              find(
+                  "FPDFBitmap_Create",
+                  FunctionDescriptor.of(C_POINTER, C_INT, C_INT, C_INT),
+                  false);
+          FPDFBitmap_Create_MH = mh;
+        }
+      }
+    }
+    return mh;
   }
 
-  private static final StableValue<Optional<MethodHandle>> FPDFBitmap_CreateEx_SV =
-      StableValue.of();
+  private static volatile MethodHandle FPDFBitmap_CreateEx_MH = null;
 
   public static MethodHandle fpdfBitmapCreateEx() {
-    return FPDFBitmap_CreateEx_SV.orElseSet(
-            () ->
-                Optional.ofNullable(
-                    find(
-                        "FPDFBitmap_CreateEx",
-                        FunctionDescriptor.of(C_POINTER, C_INT, C_INT, C_INT, C_POINTER, C_INT),
-                        false)))
-        .orElse(null);
+    MethodHandle mh = FPDFBitmap_CreateEx_MH;
+    if (mh == null) {
+      synchronized (BitmapBindings.class) {
+        mh = FPDFBitmap_CreateEx_MH;
+        if (mh == null) {
+          mh =
+              find(
+                  "FPDFBitmap_CreateEx",
+                  FunctionDescriptor.of(C_POINTER, C_INT, C_INT, C_INT, C_POINTER, C_INT),
+                  false);
+          FPDFBitmap_CreateEx_MH = mh;
+        }
+      }
+    }
+    return mh;
   }
 
-  private static final StableValue<Optional<MethodHandle>> FPDFBitmap_FillRect_SV =
-      StableValue.of();
+  private static volatile MethodHandle FPDFBitmap_FillRect_MH = null;
 
   public static MethodHandle fpdfBitmapFillRect() {
-    return FPDFBitmap_FillRect_SV.orElseSet(
-            () ->
-                Optional.ofNullable(
-                    find(
-                        "FPDFBitmap_FillRect",
-                        FunctionDescriptor.ofVoid(C_POINTER, C_INT, C_INT, C_INT, C_INT, C_LONG),
-                        false)))
-        .orElse(null);
+    MethodHandle mh = FPDFBitmap_FillRect_MH;
+    if (mh == null) {
+      synchronized (BitmapBindings.class) {
+        mh = FPDFBitmap_FillRect_MH;
+        if (mh == null) {
+          mh =
+              find(
+                  "FPDFBitmap_FillRect",
+                  FunctionDescriptor.ofVoid(C_POINTER, C_INT, C_INT, C_INT, C_INT, C_LONG),
+                  false);
+          FPDFBitmap_FillRect_MH = mh;
+        }
+      }
+    }
+    return mh;
   }
 
-  private static final StableValue<Optional<MethodHandle>> FPDFBitmap_GetBuffer_SV =
-      StableValue.of();
+  private static volatile MethodHandle FPDFBitmap_GetBuffer_MH = null;
 
   public static MethodHandle fpdfBitmapGetBuffer() {
-    return FPDFBitmap_GetBuffer_SV.orElseSet(
-            () ->
-                Optional.ofNullable(
-                    find(
-                        "FPDFBitmap_GetBuffer",
-                        FunctionDescriptor.of(C_POINTER, C_POINTER),
-                        false)))
-        .orElse(null);
+    MethodHandle mh = FPDFBitmap_GetBuffer_MH;
+    if (mh == null) {
+      synchronized (BitmapBindings.class) {
+        mh = FPDFBitmap_GetBuffer_MH;
+        if (mh == null) {
+          mh = find("FPDFBitmap_GetBuffer", FunctionDescriptor.of(C_POINTER, C_POINTER), false);
+          FPDFBitmap_GetBuffer_MH = mh;
+        }
+      }
+    }
+    return mh;
   }
 
-  private static final StableValue<Optional<MethodHandle>> FPDFBitmap_GetWidth_SV =
-      StableValue.of();
+  private static volatile MethodHandle FPDFBitmap_GetWidth_MH = null;
 
   public static MethodHandle fpdfBitmapGetWidth() {
-    return FPDFBitmap_GetWidth_SV.orElseSet(
-            () ->
-                Optional.ofNullable(
-                    find("FPDFBitmap_GetWidth", FunctionDescriptor.of(C_INT, C_POINTER), true)))
-        .orElse(null);
+    MethodHandle mh = FPDFBitmap_GetWidth_MH;
+    if (mh == null) {
+      synchronized (BitmapBindings.class) {
+        mh = FPDFBitmap_GetWidth_MH;
+        if (mh == null) {
+          mh = find("FPDFBitmap_GetWidth", FunctionDescriptor.of(C_INT, C_POINTER), true);
+          FPDFBitmap_GetWidth_MH = mh;
+        }
+      }
+    }
+    return mh;
   }
 
-  private static final StableValue<Optional<MethodHandle>> FPDFBitmap_GetHeight_SV =
-      StableValue.of();
+  private static volatile MethodHandle FPDFBitmap_GetHeight_MH = null;
 
   public static MethodHandle fpdfBitmapGetHeight() {
-    return FPDFBitmap_GetHeight_SV.orElseSet(
-            () ->
-                Optional.ofNullable(
-                    find("FPDFBitmap_GetHeight", FunctionDescriptor.of(C_INT, C_POINTER), true)))
-        .orElse(null);
+    MethodHandle mh = FPDFBitmap_GetHeight_MH;
+    if (mh == null) {
+      synchronized (BitmapBindings.class) {
+        mh = FPDFBitmap_GetHeight_MH;
+        if (mh == null) {
+          mh = find("FPDFBitmap_GetHeight", FunctionDescriptor.of(C_INT, C_POINTER), true);
+          FPDFBitmap_GetHeight_MH = mh;
+        }
+      }
+    }
+    return mh;
   }
 
-  private static final StableValue<Optional<MethodHandle>> FPDFBitmap_GetStride_SV =
-      StableValue.of();
+  private static volatile MethodHandle FPDFBitmap_GetStride_MH = null;
 
   public static MethodHandle fpdfBitmapGetStride() {
-    return FPDFBitmap_GetStride_SV.orElseSet(
-            () ->
-                Optional.ofNullable(
-                    find("FPDFBitmap_GetStride", FunctionDescriptor.of(C_INT, C_POINTER), true)))
-        .orElse(null);
+    MethodHandle mh = FPDFBitmap_GetStride_MH;
+    if (mh == null) {
+      synchronized (BitmapBindings.class) {
+        mh = FPDFBitmap_GetStride_MH;
+        if (mh == null) {
+          mh = find("FPDFBitmap_GetStride", FunctionDescriptor.of(C_INT, C_POINTER), true);
+          FPDFBitmap_GetStride_MH = mh;
+        }
+      }
+    }
+    return mh;
   }
 
-  private static final StableValue<Optional<MethodHandle>> FPDFBitmap_Destroy_SV = StableValue.of();
+  private static volatile MethodHandle FPDFBitmap_Destroy_MH = null;
 
   public static MethodHandle fpdfBitmapDestroy() {
-    return FPDFBitmap_Destroy_SV.orElseSet(
-            () ->
-                Optional.ofNullable(
-                    find("FPDFBitmap_Destroy", FunctionDescriptor.ofVoid(C_POINTER), false)))
-        .orElse(null);
+    MethodHandle mh = FPDFBitmap_Destroy_MH;
+    if (mh == null) {
+      synchronized (BitmapBindings.class) {
+        mh = FPDFBitmap_Destroy_MH;
+        if (mh == null) {
+          mh = find("FPDFBitmap_Destroy", FunctionDescriptor.ofVoid(C_POINTER), false);
+          FPDFBitmap_Destroy_MH = mh;
+        }
+      }
+    }
+    return mh;
   }
 }
