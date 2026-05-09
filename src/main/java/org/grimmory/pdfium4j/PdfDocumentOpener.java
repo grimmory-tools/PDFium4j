@@ -116,7 +116,11 @@ final class PdfDocumentOpener {
           return open(repaired, password, policy.withMode(PdfProcessingPolicy.Mode.STRICT));
         } catch (IOException e) {
           throw new PdfCorruptException(
-              "Failed to repair document from bytes", PdfErrorCode.FORMAT, "open", null, e);
+              "Failed to open document: corruption detected and repair failed",
+              PdfErrorCode.FORMAT,
+              "open",
+              null,
+              e);
         }
       }
       return pdfDoc;
@@ -128,7 +132,11 @@ final class PdfDocumentOpener {
           return open(repaired, password, policy.withMode(PdfProcessingPolicy.Mode.STRICT));
         } catch (IOException ex) {
           throw new PdfCorruptException(
-              "Failed to repair document from bytes", PdfErrorCode.FORMAT, "open", null, ex);
+              "Failed to open document: corruption detected and repair failed",
+              PdfErrorCode.FORMAT,
+              "open",
+              null,
+              ex);
         }
       }
       throw e;
@@ -240,7 +248,11 @@ final class PdfDocumentOpener {
         LOGGER.log(Level.SEVERE, "Automatic repair failed for {0}", path);
       }
       throw new PdfCorruptException(
-          "Automatic repair failed for " + path, PdfErrorCode.FORMAT, "open", path.toString(), e);
+          "Failed to open document: corruption detected and repair failed for " + path,
+          PdfErrorCode.FORMAT,
+          "open",
+          path.toString(),
+          e);
     }
   }
 
