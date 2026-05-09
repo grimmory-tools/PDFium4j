@@ -1,73 +1,131 @@
 package org.grimmory.pdfium4j.internal;
 
-import static java.lang.foreign.ValueLayout.ADDRESS;
-import static java.lang.foreign.ValueLayout.JAVA_INT;
-import static java.lang.foreign.ValueLayout.JAVA_LONG;
+import static org.grimmory.pdfium4j.internal.FfmHelper.C_INT;
+import static org.grimmory.pdfium4j.internal.FfmHelper.C_POINTER;
+import static org.grimmory.pdfium4j.internal.FfmHelper.LINKER;
+import static org.grimmory.pdfium4j.internal.FfmHelper.LOOKUP;
 
 import java.lang.foreign.FunctionDescriptor;
-import java.lang.foreign.Linker;
-import java.lang.foreign.SymbolLookup;
 import java.lang.invoke.MethodHandle;
 import java.util.Objects;
+import java.util.Optional;
 
 /** FFM bindings for PDFium bitmap functions from {@code fpdfview.h}. */
 public final class BitmapBindings {
 
-  private static final Linker LINKER = Linker.nativeLinker();
-  private static final SymbolLookup LOOKUP = SymbolLookup.loaderLookup();
-
   private BitmapBindings() {}
 
-  private static MethodHandle downcall(String name, FunctionDescriptor desc) {
-    return LOOKUP.find(name).map(addr -> LINKER.downcallHandle(addr, desc)).orElse(null);
-  }
-
-  private static MethodHandle downcallCritical(String name, FunctionDescriptor desc) {
-    return LOOKUP
-        .find(name)
-        .map(addr -> LINKER.downcallHandle(addr, desc, Linker.Option.critical(false)))
-        .orElse(null);
+  private static MethodHandle find(String name, FunctionDescriptor desc, boolean critical) {
+    java.lang.foreign.MemorySegment addr = LOOKUP.find(name).orElse(null);
+    if (addr == null) return null;
+    return LINKER.downcallHandle(
+        addr, desc, critical ? FfmHelper.CRITICAL_OPTIONS : FfmHelper.NO_OPTIONS);
   }
 
   public static void checkRequired() {
-    Objects.requireNonNull(FPDFBitmap_Create, "FPDFBitmap_Create");
-    Objects.requireNonNull(FPDFBitmap_Destroy, "FPDFBitmap_Destroy");
-    Objects.requireNonNull(FPDFBitmap_GetBuffer, "FPDFBitmap_GetBuffer");
-    Objects.requireNonNull(FPDFBitmap_GetWidth, "FPDFBitmap_GetWidth");
-    Objects.requireNonNull(FPDFBitmap_GetHeight, "FPDFBitmap_GetHeight");
-    Objects.requireNonNull(FPDFBitmap_GetStride, "FPDFBitmap_GetStride");
+    Objects.requireNonNull(fpdfBitmapCreate(), "FPDFBitmap_Create");
+    Objects.requireNonNull(fpdfBitmapDestroy(), "FPDFBitmap_Destroy");
+    Objects.requireNonNull(fpdfBitmapGetBuffer(), "FPDFBitmap_GetBuffer");
+    Objects.requireNonNull(fpdfBitmapGetWidth(), "FPDFBitmap_GetWidth");
+    Objects.requireNonNull(fpdfBitmapGetHeight(), "FPDFBitmap_GetHeight");
+    Objects.requireNonNull(fpdfBitmapGetStride(), "FPDFBitmap_GetStride");
   }
 
-  /**
-   * Create a new bitmap. Parameters: width (pixels), height (pixels), alpha (0 = no alpha/BGRx,
-   * non-zero = with alpha/BGRA). Returns FPDF_BITMAP handle (NULL on failure).
-   */
-  public static final MethodHandle FPDFBitmap_Create =
-      downcall("FPDFBitmap_Create", FunctionDescriptor.of(ADDRESS, JAVA_INT, JAVA_INT, JAVA_INT));
+  private static final StableValue<Optional<MethodHandle>> FPDFBitmap_Create_SV = StableValue.of();
 
-  /** Fill a rectangle in the bitmap. color is 0xAARRGGBB. */
-  public static final MethodHandle FPDFBitmap_FillRect =
-      downcall(
-          "FPDFBitmap_FillRect",
-          FunctionDescriptor.ofVoid(ADDRESS, JAVA_INT, JAVA_INT, JAVA_INT, JAVA_INT, JAVA_LONG));
+  public static MethodHandle fpdfBitmapCreate() {
+    return FPDFBitmap_Create_SV.orElseSet(
+            () ->
+                Optional.ofNullable(
+                    find(
+                        "FPDFBitmap_Create",
+                        FunctionDescriptor.of(C_POINTER, C_INT, C_INT, C_INT),
+                        false)))
+        .orElse(null);
+  }
 
-  /** Get pointer to first scanline of pixel data. */
-  public static final MethodHandle FPDFBitmap_GetBuffer =
-      downcallCritical("FPDFBitmap_GetBuffer", FunctionDescriptor.of(ADDRESS, ADDRESS));
+  private static final StableValue<Optional<MethodHandle>> FPDFBitmap_CreateEx_SV =
+      StableValue.of();
 
-  /** Get bitmap width. */
-  public static final MethodHandle FPDFBitmap_GetWidth =
-      downcallCritical("FPDFBitmap_GetWidth", FunctionDescriptor.of(JAVA_INT, ADDRESS));
+  public static MethodHandle fpdfBitmapCreateEx() {
+    return FPDFBitmap_CreateEx_SV.orElseSet(
+            () ->
+                Optional.ofNullable(
+                    find(
+                        "FPDFBitmap_CreateEx",
+                        FunctionDescriptor.of(C_POINTER, C_INT, C_INT, C_INT, C_POINTER, C_INT),
+                        false)))
+        .orElse(null);
+  }
 
-  /** Get bitmap height. */
-  public static final MethodHandle FPDFBitmap_GetHeight =
-      downcallCritical("FPDFBitmap_GetHeight", FunctionDescriptor.of(JAVA_INT, ADDRESS));
+  private static final StableValue<Optional<MethodHandle>> FPDFBitmap_FillRect_SV =
+      StableValue.of();
 
-  /** Get number of bytes per scanline. */
-  public static final MethodHandle FPDFBitmap_GetStride =
-      downcallCritical("FPDFBitmap_GetStride", FunctionDescriptor.of(JAVA_INT, ADDRESS));
+  public static MethodHandle fpdfBitmapFillRect() {
+    return FPDFBitmap_FillRect_SV.orElseSet(
+            () ->
+                Optional.ofNullable(
+                    find(
+                        "FPDFBitmap_FillRect",
+                        FunctionDescriptor.ofVoid(C_POINTER, C_INT, C_INT, C_INT, C_INT, C_INT),
+                        false)))
+        .orElse(null);
+  }
 
-  /** Destroy a bitmap and free its buffer (unless externally allocated). */
-  public static final MethodHandle FPDFBitmap_Destroy =
-      downcallCritical("FPDFBitmap_Destroy", FunctionDescriptor.ofVoid(ADDRESS));
+  private static final StableValue<Optional<MethodHandle>> FPDFBitmap_GetBuffer_SV =
+      StableValue.of();
+
+  public static MethodHandle fpdfBitmapGetBuffer() {
+    return FPDFBitmap_GetBuffer_SV.orElseSet(
+            () ->
+                Optional.ofNullable(
+                    find(
+                        "FPDFBitmap_GetBuffer",
+                        FunctionDescriptor.of(C_POINTER, C_POINTER),
+                        false)))
+        .orElse(null);
+  }
+
+  private static final StableValue<Optional<MethodHandle>> FPDFBitmap_GetWidth_SV =
+      StableValue.of();
+
+  public static MethodHandle fpdfBitmapGetWidth() {
+    return FPDFBitmap_GetWidth_SV.orElseSet(
+            () ->
+                Optional.ofNullable(
+                    find("FPDFBitmap_GetWidth", FunctionDescriptor.of(C_INT, C_POINTER), true)))
+        .orElse(null);
+  }
+
+  private static final StableValue<Optional<MethodHandle>> FPDFBitmap_GetHeight_SV =
+      StableValue.of();
+
+  public static MethodHandle fpdfBitmapGetHeight() {
+    return FPDFBitmap_GetHeight_SV.orElseSet(
+            () ->
+                Optional.ofNullable(
+                    find("FPDFBitmap_GetHeight", FunctionDescriptor.of(C_INT, C_POINTER), true)))
+        .orElse(null);
+  }
+
+  private static final StableValue<Optional<MethodHandle>> FPDFBitmap_GetStride_SV =
+      StableValue.of();
+
+  public static MethodHandle fpdfBitmapGetStride() {
+    return FPDFBitmap_GetStride_SV.orElseSet(
+            () ->
+                Optional.ofNullable(
+                    find("FPDFBitmap_GetStride", FunctionDescriptor.of(C_INT, C_POINTER), true)))
+        .orElse(null);
+  }
+
+  private static final StableValue<Optional<MethodHandle>> FPDFBitmap_Destroy_SV = StableValue.of();
+
+  public static MethodHandle fpdfBitmapDestroy() {
+    return FPDFBitmap_Destroy_SV.orElseSet(
+            () ->
+                Optional.ofNullable(
+                    find("FPDFBitmap_Destroy", FunctionDescriptor.ofVoid(C_POINTER), false)))
+        .orElse(null);
+  }
 }

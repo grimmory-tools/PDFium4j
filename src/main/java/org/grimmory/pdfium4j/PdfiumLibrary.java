@@ -10,6 +10,7 @@ import org.grimmory.pdfium4j.internal.BitmapBindings;
 import org.grimmory.pdfium4j.internal.DocBindings;
 import org.grimmory.pdfium4j.internal.EditBindings;
 import org.grimmory.pdfium4j.internal.NativeLoader;
+import org.grimmory.pdfium4j.internal.ShimBindings;
 import org.grimmory.pdfium4j.internal.TextBindings;
 import org.grimmory.pdfium4j.internal.ViewBindings;
 
@@ -24,8 +25,24 @@ public final class PdfiumLibrary {
   private static final Object LOCK = new Object();
   private static volatile boolean initialized = false;
   private static volatile Throwable initError = null;
+  private static volatile int rendererType = ViewBindings.FPDF_RENDERER_TYPE_SKIA;
 
   private PdfiumLibrary() {}
+
+  /**
+   * Sets the global renderer type for PDFium. Must be called before {@link #initialize()}.
+   *
+   * @param type the renderer type (AGG or Skia)
+   */
+  public static void setRendererType(int type) {
+    synchronized (LOCK) {
+      if (initialized) {
+        if (rendererType == type) return;
+        throw new IllegalStateException("Cannot change renderer type after initialization");
+      }
+      rendererType = type;
+    }
+  }
 
   /**
    * Initializes the PDFium library if not already initialized. This method is thread-safe and can
@@ -52,11 +69,17 @@ public final class PdfiumLibrary {
         BitmapBindings.checkRequired();
         TextBindings.checkRequired();
         AnnotBindings.checkRequired();
+        ShimBindings.checkRequired();
+
+        // Set renderer type if supported
+        if (ViewBindings.fpdfSetRendererType() != null) {
+          ViewBindings.fpdfSetRendererType().invokeExact(rendererType);
+        }
 
         Arena arena = Arena.global();
         MemorySegment config = arena.allocate(ViewBindings.LIBRARY_CONFIG_LAYOUT);
-        config.set(ValueLayout.JAVA_INT, 0, 2);
-        ViewBindings.FPDF_InitLibraryWithConfig.invokeExact(config);
+        config.set(ValueLayout.JAVA_INT, 0, 2); // Version 2
+        ViewBindings.fpdfInitLibraryWithConfig().invokeExact(config);
         initialized = true;
       } catch (Throwable t) {
         initError = t;
@@ -87,43 +110,10 @@ public final class PdfiumLibrary {
   }
 
   /** Ensures the library is initialized. Internal use only. */
-  static void ensureInitialized() {
+  public static void ensureInitialized() {
     if (!initialized) {
       initialize();
     }
-  }
-
-  /**
-   * Shuts down the PDFium library and releases global resources.
-   *
-   * @throws IllegalStateException if documents are still open
-   * @throws PdfiumException if shutdown fails
-   */
-  public static void shutdown() {
-    synchronized (LOCK) {
-      if (!initialized) return;
-      int open = openDocumentCount.get();
-      if (open > 0) {
-        throw new IllegalStateException(
-            "Cannot shutdown PDFium: %d documents are still open".formatted(open));
-      }
-      try {
-        ViewBindings.FPDF_DestroyLibrary.invokeExact();
-        initialized = false;
-        initError = null;
-      } catch (Throwable t) {
-        throw new PdfiumException("Failed to shut down PDFium library", t);
-      }
-    }
-  }
-
-  /**
-   * Returns whether the PDFium library is currently initialized.
-   *
-   * @return {@code true} if initialized, {@code false} otherwise
-   */
-  public static boolean isInitialized() {
-    return initialized;
   }
 
   private static final boolean LOG_SWALLOWED = false;

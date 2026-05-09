@@ -1,95 +1,195 @@
 package org.grimmory.pdfium4j.internal;
 
-import static java.lang.foreign.ValueLayout.ADDRESS;
-import static java.lang.foreign.ValueLayout.JAVA_INT;
-import static java.lang.foreign.ValueLayout.JAVA_LONG;
+import static org.grimmory.pdfium4j.internal.FfmHelper.C_INT;
+import static org.grimmory.pdfium4j.internal.FfmHelper.C_LONG;
+import static org.grimmory.pdfium4j.internal.FfmHelper.C_POINTER;
+import static org.grimmory.pdfium4j.internal.FfmHelper.LINKER;
+import static org.grimmory.pdfium4j.internal.FfmHelper.LOOKUP;
 
 import java.lang.foreign.FunctionDescriptor;
-import java.lang.foreign.Linker;
-import java.lang.foreign.SymbolLookup;
 import java.lang.invoke.MethodHandle;
 import java.util.Objects;
+import java.util.Optional;
 
 /** FFM bindings for PDFium document metadata and bookmark functions from {@code fpdf_doc.h}. */
 public final class DocBindings {
 
-  private static final Linker LINKER = Linker.nativeLinker();
-  private static final SymbolLookup LOOKUP = SymbolLookup.loaderLookup();
-
   private DocBindings() {}
 
-  private static MethodHandle downcall(String name, FunctionDescriptor desc) {
-    return LOOKUP.find(name).map(addr -> LINKER.downcallHandle(addr, desc)).orElse(null);
-  }
-
-  private static MethodHandle downcallCritical(String name, FunctionDescriptor desc) {
-    return LOOKUP
-        .find(name)
-        .map(addr -> LINKER.downcallHandle(addr, desc, Linker.Option.critical(false)))
-        .orElse(null);
+  private static MethodHandle find(String name, FunctionDescriptor desc, boolean critical) {
+    java.lang.foreign.MemorySegment addr = LOOKUP.find(name).orElse(null);
+    if (addr == null) return null;
+    return LINKER.downcallHandle(
+        addr, desc, critical ? FfmHelper.CRITICAL_OPTIONS : FfmHelper.NO_OPTIONS);
   }
 
   public static void checkRequired() {
-    // Metadata is often provided by FPDF_GetMetaText, but XMP is optional as we have a byte-level
-    // fallback
-    Objects.requireNonNull(FPDF_GetMetaText, "FPDF_GetMetaText");
-    Objects.requireNonNull(FPDFBookmark_GetFirstChild, "FPDFBookmark_GetFirstChild");
-    Objects.requireNonNull(FPDFBookmark_GetNextSibling, "FPDFBookmark_GetNextSibling");
-    Objects.requireNonNull(FPDFBookmark_GetTitle, "FPDFBookmark_GetTitle");
-    Objects.requireNonNull(FPDFBookmark_GetDest, "FPDFBookmark_GetDest");
-    Objects.requireNonNull(FPDFBookmark_GetAction, "FPDFBookmark_GetAction");
-    Objects.requireNonNull(FPDFAction_GetType, "FPDFAction_GetType");
-    Objects.requireNonNull(FPDFAction_GetDest, "FPDFAction_GetDest");
-    Objects.requireNonNull(FPDFDest_GetDestPageIndex, "FPDFDest_GetDestPageIndex");
+    Objects.requireNonNull(fpdfGetMetaText(), "FPDF_GetMetaText");
+    Objects.requireNonNull(fpdfBookmarkGetFirstChild(), "FPDFBookmark_GetFirstChild");
+    Objects.requireNonNull(fpdfBookmarkGetNextSibling(), "FPDFBookmark_GetNextSibling");
+    Objects.requireNonNull(fpdfBookmarkGetTitle(), "FPDFBookmark_GetTitle");
+    Objects.requireNonNull(fpdfBookmarkGetDest(), "FPDFBookmark_GetDest");
+    Objects.requireNonNull(fpdfBookmarkGetAction(), "FPDFBookmark_GetAction");
+    Objects.requireNonNull(fpdfActionGetType(), "FPDFAction_GetType");
+    Objects.requireNonNull(fpdfActionGetDest(), "FPDFAction_GetDest");
+    Objects.requireNonNull(fpdfDestGetDestPageIndex(), "FPDFDest_GetDestPageIndex");
   }
 
-  public static final MethodHandle FPDF_GetMetaText =
-      downcall(
-          "FPDF_GetMetaText",
-          FunctionDescriptor.of(JAVA_LONG, ADDRESS, ADDRESS, ADDRESS, JAVA_LONG));
+  private static final StableValue<Optional<MethodHandle>> FPDF_GetMetaText_SV = StableValue.of();
 
-  public static final MethodHandle FPDF_GetXMPMetadata =
-      downcall(
-          "FPDF_GetXMPMetadata", FunctionDescriptor.of(JAVA_LONG, ADDRESS, ADDRESS, JAVA_LONG));
+  public static MethodHandle fpdfGetMetaText() {
+    return FPDF_GetMetaText_SV.orElseSet(
+            () ->
+                Optional.ofNullable(
+                    find(
+                        "FPDF_GetMetaText",
+                        FunctionDescriptor.of(C_LONG, C_POINTER, C_POINTER, C_POINTER, C_LONG),
+                        false)))
+        .orElse(null);
+  }
 
-  public static final MethodHandle FPDF_GetFileVersion =
-      downcallCritical("FPDF_GetFileVersion", FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS));
+  private static final StableValue<Optional<MethodHandle>> FPDF_GetXMPMetadata_SV =
+      StableValue.of();
 
-  public static final MethodHandle FPDF_GetPageLabel =
-      downcall(
-          "FPDF_GetPageLabel",
-          FunctionDescriptor.of(JAVA_LONG, ADDRESS, JAVA_INT, ADDRESS, JAVA_LONG));
+  public static MethodHandle fpdfGetXMPMetadata() {
+    return FPDF_GetXMPMetadata_SV.orElseSet(
+            () ->
+                Optional.ofNullable(
+                    find(
+                        "FPDF_GetXMPMetadata",
+                        FunctionDescriptor.of(C_LONG, C_POINTER, C_POINTER, C_LONG),
+                        false)))
+        .orElse(null);
+  }
 
-  public static final MethodHandle FPDFPage_Delete =
-      downcall("FPDFPage_Delete", FunctionDescriptor.ofVoid(ADDRESS, JAVA_INT));
+  private static final StableValue<Optional<MethodHandle>> FPDF_GetFileVersion_SV =
+      StableValue.of();
 
-  public static final MethodHandle FPDFBookmark_GetFirstChild =
-      downcallCritical(
-          "FPDFBookmark_GetFirstChild", FunctionDescriptor.of(ADDRESS, ADDRESS, ADDRESS));
+  public static MethodHandle fpdfGetFileVersion() {
+    return FPDF_GetFileVersion_SV.orElseSet(
+            () ->
+                Optional.ofNullable(
+                    find(
+                        "FPDF_GetFileVersion",
+                        FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER),
+                        true)))
+        .orElse(null);
+  }
 
-  public static final MethodHandle FPDFBookmark_GetNextSibling =
-      downcallCritical(
-          "FPDFBookmark_GetNextSibling", FunctionDescriptor.of(ADDRESS, ADDRESS, ADDRESS));
+  private static final StableValue<Optional<MethodHandle>> FPDFPage_Delete_SV = StableValue.of();
 
-  public static final MethodHandle FPDFBookmark_GetTitle =
-      downcall(
-          "FPDFBookmark_GetTitle", FunctionDescriptor.of(JAVA_LONG, ADDRESS, ADDRESS, JAVA_LONG));
+  public static MethodHandle fpdfPageDelete() {
+    return FPDFPage_Delete_SV.orElseSet(
+            () ->
+                Optional.ofNullable(
+                    find("FPDFPage_Delete", FunctionDescriptor.ofVoid(C_POINTER, C_INT), false)))
+        .orElse(null);
+  }
 
-  public static final MethodHandle FPDFBookmark_GetDest =
-      downcallCritical("FPDFBookmark_GetDest", FunctionDescriptor.of(ADDRESS, ADDRESS, ADDRESS));
+  private static final StableValue<Optional<MethodHandle>> FPDFBookmark_GetFirstChild_SV =
+      StableValue.of();
 
-  public static final MethodHandle FPDFBookmark_GetAction =
-      downcallCritical("FPDFBookmark_GetAction", FunctionDescriptor.of(ADDRESS, ADDRESS));
+  public static MethodHandle fpdfBookmarkGetFirstChild() {
+    return FPDFBookmark_GetFirstChild_SV.orElseSet(
+            () ->
+                Optional.ofNullable(
+                    find(
+                        "FPDFBookmark_GetFirstChild",
+                        FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER),
+                        true)))
+        .orElse(null);
+  }
 
-  public static final long PDFACTION_GOTO = 1;
+  private static final StableValue<Optional<MethodHandle>> FPDFBookmark_GetNextSibling_SV =
+      StableValue.of();
 
-  public static final MethodHandle FPDFAction_GetType =
-      downcallCritical("FPDFAction_GetType", FunctionDescriptor.of(JAVA_LONG, ADDRESS));
+  public static MethodHandle fpdfBookmarkGetNextSibling() {
+    return FPDFBookmark_GetNextSibling_SV.orElseSet(
+            () ->
+                Optional.ofNullable(
+                    find(
+                        "FPDFBookmark_GetNextSibling",
+                        FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER),
+                        true)))
+        .orElse(null);
+  }
 
-  public static final MethodHandle FPDFAction_GetDest =
-      downcallCritical("FPDFAction_GetDest", FunctionDescriptor.of(ADDRESS, ADDRESS, ADDRESS));
+  private static final StableValue<Optional<MethodHandle>> FPDFBookmark_GetTitle_SV =
+      StableValue.of();
 
-  public static final MethodHandle FPDFDest_GetDestPageIndex =
-      downcallCritical(
-          "FPDFDest_GetDestPageIndex", FunctionDescriptor.of(JAVA_INT, ADDRESS, ADDRESS));
+  public static MethodHandle fpdfBookmarkGetTitle() {
+    return FPDFBookmark_GetTitle_SV.orElseSet(
+            () ->
+                Optional.ofNullable(
+                    find(
+                        "FPDFBookmark_GetTitle",
+                        FunctionDescriptor.of(C_LONG, C_POINTER, C_POINTER, C_LONG),
+                        false)))
+        .orElse(null);
+  }
+
+  private static final StableValue<Optional<MethodHandle>> FPDFBookmark_GetDest_SV =
+      StableValue.of();
+
+  public static MethodHandle fpdfBookmarkGetDest() {
+    return FPDFBookmark_GetDest_SV.orElseSet(
+            () ->
+                Optional.ofNullable(
+                    find(
+                        "FPDFBookmark_GetDest",
+                        FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER),
+                        true)))
+        .orElse(null);
+  }
+
+  private static final StableValue<Optional<MethodHandle>> FPDFBookmark_GetAction_SV =
+      StableValue.of();
+
+  public static MethodHandle fpdfBookmarkGetAction() {
+    return FPDFBookmark_GetAction_SV.orElseSet(
+            () ->
+                Optional.ofNullable(
+                    find(
+                        "FPDFBookmark_GetAction",
+                        FunctionDescriptor.of(C_POINTER, C_POINTER),
+                        true)))
+        .orElse(null);
+  }
+
+  private static final StableValue<Optional<MethodHandle>> FPDFAction_GetType_SV = StableValue.of();
+
+  public static MethodHandle fpdfActionGetType() {
+    return FPDFAction_GetType_SV.orElseSet(
+            () ->
+                Optional.ofNullable(
+                    find("FPDFAction_GetType", FunctionDescriptor.of(C_LONG, C_POINTER), true)))
+        .orElse(null);
+  }
+
+  private static final StableValue<Optional<MethodHandle>> FPDFAction_GetDest_SV = StableValue.of();
+
+  public static MethodHandle fpdfActionGetDest() {
+    return FPDFAction_GetDest_SV.orElseSet(
+            () ->
+                Optional.ofNullable(
+                    find(
+                        "FPDFAction_GetDest",
+                        FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER),
+                        true)))
+        .orElse(null);
+  }
+
+  private static final StableValue<Optional<MethodHandle>> FPDFDest_GetDestPageIndex_SV =
+      StableValue.of();
+
+  public static MethodHandle fpdfDestGetDestPageIndex() {
+    return FPDFDest_GetDestPageIndex_SV.orElseSet(
+            () ->
+                Optional.ofNullable(
+                    find(
+                        "FPDFDest_GetDestPageIndex",
+                        FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER),
+                        true)))
+        .orElse(null);
+  }
 }
