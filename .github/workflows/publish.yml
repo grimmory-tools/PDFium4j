@@ -75,29 +75,6 @@ jobs:
           pattern: native-dir-*
           path: build/native-artifacts
 
-      - name: Normalize native artifact layout
-        run: |
-          set -euo pipefail
-          rm -rf build/generated-natives/natives
-          mkdir -p build/generated-natives/natives
-
-          found=0
-          for artifact_dir in build/native-artifacts/native-dir-*; do
-            if [[ ! -d "$artifact_dir" ]]; then
-              continue
-            fi
-            found=1
-            platform="${artifact_dir##*native-dir-}"
-            target="build/generated-natives/natives/$platform"
-            mkdir -p "$target"
-            cp -a "$artifact_dir"/. "$target"/
-          done
-
-          if [[ "$found" -eq 0 ]]; then
-            echo "::error::No native artifacts were downloaded"
-            exit 1
-          fi
-
       - name: Cache PDFium binaries
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
@@ -114,7 +91,7 @@ jobs:
           sed -i "s/version = \".*\"/version = \"$VERSION\"/" build.gradle.kts
           echo "Publishing version: $VERSION"
 
-      - run: ./gradlew verifyNativeJars build -x test --warning-mode all
+      - run: ./gradlew verifyNativeJars build -x test -PprebuiltShimsDir=build/native-artifacts --warning-mode all
 
       - run: ./gradlew publishAggregationToCentralPortal
         env:
