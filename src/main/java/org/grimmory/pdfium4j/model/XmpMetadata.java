@@ -8,9 +8,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.OptionalDouble;
 import java.util.OptionalInt;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * Structured representation of XMP metadata extracted from a PDF. Contains Dublin Core fields,
@@ -97,14 +97,14 @@ public record XmpMetadata(
     return Optional.ofNullable(calibreFields.get("series")).filter(s -> !s.isBlank());
   }
 
-  /** Get Calibre series index as a double, if present and parseable. */
-  public OptionalDouble calibreSeriesIndex() {
+  /** Get Calibre series index, if present and parseable. */
+  public Optional<Double> calibreSeriesIndex() {
     String val = calibreFields.get("series_index");
-    if (val == null || val.isBlank()) return OptionalDouble.empty();
+    if (val == null || val.isBlank()) return Optional.empty();
     try {
-      return OptionalDouble.of(Double.parseDouble(val));
+      return Optional.of(Double.parseDouble(val));
     } catch (NumberFormatException e) {
-      return OptionalDouble.empty();
+      return Optional.empty();
     }
   }
 
@@ -130,6 +130,40 @@ public record XmpMetadata(
   }
 
   /**
+   * Finds a simple field by its local name, searching across all custom namespaces. Returns the
+   * first match found.
+   */
+  public Optional<String> findField(String localName) {
+    String suffix = ":" + localName;
+    for (Map.Entry<String, String> entry : customFields.entrySet()) {
+      if (entry.getKey().endsWith(suffix) || entry.getKey().equals(localName)) {
+        return Optional.of(entry.getValue());
+      }
+    }
+    // Also check calibre fields
+    for (Map.Entry<String, String> entry : calibreFields.entrySet()) {
+      if (entry.getKey().equals(localName)) {
+        return Optional.of(entry.getValue());
+      }
+    }
+    return Optional.empty();
+  }
+
+  /**
+   * Finds a list field by its local name, searching across all custom namespaces. Returns the first
+   * match found.
+   */
+  public List<String> findListField(String localName) {
+    String suffix = ":" + localName;
+    for (Map.Entry<String, List<String>> entry : customListFields.entrySet()) {
+      if (entry.getKey().endsWith(suffix) || entry.getKey().equals(localName)) {
+        return entry.getValue();
+      }
+    }
+    return Collections.emptyList();
+  }
+
+  /**
    * Get an XMP identifier value by its scheme (case-insensitive).
    *
    * <p>Note: This performs a linear scan of the identifiers list.
@@ -144,6 +178,25 @@ public record XmpMetadata(
         .findFirst();
   }
 
+  /** Creates a new {@link Builder} initialized with the values of this metadata. */
+  public Builder toBuilder() {
+    return new Builder()
+        .title(title.orElse(null))
+        .creators(creators)
+        .description(description.orElse(null))
+        .subjects(subjects)
+        .publisher(publisher.orElse(null))
+        .language(language.orElse(null))
+        .date(date.orElse(null))
+        .rights(rights.orElse(null))
+        .identifiers(identifiers)
+        .pdfaConformance(pdfaConformance.orElse(null))
+        .calibreFields(calibreFields)
+        .customFields(customFields)
+        .customListFields(customListFields)
+        .xmpIdentifiers(xmpIdentifiers);
+  }
+
   /** Create an empty XmpMetadata. */
   public static XmpMetadata empty() {
     return builder().build();
@@ -156,108 +209,153 @@ public record XmpMetadata(
 
   /** Builder for {@link XmpMetadata} to insulate callers from record component additions. */
   public static final class Builder {
-    private Optional<String> title = Optional.empty();
-    private List<String> creators = new ArrayList<>(8);
-    private Optional<String> description = Optional.empty();
-    private List<String> subjects = new ArrayList<>(8);
-    private Optional<String> publisher = Optional.empty();
-    private Optional<String> language = Optional.empty();
-    private Optional<String> date = Optional.empty();
-    private Optional<String> rights = Optional.empty();
-    private List<String> identifiers = new ArrayList<>(8);
-    private Optional<String> pdfaConformance = Optional.empty();
-    private Map<String, String> calibreFields = LinkedHashMap.newLinkedHashMap(8);
-    private Map<String, String> customFields = LinkedHashMap.newLinkedHashMap(8);
-    private Map<String, List<String>> customListFields = LinkedHashMap.newLinkedHashMap(8);
-    private List<QualifiedIdentifier> xmpIdentifiers = new ArrayList<>(8);
+    private String title;
+    private final List<String> creators = new ArrayList<>(8);
+    private String description;
+    private final List<String> subjects = new ArrayList<>(8);
+    private String publisher;
+    private String language;
+    private String date;
+    private String rights;
+    private final List<String> identifiers = new ArrayList<>(8);
+    private String pdfaConformance;
+    private final Map<String, String> calibreFields = new LinkedHashMap<>(8);
+    private final Map<String, String> customFields = new LinkedHashMap<>(8);
+    private final Map<String, List<String>> customListFields = new LinkedHashMap<>(8);
+    private final List<QualifiedIdentifier> xmpIdentifiers = new ArrayList<>(8);
 
     public Builder title(String val) {
-      this.title = Optional.ofNullable(val);
+      this.title = val;
       return this;
     }
 
     public Builder creators(List<String> val) {
-      this.creators = new ArrayList<>(val);
+      this.creators.clear();
+      if (val != null) this.creators.addAll(val);
+      return this;
+    }
+
+    public Builder addCreator(String val) {
+      if (val != null) this.creators.add(val);
       return this;
     }
 
     public Builder description(String val) {
-      this.description = Optional.ofNullable(val);
+      this.description = val;
       return this;
     }
 
     public Builder subjects(List<String> val) {
-      this.subjects = new ArrayList<>(val);
+      this.subjects.clear();
+      if (val != null) this.subjects.addAll(val);
+      return this;
+    }
+
+    public Builder addSubject(String val) {
+      if (val != null) this.subjects.add(val);
       return this;
     }
 
     public Builder publisher(String val) {
-      this.publisher = Optional.ofNullable(val);
+      this.publisher = val;
       return this;
     }
 
     public Builder language(String val) {
-      this.language = Optional.ofNullable(val);
+      this.language = val;
       return this;
     }
 
     public Builder date(String val) {
-      this.date = Optional.ofNullable(val);
+      this.date = val;
       return this;
     }
 
     public Builder rights(String val) {
-      this.rights = Optional.ofNullable(val);
+      this.rights = val;
       return this;
     }
 
     public Builder identifiers(List<String> val) {
-      this.identifiers = new ArrayList<>(val);
+      this.identifiers.clear();
+      if (val != null) this.identifiers.addAll(val);
+      return this;
+    }
+
+    public Builder addIdentifier(String val) {
+      if (val != null) this.identifiers.add(val);
       return this;
     }
 
     public Builder pdfaConformance(String val) {
-      this.pdfaConformance = Optional.ofNullable(val);
+      this.pdfaConformance = val;
       return this;
     }
 
     public Builder calibreFields(Map<String, String> val) {
-      this.calibreFields = new LinkedHashMap<>(val);
+      this.calibreFields.clear();
+      if (val != null) this.calibreFields.putAll(val);
+      return this;
+    }
+
+    public Builder putCalibreField(String k, String v) {
+      if (k != null && v != null) this.calibreFields.put(k, v);
       return this;
     }
 
     public Builder customFields(Map<String, String> val) {
-      this.customFields = new LinkedHashMap<>(val);
+      this.customFields.clear();
+      if (val != null) this.customFields.putAll(val);
+      return this;
+    }
+
+    public Builder putCustomField(String k, String v) {
+      if (k != null && v != null) this.customFields.put(k, v);
       return this;
     }
 
     public Builder customListFields(Map<String, List<String>> val) {
-      this.customListFields = LinkedHashMap.newLinkedHashMap(val.size());
-      val.forEach((k, v) -> this.customListFields.put(k, new ArrayList<>(v)));
+      this.customListFields.clear();
+      if (val != null) {
+        val.forEach((k, v) -> this.customListFields.put(k, new ArrayList<>(v)));
+      }
+      return this;
+    }
+
+    public Builder putCustomListField(String k, List<String> v) {
+      if (k != null && v != null) this.customListFields.put(k, new ArrayList<>(v));
       return this;
     }
 
     public Builder xmpIdentifiers(List<QualifiedIdentifier> val) {
-      this.xmpIdentifiers = new ArrayList<>(val);
+      this.xmpIdentifiers.clear();
+      if (val != null) this.xmpIdentifiers.addAll(val);
+      return this;
+    }
+
+    public Builder addXmpIdentifier(QualifiedIdentifier val) {
+      if (val != null) this.xmpIdentifiers.add(val);
       return this;
     }
 
     public XmpMetadata build() {
       return new XmpMetadata(
-          title,
-          creators,
-          description,
-          subjects,
-          publisher,
-          language,
-          date,
-          rights,
-          identifiers,
-          pdfaConformance,
-          calibreFields,
-          customFields,
-          customListFields,
-          xmpIdentifiers);
+          Optional.ofNullable(title),
+          List.copyOf(creators),
+          Optional.ofNullable(description),
+          List.copyOf(subjects),
+          Optional.ofNullable(publisher),
+          Optional.ofNullable(language),
+          Optional.ofNullable(date),
+          Optional.ofNullable(rights),
+          List.copyOf(identifiers),
+          Optional.ofNullable(pdfaConformance),
+          Map.copyOf(calibreFields),
+          Map.copyOf(customFields),
+          customListFields.entrySet().stream()
+              .collect(
+                  Collectors.toUnmodifiableMap(Map.Entry::getKey, e -> List.copyOf(e.getValue()))),
+          List.copyOf(xmpIdentifiers));
     }
   }
 }

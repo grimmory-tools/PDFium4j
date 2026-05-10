@@ -28,6 +28,7 @@ import java.util.regex.Pattern;
  */
 public record PdfBookMetadata(
     Optional<String> title,
+    Optional<String> subtitle,
     List<String> authors,
     Optional<String> series,
     Optional<Float> seriesNumber,
