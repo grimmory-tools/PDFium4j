@@ -6,6 +6,7 @@
 #include <fpdf_save.h>
 #include <fpdf_structtree.h>
 #include <fpdf_text.h>
+#include <stddef.h>
 
 #if defined(_WIN32)
     #ifdef PDFIUM4J_SHIM_IMPLEMENTATION
@@ -88,6 +89,62 @@ SHIM_EXPORT int FPDF_CALLCONV pdfium4j_text_get_chars_with_bounds(FPDF_TEXTPAGE 
 
 SHIM_EXPORT int FPDF_CALLCONV pdfium4j_save_incremental(FPDF_DOCUMENT doc, const char* out_path);
 SHIM_EXPORT int FPDF_CALLCONV pdfium4j_save_copy(FPDF_DOCUMENT doc, const char* out_path);
+
+/**
+ * pdfium4j_save_with_metadata_native
+ * 
+ * Uses QPDF to save a PDF with injected XMP and Info dictionary updates.
+ * 
+ * Parameters:
+ *   src_path: Path to the source PDF.
+ *   dst_path: Path to save the modified PDF.
+ *   xmp_metadata: The raw XMP metadata string (XML) to inject.
+ *   xmp_len: The byte length of the xmp_metadata string.
+ *   metadata_pairs: Array of key-value pairs for the Info dictionary.
+ *   metadata_count: The number of key-value pairs (array must have count * 2 elements).
+ */
+SHIM_EXPORT int FPDF_CALLCONV pdfium4j_save_with_metadata_native(
+    const char* src_path,
+    const char* dst_path,
+    const char* xmp_metadata,
+    int xmp_len,
+    const char** metadata_pairs,
+    int metadata_count
+);
+
+/**
+ * pdfium4j_save_with_metadata_mem_native
+ * 
+ * Memory/Callback version of save_with_metadata.
+ */
+SHIM_EXPORT int FPDF_CALLCONV pdfium4j_save_with_metadata_mem_native(
+    const void* src_buf,
+    size_t      src_len,
+    int (*write_block)(void* pThis, const void* pData, size_t size),
+    void* pThis,
+    const char* xmp_metadata,
+    int xmp_len,
+    const char** metadata_pairs,
+    int metadata_count
+);
+
+/**
+ * QPDF-based metadata enumeration
+ */
+typedef int (*Pdfium4jMetaCallback)(const char* key, const char* value_utf8, void* userdata);
+
+SHIM_EXPORT int FPDF_CALLCONV pdfium4j_read_info_dict(
+    const char*          src_path,
+    Pdfium4jMetaCallback callback,
+    void*                userdata
+);
+
+SHIM_EXPORT int FPDF_CALLCONV pdfium4j_read_info_dict_mem(
+    const char*          data,
+    size_t               len,
+    Pdfium4jMetaCallback callback,
+    void*                userdata
+);
 
 #ifdef __cplusplus
 }

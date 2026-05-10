@@ -36,4 +36,13 @@ public enum MetadataTag {
   public byte[] pdfKeyBytes() {
     return pdfKeyBytes;
   }
+
+  public static MetadataTag fromPdfKey(String key) {
+    for (MetadataTag tag : values()) {
+      if (tag.pdfKey.equalsIgnoreCase(key)) {
+        return tag;
+      }
+    }
+    return null;
+  }
 }

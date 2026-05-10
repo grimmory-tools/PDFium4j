@@ -17,6 +17,11 @@ public final class PdfDocumentXmp {
   private static final byte[] XMP_START = "<?xpacket begin".getBytes(StandardCharsets.ISO_8859_1);
   private static final byte[] XMP_END = "<?xpacket end".getBytes(StandardCharsets.ISO_8859_1);
   private static final byte[] XMP_TERM = "?>".getBytes(StandardCharsets.ISO_8859_1);
+  private static final byte[] XMPMETA_START = "<x:xmpmeta".getBytes(StandardCharsets.ISO_8859_1);
+  private static final byte[] XMPMETA_END = "</x:xmpmeta>".getBytes(StandardCharsets.ISO_8859_1);
+
+  private static final byte[] RDF_START = "<rdf:RDF".getBytes(StandardCharsets.ISO_8859_1);
+  private static final byte[] RDF_END = "</rdf:RDF>".getBytes(StandardCharsets.ISO_8859_1);
   private static final long FALLBACK_TAIL_SCAN_BYTES = 256L << 10;
   private static final byte[] EMPTY_BYTE_ARRAY = new byte[0];
 
@@ -34,11 +39,25 @@ public final class PdfDocumentXmp {
         long tailSize = Math.min(fileSize, FALLBACK_TAIL_SCAN_BYTES);
         long tailStart = fileSize - tailSize;
         MemorySegment tail = fc.map(FileChannel.MapMode.READ_ONLY, tailStart, tailSize, arena);
-        byte[] xmp = extractXmpFromSegment(tail);
-        if (xmp.length > 0 || tailStart == 0) return xmp;
+        byte[] tailXmp = extractXmpFromSegment(tail);
+        if (tailStart == 0) return tailXmp;
+
+        if (tailXmp.length == 0) {
+          // Common case when XMP sits before the tail scan window.
+          MemorySegment full = fc.map(FileChannel.MapMode.READ_ONLY, 0, fileSize, arena);
+          return extractXmpFromSegment(full);
+        }
+
+        // If tail extraction found a canonical xpacket, accept it. Otherwise, run a full-file
+        // scan and prefer that result to avoid accidental matches in trailing update sections.
+        if (startsWith(tailXmp, XMP_START)) {
+          return tailXmp;
+        }
+
         // Fallback for uncommon PDFs where the packet is not in the tail window.
         MemorySegment full = fc.map(FileChannel.MapMode.READ_ONLY, 0, fileSize, arena);
-        return extractXmpFromSegment(full);
+        byte[] fullXmp = extractXmpFromSegment(full);
+        return fullXmp.length > 0 ? fullXmp : tailXmp;
       } catch (IOException e) {
         PdfiumLibrary.ignore(e);
       }
@@ -47,19 +66,90 @@ public final class PdfDocumentXmp {
   }
 
   public static byte[] extractXmpFromSegment(MemorySegment pdf) {
-    long start = lastIndexOf(pdf, XMP_START);
-    if (start < 0) return EMPTY_BYTE_ARRAY;
+    long searchFrom = 0;
+    byte[] bestFound = EMPTY_BYTE_ARRAY;
 
-    long end = indexOf(pdf, XMP_END, start);
-    if (end < 0) return EMPTY_BYTE_ARRAY;
+    try {
+      while (searchFrom < pdf.byteSize()) {
+        long next = findEarliestBlockStart(pdf, searchFrom);
+        if (next < 0) break;
 
-    long term = indexOf(pdf, XMP_TERM, end);
-    if (term < 0) return EMPTY_BYTE_ARRAY;
+        byte[] currentBlock;
+        long jump;
 
-    return pdf.asSlice(start, term + 2 - start).toArray(JAVA_BYTE);
+        if (matches(pdf, next, XMP_START)) {
+          currentBlock = extractXpacketAt(pdf, next);
+          jump = XMP_START.length;
+        } else if (matches(pdf, next, XMPMETA_START)) {
+          currentBlock = extractBlock(pdf, XMPMETA_START, XMPMETA_END, next);
+          jump = XMPMETA_START.length;
+        } else {
+          currentBlock = extractBlock(pdf, RDF_START, RDF_END, next);
+          jump = RDF_START.length;
+        }
+
+        if (currentBlock.length > 0 && isMeaningfulXmp(currentBlock)) {
+          bestFound = currentBlock;
+        }
+        searchFrom = next + Math.max(1, jump);
+      }
+    } catch (Exception e) {
+      PdfiumLibrary.ignore(e);
+    }
+    return bestFound;
+  }
+
+  private static long findEarliestBlockStart(MemorySegment pdf, long searchFrom) {
+    long nextXpacket = indexOf(pdf, XMP_START, searchFrom);
+    long nextXmpmeta = indexOf(pdf, XMPMETA_START, searchFrom);
+    long nextRdf = indexOf(pdf, RDF_START, searchFrom);
+
+    long next = -1;
+    if (nextXpacket >= 0) next = nextXpacket;
+    if (nextXmpmeta >= 0 && (next < 0 || nextXmpmeta < next)) next = nextXmpmeta;
+    if (nextRdf >= 0 && (next < 0 || nextRdf < next)) next = nextRdf;
+    return next;
+  }
+
+  private static boolean isMeaningfulXmp(byte[] data) {
+    if (data == null || data.length < 50) return false;
+    String s = new String(data, StandardCharsets.UTF_8);
+    // Must contain actual metadata content, not just an empty RDF wrapper.
+    // We look for rdf:Description which is the container for actual properties.
+    return s.contains("<rdf:Description") || s.contains(":Description");
+  }
+
+  private static byte[] extractXpacketAt(MemorySegment pdf, long start) {
+    long afterStart = start + XMP_START.length;
+    long end = indexOf(pdf, XMP_END, afterStart);
+
+    if (end >= 0) {
+      long term = indexOf(pdf, XMP_TERM, end + XMP_END.length);
+      if (term >= 0) {
+        return pdf.asSlice(start, term + XMP_TERM.length - start).toArray(JAVA_BYTE);
+      }
+    }
+    return EMPTY_BYTE_ARRAY;
+  }
+
+  private static byte[] extractBlock(
+      MemorySegment segment, byte[] startPattern, byte[] endPattern, long start) {
+    long afterStart = start + startPattern.length;
+    long end = indexOf(segment, endPattern, afterStart);
+
+    // Skip unclosed blocks: if another start appears before an end, it's likely
+    // a corrupted or partially rewritten stream.
+    // RELAXED: only skip if we can't find an end at all.
+    if (end < 0) {
+      return EMPTY_BYTE_ARRAY;
+    }
+
+    long sliceLength = end + endPattern.length - start;
+    return segment.asSlice(start, sliceLength).toArray(JAVA_BYTE);
   }
 
   private static long indexOf(MemorySegment segment, byte[] pattern, long start) {
+    if (start < 0) return -1;
     long limit = segment.byteSize() - pattern.length;
     for (long i = start; i <= limit; i++) {
       if (matches(segment, i, pattern)) return i;
@@ -67,12 +157,12 @@ public final class PdfDocumentXmp {
     return -1;
   }
 
-  private static long lastIndexOf(MemorySegment segment, byte[] pattern) {
-    long limit = segment.byteSize() - pattern.length;
-    for (long i = limit; i >= 0; i--) {
-      if (matches(segment, i, pattern)) return i;
+  private static boolean startsWith(byte[] data, byte[] prefix) {
+    if (data.length < prefix.length) return false;
+    for (int i = 0; i < prefix.length; i++) {
+      if (data[i] != prefix[i]) return false;
     }
-    return -1;
+    return true;
   }
 
   private static boolean matches(MemorySegment segment, long pos, byte[] pattern) {

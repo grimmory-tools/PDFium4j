@@ -7,6 +7,7 @@ import static org.grimmory.pdfium4j.internal.FfmHelper.LINKER;
 import static org.grimmory.pdfium4j.internal.FfmHelper.LOOKUP;
 
 import java.lang.foreign.FunctionDescriptor;
+import java.lang.foreign.MemorySegment;
 import java.lang.invoke.MethodHandle;
 import java.util.Objects;
 import java.util.Optional;
@@ -17,7 +18,7 @@ public final class BitmapBindings {
   private BitmapBindings() {}
 
   private static MethodHandle find(String name, FunctionDescriptor desc, boolean critical) {
-    java.lang.foreign.MemorySegment addr = LOOKUP.find(name).orElse(null);
+    MemorySegment addr = LOOKUP.find(name).orElse(null);
     if (addr == null) return null;
     return LINKER.downcallHandle(
         addr, desc, critical ? FfmHelper.CRITICAL_OPTIONS : FfmHelper.NO_OPTIONS);

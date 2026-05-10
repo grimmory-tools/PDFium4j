@@ -4,4 +4,17 @@
     <Match>
         <Class name="~org\.grimmory\.pdfium4j\.internal\..*Bindings" />
     </Match>
+    <!-- Internal records for save params exposure -->
+    <Match>
+        <Class name="org.grimmory.pdfium4j.PdfSaver$XmpResult" />
+    </Match>
+    <Match>
+        <Class name="org.grimmory.pdfium4j.PdfSaver$MetaResult" />
+    </Match>
+    <!-- FFM invokeExact results are ignored via var _ which triggers DLS -->
+    <Match>
+        <Class name="org.grimmory.pdfium4j.internal.PdfDocumentMetadata" />
+        <Method name="readAllInfoDict" />
+        <Bug pattern="DLS_DEAD_LOCAL_STORE" />
+    </Match>
 </FindBugsFilter>

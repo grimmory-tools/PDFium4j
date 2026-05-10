@@ -31,7 +31,20 @@ jobs:
             skipTests: true
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libjpeg-dev zlib1g-dev qpdf poppler-utils
+
+      - name: Install dependencies (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          vcpkg install zlib:x64-windows libjpeg-turbo:x64-windows
+          echo "ZLIB_ROOT=C:/vcpkg/installed/x64-windows" >> $GITHUB_ENV
+          echo "JPEG_ROOT=C:/vcpkg/installed/x64-windows" >> $GITHUB_ENV
 
       - name: Setup Java
         uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0

@@ -2,6 +2,7 @@ package org.grimmory.pdfium4j;
 
 import static java.lang.foreign.ValueLayout.JAVA_INT;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -12,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.grimmory.pdfium4j.exception.PdfCorruptException;
@@ -137,7 +139,22 @@ final class PdfDocumentOpener {
   private static PdfDocument repairAndReopenFromBytes(
       byte[] data, String password, PdfProcessingPolicy policy) {
     try {
-      byte[] repaired = PdfSaver.repair(data);
+      ByteArrayOutputStream bos = new ByteArrayOutputStream();
+      PdfSaver.SaveParams params =
+          new PdfSaver.SaveParams(
+              MemorySegment.NULL,
+              Map.of(),
+              Map.of(),
+              _ -> null,
+              false,
+              null,
+              null,
+              null,
+              data,
+              MemorySegment.NULL,
+              bos);
+      PdfSaver.save(params);
+      byte[] repaired = bos.toByteArray();
       return open(repaired, password, policy.withMode(PdfProcessingPolicy.Mode.STRICT));
     } catch (IOException | IllegalArgumentException e) {
       throw new PdfCorruptException(
@@ -234,7 +251,20 @@ final class PdfDocumentOpener {
     try {
       temp = IoUtils.createTempFile("pdfium4j-autorepair-", ".pdf");
       try (OutputStream out = Files.newOutputStream(temp)) {
-        PdfSaver.repair(path, out);
+        PdfSaver.SaveParams params =
+            new PdfSaver.SaveParams(
+                MemorySegment.NULL,
+                Map.of(),
+                Map.of(),
+                _ -> null,
+                false,
+                null,
+                path,
+                temp,
+                null,
+                MemorySegment.NULL,
+                out);
+        PdfSaver.save(params);
       }
       return openFromNativePath(
           temp, password, resolvedPolicy.withMode(PdfProcessingPolicy.Mode.STRICT), temp);
