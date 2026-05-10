@@ -6,6 +6,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.lang.foreign.SymbolLookup;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
@@ -31,6 +32,12 @@ public final class NativeLoader {
 
   private static volatile boolean loaded = false;
   private static volatile Throwable loadError = null;
+  private static volatile SymbolLookup shimLookup = null;
+  private static volatile SymbolLookup pdfiumLookup = null;
+
+  public static SymbolLookup getShimLookup() {
+    return shimLookup;
+  }
 
   private NativeLoader() {}
 
@@ -208,13 +215,16 @@ public final class NativeLoader {
       }
 
       // Load main PDFium library first so dependencies (like the shim) can link against it
-      loadLibraryFile(pdfiumPath);
+      pdfiumLookup = loadLibraryFile(pdfiumPath);
 
       for (String lib : libs) {
         if (!lib.equals(libName)) {
           Path depPath = tmpDir.resolve(lib);
           if (Files.exists(depPath)) {
-            loadLibraryFile(depPath);
+            var lookup = loadLibraryFile(depPath);
+            if (lib.contains("shim")) {
+              shimLookup = lookup;
+            }
           }
         }
       }
@@ -223,9 +233,10 @@ public final class NativeLoader {
     }
   }
 
-  private static void loadLibraryFile(Path path) {
+  private static java.lang.foreign.SymbolLookup loadLibraryFile(Path path) {
     try {
       System.load(path.toAbsolutePath().toString());
+      return java.lang.foreign.SymbolLookup.libraryLookup(path, java.lang.foreign.Arena.global());
     } catch (UnsatisfiedLinkError e) {
       throw new NativeLoadException(
           "Failed to load native library: " + path.getFileName() + ". Error: " + e.getMessage(), e);

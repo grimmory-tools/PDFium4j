@@ -12,7 +12,6 @@ import java.lang.foreign.FunctionDescriptor;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandle;
-import java.util.Objects;
 
 /** FFM bindings for the pdfium4j C++ shim library. */
 public final class ShimBindings {
@@ -21,50 +20,58 @@ public final class ShimBindings {
 
   /** Ensures all required shim symbols are available. */
   public static void checkRequired() {
-    try {
-      Objects.requireNonNull(pdfium4jPageCount(), "pdfium4j_page_count");
-      Objects.requireNonNull(pdfium4jGetMetaUtf8(), "pdfium4j_get_meta_utf8");
-      Objects.requireNonNull(pdfium4jSetMetaUtf8(), "pdfium4j_set_meta_utf8");
-      Objects.requireNonNull(pdfium4jGetXmpMetadata(), "pdfium4j_get_xmp_metadata");
-      Objects.requireNonNull(pdfium4jPageLabel(), "pdfium4j_page_label");
-      Objects.requireNonNull(pdfium4jPageWidth(), "pdfium4j_page_width");
-      Objects.requireNonNull(pdfium4jPageHeight(), "pdfium4j_page_height");
-      Objects.requireNonNull(pdfium4jBookmarkFirst(), "pdfium4j_bookmark_first");
-      Objects.requireNonNull(pdfium4jBookmarkNext(), "pdfium4j_bookmark_next");
-      Objects.requireNonNull(pdfium4jBookmarkFirstChild(), "pdfium4j_bookmark_first_child");
-      Objects.requireNonNull(pdfium4jBookmarkTitle(), "pdfium4j_bookmark_title");
-      Objects.requireNonNull(pdfium4jBookmarkPageIndex(), "pdfium4j_bookmark_page_index");
-      Objects.requireNonNull(pdfium4jStructTreeGet(), "pdfium4j_struct_tree_get");
-      Objects.requireNonNull(pdfium4jStructTreeClose(), "pdfium4j_struct_tree_close");
-      Objects.requireNonNull(
-          pdfium4jStructTreeCountChildren(), "pdfium4j_struct_tree_count_children");
-      Objects.requireNonNull(pdfium4jStructTreeGetChild(), "pdfium4j_struct_tree_get_child");
-      Objects.requireNonNull(
-          pdfium4jStructElementCountChildren(), "pdfium4j_struct_element_count_children");
-      Objects.requireNonNull(pdfium4jStructElementGetChild(), "pdfium4j_struct_element_get_child");
-      Objects.requireNonNull(pdfium4jStructElementGetMcid(), "pdfium4j_struct_element_get_mcid");
-      Objects.requireNonNull(pdfium4jStructElementGetType(), "pdfium4j_struct_element_get_type");
-      Objects.requireNonNull(pdfium4jStructElementGetTitle(), "pdfium4j_struct_element_get_title");
-      Objects.requireNonNull(
-          pdfium4jStructElementGetAltText(), "pdfium4j_struct_element_get_alt_text");
-      Objects.requireNonNull(
-          pdfium4jStructElementGetActualText(), "pdfium4j_struct_element_get_actual_text");
-      Objects.requireNonNull(pdfium4jStructElementGetLang(), "pdfium4j_struct_element_get_lang");
-      Objects.requireNonNull(
-          pdfium4jStructElementGetAttributeCount(), "pdfium4j_struct_element_get_attribute_count");
-      Objects.requireNonNull(
-          pdfium4jTextGetCharsWithBounds(), "pdfium4j_text_get_chars_with_bounds");
-      Objects.requireNonNull(pdfium4jSaveIncremental(), "pdfium4j_save_incremental");
-      Objects.requireNonNull(pdfium4jSaveCopy(), "pdfium4j_save_copy");
-      Objects.requireNonNull(pdfium4jReadInfoDict(), "pdfium4j_read_info_dict");
-      Objects.requireNonNull(pdfium4jReadInfoDictMem(), "pdfium4j_read_info_dict_mem");
-    } catch (NullPointerException e) {
-      throw new RuntimeException("Missing required shim symbol: " + e.getMessage(), e);
+    check("pdfium4j_page_count", pdfium4jPageCount());
+    check("pdfium4j_get_meta_utf8", pdfium4jGetMetaUtf8());
+    check("pdfium4j_set_meta_utf8", pdfium4jSetMetaUtf8());
+    check("pdfium4j_get_custom_xmp", pdfium4jGetCustomXmp());
+    check("pdfium4j_get_custom_xmp_bag", pdfium4jGetCustomXmpBag());
+    check("pdfium4j_get_xmp_metadata", pdfium4jGetXmpMetadata());
+    check("pdfium4j_page_label", pdfium4jPageLabel());
+    check("pdfium4j_page_width", pdfium4jPageWidth());
+    check("pdfium4j_page_height", pdfium4jPageHeight());
+    check("pdfium4j_bookmark_first", pdfium4jBookmarkFirst());
+    check("pdfium4j_bookmark_next", pdfium4jBookmarkNext());
+    check("pdfium4j_bookmark_first_child", pdfium4jBookmarkFirstChild());
+    check("pdfium4j_bookmark_title", pdfium4jBookmarkTitle());
+    check("pdfium4j_bookmark_page_index", pdfium4jBookmarkPageIndex());
+    check("pdfium4j_struct_tree_get", pdfium4jStructTreeGet());
+    check("pdfium4j_struct_tree_close", pdfium4jStructTreeClose());
+    check("pdfium4j_struct_tree_count_children", pdfium4jStructTreeCountChildren());
+    check("pdfium4j_struct_tree_get_child", pdfium4jStructTreeGetChild());
+    check("pdfium4j_struct_element_count_children", pdfium4jStructElementCountChildren());
+    check("pdfium4j_struct_element_get_child", pdfium4jStructElementGetChild());
+    check("pdfium4j_struct_element_get_mcid", pdfium4jStructElementGetMcid());
+    check("pdfium4j_struct_element_get_type", pdfium4jStructElementGetType());
+    check("pdfium4j_struct_element_get_title", pdfium4jStructElementGetTitle());
+    check("pdfium4j_struct_element_get_alt_text", pdfium4jStructElementGetAltText());
+    check("pdfium4j_struct_element_get_actual_text", pdfium4jStructElementGetActualText());
+    check("pdfium4j_struct_element_get_lang", pdfium4jStructElementGetLang());
+    check("pdfium4j_struct_element_get_attribute_count", pdfium4jStructElementGetAttributeCount());
+    check("pdfium4j_text_get_chars_with_bounds", pdfium4jTextGetCharsWithBounds());
+    check("pdfium4j_save_incremental", pdfium4jSaveIncremental());
+    check("pdfium4j_save_copy", pdfium4jSaveCopy());
+    check("pdfium4j_read_info_dict", pdfium4jReadInfoDict());
+    check("pdfium4j_read_info_dict_mem", pdfium4jReadInfoDictMem());
+    check("pdfium4j_save_with_metadata_native", pdfium4jSaveWithMetadata());
+    check("pdfium4j_save_with_metadata_mem_native", pdfium4jSaveWithMetadataMem());
+  }
+
+  private static void check(String name, MethodHandle mh) {
+    if (mh == null) {
+      System.err.println("CRITICAL: Missing required PDFium shim symbol: " + name);
+      throw new RuntimeException("Missing required PDFium shim symbol: " + name);
     }
   }
 
   private static MethodHandle find(String name, FunctionDescriptor desc, boolean critical) {
-    MemorySegment addr = LOOKUP.find(name).orElse(null);
+    java.lang.foreign.SymbolLookup shim = NativeLoader.getShimLookup();
+    MemorySegment addr = null;
+    if (shim != null) {
+      addr = shim.find(name).orElse(null);
+    }
+    if (addr == null) {
+      addr = LOOKUP.find(name).orElse(null);
+    }
     if (addr == null) return null;
     return LINKER.downcallHandle(
         addr, desc, critical ? FfmHelper.CRITICAL_OPTIONS : FfmHelper.NO_OPTIONS);
@@ -120,6 +127,46 @@ public final class ShimBindings {
                   FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER),
                   false);
           pdfium4jSetMetaUtf8MH = mh;
+        }
+      }
+    }
+    return mh;
+  }
+  
+  private static volatile MethodHandle pdfium4jGetCustomXmpMH = null;
+
+  public static MethodHandle pdfium4jGetCustomXmp() {
+    MethodHandle mh = pdfium4jGetCustomXmpMH;
+    if (mh == null) {
+      synchronized (ShimBindings.class) {
+        mh = pdfium4jGetCustomXmpMH;
+        if (mh == null) {
+          mh =
+              find(
+                  "pdfium4j_get_custom_xmp",
+                  FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_INT),
+                  false);
+          pdfium4jGetCustomXmpMH = mh;
+        }
+      }
+    }
+    return mh;
+  }
+
+  private static volatile MethodHandle pdfium4jGetCustomXmpBagMH = null;
+
+  public static MethodHandle pdfium4jGetCustomXmpBag() {
+    MethodHandle mh = pdfium4jGetCustomXmpBagMH;
+    if (mh == null) {
+      synchronized (ShimBindings.class) {
+        mh = pdfium4jGetCustomXmpBagMH;
+        if (mh == null) {
+          mh =
+              find(
+                  "pdfium4j_get_custom_xmp_bag",
+                  FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_INT),
+                  false);
+          pdfium4jGetCustomXmpBagMH = mh;
         }
       }
     }
@@ -663,7 +710,7 @@ public final class ShimBindings {
               find(
                   "pdfium4j_save_with_metadata_native",
                   FunctionDescriptor.of(
-                      C_INT, C_POINTER, C_POINTER, C_POINTER, JAVA_INT, C_POINTER, JAVA_INT),
+                      C_INT, C_POINTER, C_POINTER, C_POINTER, C_INT, C_POINTER, C_INT),
                   false);
           pdfium4jSaveWithMetadataMH = mh;
         }
@@ -684,8 +731,8 @@ public final class ShimBindings {
               find(
                   "pdfium4j_save_with_metadata_mem_native",
                   FunctionDescriptor.of(
-                      C_INT, C_POINTER, C_SIZE_T, C_POINTER, C_POINTER, C_POINTER, JAVA_INT,
-                      C_POINTER, JAVA_INT),
+                      C_INT, C_POINTER, C_SIZE_T, C_POINTER, C_POINTER, C_POINTER, C_INT, C_POINTER,
+                      C_INT),
                   false);
           pdfium4jSaveWithMetadataMemMH = mh;
         }
