@@ -180,9 +180,24 @@ pdfium4j/                     Root (Java module)
 
 ## Build
 
-```bash
 ./gradlew build
 ```
+
+## Native Build Requirements
+
+To build the native shim from source, the following system dependencies are required:
+
+- **CMake** 3.15+
+- **C++17 Compiler** (Clang, GCC, or MSVC)
+- **ZLIB** (System library)
+- **JPEG** (System library, e.g., libjpeg-turbo)
+
+### Installing dependencies:
+
+- **macOS**: `brew install cmake zlib jpeg`
+- **Linux (Debian/Ubuntu)**: `sudo apt-get install cmake zlib1g-dev libjpeg-dev`
+- **Windows**: Use `vcpkg` or manual installation. For `vcpkg`: `vcpkg install zlib:x64-windows libjpeg-turbo:x64-windows`
+
 
 ## Quality Workflow
 

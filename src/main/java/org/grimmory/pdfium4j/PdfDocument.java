@@ -30,6 +30,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
@@ -46,9 +47,9 @@ import org.grimmory.pdfium4j.internal.IntObjectCache;
 import org.grimmory.pdfium4j.internal.IoUtils;
 import org.grimmory.pdfium4j.internal.NoAllocationPathProbe;
 import org.grimmory.pdfium4j.internal.PdfDocumentAttachments;
-import org.grimmory.pdfium4j.internal.PdfDocumentFallbackMeta;
 import org.grimmory.pdfium4j.internal.PdfDocumentIndexer;
 import org.grimmory.pdfium4j.internal.PdfDocumentMetadata;
+import org.grimmory.pdfium4j.internal.PdfDocumentNativeSaver;
 import org.grimmory.pdfium4j.internal.PdfDocumentSignatures;
 import org.grimmory.pdfium4j.internal.PdfDocumentXmp;
 import org.grimmory.pdfium4j.internal.ScratchBuffer;
@@ -99,8 +100,11 @@ public final class PdfDocument implements AutoCloseable {
   private final Thread ownerThread;
   private final List<PdfPage> openPages = new ArrayList<>(8);
   private volatile boolean closed = false;
-  private volatile boolean structurallyModified = false;
+
+  @SuppressWarnings("PMD.UnusedPrivateField")
   MemorySegment sourceSegment;
+
+  @SuppressWarnings("PMD.UnusedPrivateField")
   Arena sourceSegmentArena;
 
   MemorySegment handle() {
@@ -116,6 +120,8 @@ public final class PdfDocument implements AutoCloseable {
   private byte[] cachedFallbackXmp;
 
   private final Map<MetadataTag, String> pendingMetadata = new EnumMap<>(MetadataTag.class);
+  private final Map<String, String> pendingCustomMetadata =
+      new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
   private XmpUpdate pendingXmp = null;
   private final PdfSaver.MetadataProvider nativeMetadataProvider = this::metadataString;
   final CleanupState state;
@@ -125,6 +131,7 @@ public final class PdfDocument implements AutoCloseable {
   private final IntObjectCache<PageSize> pageSizeCache;
   private final IntObjectCache<Integer> rotationCache;
   private Map<Long, int[]> textIndex = null;
+  private volatile boolean structurallyModified = false;
 
   /** Internal metadata about the document source. */
   record SourceInfo(Path path, Path tempFile, byte[] sourceBytes, int version, Thread ownerThread) {
@@ -531,12 +538,14 @@ public final class PdfDocument implements AutoCloseable {
   }
 
   public synchronized Optional<String> metadata(MetadataTag tag) {
+    PdfDocumentMetadata.ensureInitialized();
     String val = metadataString(tag);
     return (val == null || val.isEmpty()) ? Optional.empty() : Optional.of(val);
   }
 
   public synchronized String metadataString(MetadataTag tag) {
     ensureOpen();
+    PdfDocumentMetadata.ensureInitialized();
     return PdfDocumentMetadata.readMetadataString(
         handle, tag, PdfDocumentMetadata.getHandle(tag), pendingMetadata, this::metadataFallback);
   }
@@ -788,6 +797,7 @@ public final class PdfDocument implements AutoCloseable {
   }
 
   private Optional<String> metadataFallback(MetadataTag tag) {
+    PdfDocumentMetadata.ensureInitialized();
     Map<String, String> cache = getOrBuildFallbackMeta();
     String val = cache.get(tag.pdfKey());
     return (val == null || val.isEmpty()) ? Optional.empty() : Optional.of(val);
@@ -799,7 +809,8 @@ public final class PdfDocument implements AutoCloseable {
    */
   private Map<String, String> getOrBuildFallbackMeta() {
     if (cachedFallbackMeta != null) return cachedFallbackMeta;
-    Map<String, String> result = PdfDocumentFallbackMeta.buildFallbackMeta(sourcePath, sourceBytes);
+    Map<String, String> result =
+        PdfDocumentMetadata.readAllInfoDict(sourcePath, sourceBytes, sourceSegment);
     cachedFallbackMeta = result;
     return result;
   }
@@ -813,12 +824,18 @@ public final class PdfDocument implements AutoCloseable {
     for (MetadataTag tag : METADATA_TAGS) {
       if (tag.pdfKey().equalsIgnoreCase(customKey)) return metadata(tag);
     }
+    // Check pending custom metadata first
+    String pending = pendingCustomMetadata.get(customKey);
+    if (pending != null) {
+      return pending.isEmpty() ? Optional.empty() : Optional.of(pending);
+    }
     // Support arbitrary /Info keys (e.g. /Language) via fpdfGetMetaText
     ensureOpen();
     Optional<String> val = tryGetMetaText(customKey);
     if (val.isPresent()) {
       return val;
     }
+    PdfDocumentMetadata.ensureInitialized();
     return findMetadataInFallback(customKey);
   }
 
@@ -832,14 +849,12 @@ public final class PdfDocument implements AutoCloseable {
                     .invokeExact(handle, keyProbe, MemorySegment.NULL, 0);
         if (needed <= 1) return Optional.empty();
 
-        var slots = ScratchBuffer.utf8KeyAndWideValue(customKey, needed);
+        MemorySegment buf = ScratchBuffer.get(needed);
         int copied =
-            (int)
-                ShimBindings.pdfium4jGetMetaUtf8()
-                    .invokeExact(handle, slots.keySeg(), slots.valueSeg(), needed);
+            (int) ShimBindings.pdfium4jGetMetaUtf8().invokeExact(handle, keyProbe, buf, needed);
         if (copied <= 1) return Optional.empty();
 
-        String val = FfmHelper.fromWideString(slots.valueSeg(), copied);
+        String val = buf.reinterpret(copied).getString(0, StandardCharsets.UTF_8);
         return (val == null || val.isEmpty()) ? Optional.empty() : Optional.of(val);
       } catch (Throwable _) {
         return Optional.empty();
@@ -859,8 +874,27 @@ public final class PdfDocument implements AutoCloseable {
   }
 
   public Map<String, String> metadata() {
+    PdfDocumentMetadata.ensureInitialized();
     Map<String, String> meta = LinkedHashMap.newLinkedHashMap(METADATA_TAGS.length);
-    for (MetadataTag tag : METADATA_TAGS) metadata(tag).ifPresent(v -> meta.put(tag.name(), v));
+    Map<String, String> all = getOrBuildFallbackMeta();
+    for (Map.Entry<String, String> entry : all.entrySet()) {
+      String key = entry.getKey();
+      String val = entry.getValue();
+      // Use uppercase for standard tags if they match
+      MetadataTag tag = MetadataTag.fromPdfKey(key);
+      if (tag != null) {
+        meta.put(tag.name(), val);
+      } else {
+        meta.put(key, val);
+      }
+    }
+    // Overlay pending changes
+    for (Map.Entry<MetadataTag, String> entry : pendingMetadata.entrySet()) {
+      meta.put(entry.getKey().name(), entry.getValue());
+    }
+    for (Map.Entry<String, String> entry : pendingCustomMetadata.entrySet()) {
+      meta.put(entry.getKey(), entry.getValue());
+    }
     return meta;
   }
 
@@ -1057,12 +1091,28 @@ public final class PdfDocument implements AutoCloseable {
   public void setMetadata(MetadataTag tag, String value) {
     ensureOpen();
     pendingMetadata.put(tag, value);
+    // Keep the in-memory PDFium handle in sync so reads-before-save observe the change.
+    writeNativeInfo(tag.pdfKey(), value);
+  }
+
+  public void setMetadata(String key, String value) {
+    ensureOpen();
+    MetadataTag known = MetadataTag.fromPdfKey(key);
+    if (known != null) {
+      pendingMetadata.put(known, value);
+    } else {
+      pendingCustomMetadata.put(key, value);
+    }
+    writeNativeInfo(key, value);
+  }
+
+  private void writeNativeInfo(String key, String value) {
     try (var _ = ScratchBuffer.acquireScope()) {
-      MemorySegment keySeg = ScratchBuffer.getUtf8(tag.pdfKey());
+      MemorySegment keySeg = ScratchBuffer.getUtf8(key);
       MemorySegment valSeg = ScratchBuffer.getUtf8(value);
       int rc = (int) ShimBindings.pdfium4jSetMetaUtf8().invokeExact(handle, keySeg, valSeg);
       if (rc == 0 && LOGGER.isLoggable(Level.FINE)) {
-        LOGGER.log(Level.FINE, "pdfium4j_set_meta_utf8 returned 0 for {0}", tag.pdfKey());
+        LOGGER.log(Level.FINE, "pdfium4j_set_meta_utf8 returned 0 for {0}", key);
       }
     } catch (Throwable e) {
       PdfiumLibrary.ignore(e);
@@ -1163,9 +1213,7 @@ public final class PdfDocument implements AutoCloseable {
     boolean detachedSource = false;
     try {
       temp = IoUtils.createTempFile("pdfium4j-save-", ".pdf");
-      try (OutputStream out = Files.newOutputStream(temp)) {
-        save(out, true);
-      }
+      saveToNewPath(temp);
 
       if (docSourceChannel != null) {
         docSourceChannel.close();
@@ -1215,42 +1263,60 @@ public final class PdfDocument implements AutoCloseable {
   }
 
   private void saveToNewPath(Path path) {
-    try (OutputStream out = Files.newOutputStream(path)) {
-      save(out, true);
+    ensureOpen();
+    try {
+      byte[] modifiedBytes = null;
+      if (structurallyModified) {
+        modifiedBytes = saveNativeToBytes();
+      }
+
+      PdfSaver.SaveParams params =
+          new PdfSaver.SaveParams(
+              handle,
+              pendingMetadata,
+              pendingCustomMetadata,
+              nativeMetadataProvider,
+              !pendingMetadata.isEmpty() || !pendingCustomMetadata.isEmpty(),
+              pendingXmp,
+              modifiedBytes != null ? null : sourcePath,
+              path,
+              modifiedBytes != null ? modifiedBytes : sourceBytes,
+              modifiedBytes != null ? MemorySegment.NULL : sourceSegment,
+              null);
+      PdfSaver.save(params);
+      structurallyModified = false;
     } catch (IOException e) {
       throw new PdfiumException("Failed to save to " + path, e);
     }
   }
 
   public void save(OutputStream out) {
-    save(out, true);
+    save(out, null);
   }
 
-  private void save(OutputStream out, boolean allowIncrementalOutput) {
+  public void save(OutputStream out, Path targetPath) {
     ensureOpen();
     try {
-      if (pendingXmp == null && pendingMetadata.isEmpty() && !structurallyModified) {
-        PdfSaver.saveNativeFullRewrite(handle, out, sourceFileVersion);
-      } else {
-        PdfSaver.SaveParams params =
-            new PdfSaver.SaveParams(
-                handle,
-                pendingMetadata,
-                nativeMetadataProvider,
-                !pendingMetadata.isEmpty(),
-                pendingXmp,
-                docSourceChannel,
-                sourcePath,
-                sourceBytes,
-                sourceSegment,
-                structurallyModified,
-                out,
-                allowIncrementalOutput,
-                false,
-                EditBindings.FPDF_NO_INCREMENTAL,
-                sourceFileVersion);
-        PdfSaver.save(params);
+      byte[] modifiedBytes = null;
+      if (structurallyModified) {
+        modifiedBytes = saveNativeToBytes();
       }
+
+      PdfSaver.SaveParams params =
+          new PdfSaver.SaveParams(
+              handle,
+              pendingMetadata,
+              pendingCustomMetadata,
+              nativeMetadataProvider,
+              !pendingMetadata.isEmpty() || !pendingCustomMetadata.isEmpty(),
+              pendingXmp,
+              modifiedBytes != null ? null : sourcePath,
+              targetPath,
+              modifiedBytes != null ? modifiedBytes : sourceBytes,
+              modifiedBytes != null ? MemorySegment.NULL : sourceSegment,
+              out);
+      PdfSaver.save(params);
+      structurallyModified = false;
     } catch (IOException e) {
       throw new PdfiumException("Failed to save document", e);
     }
@@ -1258,7 +1324,13 @@ public final class PdfDocument implements AutoCloseable {
 
   public byte[] saveToBytes() {
     ByteArrayOutputStream bos = new ByteArrayOutputStream();
-    save(bos, true);
+    save(bos);
+    return bos.toByteArray();
+  }
+
+  private byte[] saveNativeToBytes() throws IOException {
+    ByteArrayOutputStream bos = new ByteArrayOutputStream();
+    PdfDocumentNativeSaver.save(handle, bos);
     return bos.toByteArray();
   }
 
@@ -1358,7 +1430,20 @@ public final class PdfDocument implements AutoCloseable {
     try {
       temp = IoUtils.createTempFile("pdfium4j-repair-", ".pdf");
       try (OutputStream out = Files.newOutputStream(temp)) {
-        PdfSaver.repair(path, out);
+        PdfSaver.SaveParams params =
+            new PdfSaver.SaveParams(
+                MemorySegment.NULL,
+                Map.of(),
+                Map.of(),
+                _ -> null,
+                false,
+                null,
+                path,
+                temp,
+                null,
+                MemorySegment.NULL,
+                out);
+        PdfSaver.save(params);
       }
       Files.move(temp, path, StandardCopyOption.REPLACE_EXISTING);
       temp = null;

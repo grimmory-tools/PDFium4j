@@ -1,5 +1,7 @@
 package org.grimmory.pdfium4j.util;
 
+import java.io.IOException;
+import java.io.OutputStream;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -155,9 +157,9 @@ public final class PdfDateUtils {
    * Writes the current UTC date and time in PDF format (D:YYYYMMDDHHmmssZ) to the output stream.
    *
    * @param out the output stream to write to
-   * @throws java.io.IOException if an I/O error occurs
+   * @throws IOException if an I/O error occurs
    */
-  public static void writeCurrentPdfDate(java.io.OutputStream out) throws java.io.IOException {
+  public static void writeCurrentPdfDate(OutputStream out) throws IOException {
     OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
     out.write('D');
     out.write(':');
@@ -170,8 +172,7 @@ public final class PdfDateUtils {
     out.write('Z');
   }
 
-  private static void writePadded(java.io.OutputStream out, int value, int width)
-      throws java.io.IOException {
+  private static void writePadded(OutputStream out, int value, int width) throws IOException {
     int v = Math.abs(value);
     if (width == 2) {
       out.write('0' + (v / 10 % 10));

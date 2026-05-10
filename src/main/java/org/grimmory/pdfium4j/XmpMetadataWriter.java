@@ -25,6 +25,37 @@ public final class XmpMetadataWriter {
   private static final String NS_CALIBRE = "http://calibre-ebook.com/xmp-namespace";
   private static final String NS_XAP = "http://ns.adobe.com/xap/1.0/";
   private static final String NS_XMP_IDQ = "http://ns.adobe.com/xmp/Identifier/qual/1.0/";
+  private static final String NS_XMP_MM = "http://ns.adobe.com/xap/1.0/mm/";
+  private static final String NS_PDF = "http://ns.adobe.com/pdf/1.3/";
+  private static final String NS_PHOTOSHOP = "http://ns.adobe.com/photoshop/1.0/";
+  private static final String NS_TIFF = "http://ns.adobe.com/tiff/1.0/";
+  private static final String NS_EXIF = "http://ns.adobe.com/exif/1.0/";
+  private static final String NS_ST_REF = "http://ns.adobe.com/xap/1.0/sType/ResourceRef#";
+  private static final String NS_ST_EVT = "http://ns.adobe.com/xap/1.0/sType/ResourceEvent#";
+  private static final String NS_BOOKLORE = "http://booklore.org/xmp/1.0/";
+  private static final String NS_GRIMMORY = "http://grimmory.org/xmp/1.0/";
+  private static final String NS_XAP_G = "http://ns.adobe.com/xap/1.0/g/";
+
+  private static final Map<String, String> BUILTIN_NS_PREFIXES =
+      Map.ofEntries(
+          Map.entry("calibre", NS_CALIBRE),
+          Map.entry("xmp", NS_XAP),
+          Map.entry("xap", NS_XAP),
+          Map.entry("xapG", NS_XAP_G),
+          Map.entry("xmpMM", NS_XMP_MM),
+          Map.entry("xapMM", NS_XMP_MM),
+          Map.entry("dc", NS_DC),
+          Map.entry("pdf", NS_PDF),
+          Map.entry("photoshop", NS_PHOTOSHOP),
+          Map.entry("tiff", NS_TIFF),
+          Map.entry("exif", NS_EXIF),
+          Map.entry("stRef", NS_ST_REF),
+          Map.entry("stEvt", NS_ST_EVT),
+          Map.entry("booklore", NS_BOOKLORE),
+          Map.entry("grimmory", NS_GRIMMORY),
+          Map.entry("pdfx", "http://ns.adobe.com/pdfx/1.3/"),
+          Map.entry("prism", "http://prismstandard.org/namespaces/basic/2.0/"),
+          Map.entry("pdfaid", "http://www.aiim.org/pdfa/ns/id/"));
 
   private static final String RDF_DESCRIPTION_START = "<rdf:Description rdf:about=\"\"\n";
   private static final String RDF_DESCRIPTION_END = "</rdf:Description>\n";
@@ -43,11 +74,12 @@ public final class XmpMetadataWriter {
     Objects.requireNonNull(prefix, "prefix");
     Objects.requireNonNull(uri, "uri");
     if (prefix.isEmpty()) throw new IllegalArgumentException("Prefix must not be empty");
-    if (Set.of("dc", "rdf", "pdfaid", "calibre", "xmp", "xap", "xml")
-        .contains(prefix.toLowerCase(Locale.ROOT))) {
+    if (BUILTIN_NS_PREFIXES.containsKey(prefix.toLowerCase(Locale.ROOT))
+        || "rdf".equals(prefix)
+        || "xml".equals(prefix)) {
       throw new IllegalArgumentException("Prefix '" + prefix + "' is reserved");
     }
-    validateNcName(prefix);
+    if (!isValidNcName(prefix)) throw new IllegalArgumentException("Invalid prefix: " + prefix);
     customNamespaces.put(prefix, uri);
     return this;
   }
@@ -246,13 +278,15 @@ public final class XmpMetadataWriter {
 
     for (Map.Entry<String, String> entry : metadata.calibreFields().entrySet()) {
       String key = entry.getKey();
-      s.write("  <calibre:");
-      s.write(key);
-      s.write(">");
-      writeEscaped(s, entry.getValue());
-      s.write("</calibre:");
-      s.write(key);
-      s.write(">\n");
+      if (isValidNcName(key)) {
+        s.write("  <calibre:");
+        s.write(key);
+        s.write(">");
+        writeEscaped(s, entry.getValue());
+        s.write("</calibre:");
+        s.write(key);
+        s.write(">\n");
+      }
     }
 
     s.write(RDF_DESCRIPTION_END);
@@ -272,7 +306,8 @@ public final class XmpMetadataWriter {
     allPrefixes.addAll(listGrouped.keySet());
 
     for (String prefix : allPrefixes) {
-      String uri = customNamespaces.get(prefix);
+      String uri =
+          customNamespaces.getOrDefault(prefix, BUILTIN_NS_PREFIXES.getOrDefault(prefix, ""));
       s.write(RDF_DESCRIPTION_START);
       s.write(XMLNS_ATTR);
       s.write(prefix);
@@ -454,32 +489,42 @@ public final class XmpMetadataWriter {
   }
 
   private void validate(XmpMetadata metadata) {
-    metadata.calibreFields().keySet().forEach(XmpMetadataWriter::validateNcName);
-    metadata.customFields().keySet().forEach(this::validateCustomField);
-    metadata.customListFields().keySet().forEach(this::validateCustomField);
+    // We no longer throw during validation of custom fields; instead we skip invalid ones during
+    // write.
+    metadata
+        .calibreFields()
+        .keySet()
+        .forEach(
+            k -> {
+              if (!isValidNcName(k))
+                throw new IllegalArgumentException("Invalid Calibre field name: " + k);
+            });
   }
 
-  private void validateCustomField(String key) {
+  private boolean isValidCustomField(String key) {
     int colonIdx = key.indexOf(':');
     if (colonIdx > 0) {
       String prefix = key.substring(0, colonIdx);
-      validateNcName(prefix);
-      validateNcName(key.substring(colonIdx + 1));
-      if (!"xmp".equals(prefix) && !customNamespaces.containsKey(prefix)) {
-        throw new IllegalArgumentException("Namespace prefix '" + prefix + "' is not registered");
+      String localName = key.substring(colonIdx + 1);
+      if (!isValidNcName(prefix) || !isValidNcName(localName)) return false;
+
+      String lowerPrefix = prefix.toLowerCase(Locale.ROOT);
+      if (!BUILTIN_NS_PREFIXES.containsKey(lowerPrefix) && !customNamespaces.containsKey(prefix)) {
+        customNamespaces.put(prefix, "http://pdfium4j.org/ns/auto-generated/" + prefix);
       }
+      return true;
     } else {
-      validateNcName(key);
+      return isValidNcName(key);
     }
   }
 
-  private static void validateNcName(String name) {
-    if (name == null || name.isEmpty() || !isValidNcNameStart(name.charAt(0)))
-      throw new IllegalArgumentException("Invalid XML name: '" + name + "'");
+  private static boolean isValidNcName(String name) {
+    if (name == null || name.isEmpty() || !isValidNcNameStart(name.charAt(0))) return false;
     final int nameLength = name.length();
-    for (int i = 1; i < nameLength; i++)
-      if (!isValidNcNameChar(name.charAt(i)))
-        throw new IllegalArgumentException("Invalid XML name: '" + name + "'");
+    for (int i = 1; i < nameLength; i++) {
+      if (!isValidNcNameChar(name.charAt(i))) return false;
+    }
+    return true;
   }
 
   private static boolean isValidNcNameStart(char c) {
@@ -490,8 +535,20 @@ public final class XmpMetadataWriter {
     return isValidNcNameStart(c) || (c >= '0' && c <= '9') || c == '-' || c == '.';
   }
 
-  private static <T> void processField(
+  private void groupCustomFields(
+      XmpMetadata metadata,
+      Map<String, Map<String, String>> simpleGrouped,
+      Map<String, Map<String, List<String>>> listGrouped,
+      Map<String, String> simpleUnprefixed,
+      Map<String, List<String>> listUnprefixed) {
+    metadata.customFields().forEach((k, v) -> processField(k, v, simpleGrouped, simpleUnprefixed));
+    metadata.customListFields().forEach((k, v) -> processField(k, v, listGrouped, listUnprefixed));
+  }
+
+  private <T> void processField(
       String key, T value, Map<String, Map<String, T>> grouped, Map<String, T> unprefixed) {
+    if (!isValidCustomField(key)) return;
+
     int colonIdx = key.indexOf(':');
     if (colonIdx > 0) {
       String prefix = key.substring(0, colonIdx);
@@ -501,16 +558,6 @@ public final class XmpMetadataWriter {
             .computeIfAbsent(prefix, _ -> LinkedHashMap.newLinkedHashMap(8))
             .put(key.substring(colonIdx + 1), value);
     } else unprefixed.put(key, value);
-  }
-
-  private static void groupCustomFields(
-      XmpMetadata metadata,
-      Map<String, Map<String, String>> simpleGrouped,
-      Map<String, Map<String, List<String>>> listGrouped,
-      Map<String, String> simpleUnprefixed,
-      Map<String, List<String>> listUnprefixed) {
-    metadata.customFields().forEach((k, v) -> processField(k, v, simpleGrouped, simpleUnprefixed));
-    metadata.customListFields().forEach((k, v) -> processField(k, v, listGrouped, listUnprefixed));
   }
 
   private interface ThrowingRunnable {

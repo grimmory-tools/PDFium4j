@@ -61,3 +61,10 @@ src/test/java/org/grimmory/pdfium4j/PdfBoxCorpusGenerator.java
 # Corpus investigation artifacts
 /build/tmp/corpus-stress-work/
 /pdfium4j-natives-*/
+
+# Temporary test artifacts
+*.pdf
+*.class
+*.log
+test_progress.log
+test_progress.log

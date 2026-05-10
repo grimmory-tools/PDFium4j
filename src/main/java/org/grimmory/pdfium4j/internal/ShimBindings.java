@@ -1,11 +1,15 @@
 package org.grimmory.pdfium4j.internal;
 
+import static java.lang.foreign.ValueLayout.*;
 import static org.grimmory.pdfium4j.internal.FfmHelper.C_INT;
 import static org.grimmory.pdfium4j.internal.FfmHelper.C_POINTER;
+import static org.grimmory.pdfium4j.internal.FfmHelper.C_SIZE_T;
 import static org.grimmory.pdfium4j.internal.FfmHelper.LINKER;
 import static org.grimmory.pdfium4j.internal.FfmHelper.LOOKUP;
 
+import java.lang.foreign.Arena;
 import java.lang.foreign.FunctionDescriptor;
+import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandle;
 import java.util.Objects;
@@ -51,10 +55,12 @@ public final class ShimBindings {
     Objects.requireNonNull(pdfium4jTextGetCharsWithBounds(), "pdfium4j_text_get_chars_with_bounds");
     Objects.requireNonNull(pdfium4jSaveIncremental(), "pdfium4j_save_incremental");
     Objects.requireNonNull(pdfium4jSaveCopy(), "pdfium4j_save_copy");
+    Objects.requireNonNull(pdfium4jReadInfoDict(), "pdfium4j_read_info_dict");
+    Objects.requireNonNull(pdfium4jReadInfoDictMem(), "pdfium4j_read_info_dict_mem");
   }
 
   private static MethodHandle find(String name, FunctionDescriptor desc, boolean critical) {
-    java.lang.foreign.MemorySegment addr = LOOKUP.find(name).orElse(null);
+    MemorySegment addr = LOOKUP.find(name).orElse(null);
     if (addr == null) return null;
     return LINKER.downcallHandle(
         addr, desc, critical ? FfmHelper.CRITICAL_OPTIONS : FfmHelper.NO_OPTIONS);
@@ -466,5 +472,96 @@ public final class ShimBindings {
                         FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER),
                         false)))
         .orElse(null);
+  }
+
+  private static final StableValue<Optional<MethodHandle>> pdfium4jReadInfoDictSV =
+      StableValue.of();
+
+  public static MethodHandle pdfium4jReadInfoDict() {
+    return pdfium4jReadInfoDictSV
+        .orElseSet(
+            () ->
+                Optional.ofNullable(
+                    find(
+                        "pdfium4j_read_info_dict",
+                        FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER),
+                        false)))
+        .orElse(null);
+  }
+
+  private static final StableValue<Optional<MethodHandle>> pdfium4jReadInfoDictMemSV =
+      StableValue.of();
+
+  public static MethodHandle pdfium4jReadInfoDictMem() {
+    return pdfium4jReadInfoDictMemSV
+        .orElseSet(
+            () ->
+                Optional.ofNullable(
+                    find(
+                        "pdfium4j_read_info_dict_mem",
+                        FunctionDescriptor.of(C_INT, C_POINTER, C_SIZE_T, C_POINTER, C_POINTER),
+                        false)))
+        .orElse(null);
+  }
+
+  private static final StableValue<Optional<MethodHandle>> pdfium4jSaveWithMetadataSV =
+      StableValue.of();
+
+  public static MethodHandle pdfium4jSaveWithMetadata() {
+    return pdfium4jSaveWithMetadataSV
+        .orElseSet(
+            () ->
+                Optional.ofNullable(
+                    find(
+                        "pdfium4j_save_with_metadata_native",
+                        FunctionDescriptor.of(
+                            C_INT, C_POINTER, C_POINTER, C_POINTER, JAVA_INT, C_POINTER, JAVA_INT),
+                        false)))
+        .orElse(null);
+  }
+
+  private static final StableValue<Optional<MethodHandle>> pdfium4jSaveWithMetadataMemSV =
+      StableValue.of();
+
+  public static MethodHandle pdfium4jSaveWithMetadataMem() {
+    return pdfium4jSaveWithMetadataMemSV
+        .orElseSet(
+            () ->
+                Optional.ofNullable(
+                    find(
+                        "pdfium4j_save_with_metadata_mem_native",
+                        FunctionDescriptor.of(
+                            C_INT, C_POINTER, C_SIZE_T, C_POINTER, C_POINTER, C_POINTER, JAVA_INT,
+                            C_POINTER, JAVA_INT),
+                        false)))
+        .orElse(null);
+  }
+
+  public static MemorySegment writeBlockCallback() {
+    return WRITE_BLOCK_CALLBACK_SV.orElseThrow();
+  }
+
+  private static final StableValue<MemorySegment> WRITE_BLOCK_CALLBACK_SV = StableValue.of();
+
+  public static void initializeWriteBlockCallback(MethodHandle mh) {
+    WRITE_BLOCK_CALLBACK_SV.orElseSet(
+        () ->
+            LINKER.upcallStub(
+                mh,
+                FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, ValueLayout.JAVA_LONG),
+                Arena.global()));
+  }
+
+  public static MemorySegment metadataCallback() {
+    return METADATA_CALLBACK_SV.orElseThrow();
+  }
+
+  private static final StableValue<MemorySegment> METADATA_CALLBACK_SV = StableValue.of();
+
+  public static void initializeMetadataCallback(MethodHandle mh) {
+    METADATA_CALLBACK_SV.orElseSet(
+        () ->
+            LINKER.upcallStub(
+                mh, FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER), Arena.global()));
   }
 }

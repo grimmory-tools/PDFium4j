@@ -230,7 +230,9 @@ public final class XmpMetadataParser {
         Node child = children.item(j);
         if (child.getNodeType() != Node.ELEMENT_NODE) continue;
         String ns = child.getNamespaceURI();
-        if (ns == null || CORE_NAMESPACES.contains(ns)) continue;
+        if (ns == null || NS_RDF.equals(ns) || NS_DC.equals(ns)) continue;
+        if (NS_PDFA_ID.equals(ns) || NS_CALIBRE.equals(ns) || NS_CALIBRE_SI.equals(ns))
+          continue; // Handled separately
         if (NS_XMP.equals(ns) && "Identifier".equals(child.getLocalName()))
           continue; // Handled separately
 

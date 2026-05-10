@@ -15,7 +15,7 @@ plugins {
 
 allprojects {
     group = "org.grimmory"
-    version = "1.0.0"
+    version = "1.1.0"
 
     repositories {
         mavenCentral()
@@ -471,6 +471,8 @@ val nativeJarTasks = activePlatforms.keys.map { localName ->
         }
 
         from(pdfiumNativesDir.map { it.dir("natives/$localName") }) { into("natives/$localName") }
+        from("shim/vendor/qpdf/LICENSE.txt") { into("natives/$localName"); rename { "QPDF-LICENSE.txt" } }
+        from("shim/vendor/qpdf/NOTICE.md") { into("natives/$localName"); rename { "QPDF-NOTICE.md" } }
     }
 }
 
@@ -510,10 +512,13 @@ tasks.register("verifyNativeJars") {
                 if (!entries.contains(expectedShim)) {
                     throw GradleException("Integrity check failed: Missing $expectedShim in ${jarFile.name}")
                 }
-                if (!entries.contains("natives/$platform/native-libs.txt")) {
-                    throw GradleException("Integrity check failed: Missing native-libs.txt in ${jarFile.name}")
+                if (!entries.contains("natives/$platform/QPDF-LICENSE.txt")) {
+                    throw GradleException("Integrity check failed: Missing QPDF-LICENSE.txt in ${jarFile.name}")
                 }
-                logger.lifecycle("Successfully verified integrity of ${jarFile.name} (contains PDFium + Shim)")
+                if (!entries.contains("natives/$platform/QPDF-NOTICE.md")) {
+                    throw GradleException("Integrity check failed: Missing QPDF-NOTICE.md in ${jarFile.name}")
+                }
+                logger.lifecycle("Successfully verified integrity of ${jarFile.name} (contains PDFium + Shim + QPDF License)")
             }
         }
     }
@@ -525,6 +530,10 @@ tasks.assemble {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    testLogging {
+        showStandardStreams = true
+        events("passed", "skipped", "failed")
+    }
     dependsOn(generateNativeIndex)
     classpath += files(layout.buildDirectory.dir("generated-natives"))
     jvmArgs(
@@ -533,6 +542,18 @@ tasks.withType<Test> {
     )
     if (platformFilter != null) {
         systemProperty("pdfium4j.platform", platformFilter)
+    }
+    System.getProperty("corpus.xmp.limit")?.let {
+        systemProperty("corpus.xmp.limit", it)
+    }
+    System.getProperty("corpus.path")?.let {
+        systemProperty("corpus.path", it)
+    }
+    System.getProperty("sourcePdf")?.let {
+        systemProperty("sourcePdf", it)
+    }
+    System.getProperty("corpus.limit")?.let {
+        systemProperty("corpus.limit", it)
     }
     filter {
         excludeTestsMatching("org.grimmory.pdfium4j.PathologicalPdfTest")

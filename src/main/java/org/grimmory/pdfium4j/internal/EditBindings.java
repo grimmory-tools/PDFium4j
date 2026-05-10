@@ -8,6 +8,7 @@ import static org.grimmory.pdfium4j.internal.FfmHelper.LOOKUP;
 
 import java.lang.foreign.FunctionDescriptor;
 import java.lang.foreign.MemoryLayout;
+import java.lang.foreign.MemorySegment;
 import java.lang.foreign.StructLayout;
 import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandle;
@@ -23,7 +24,7 @@ public final class EditBindings {
   private EditBindings() {}
 
   private static MethodHandle find(String name, FunctionDescriptor desc, boolean critical) {
-    java.lang.foreign.MemorySegment addr = LOOKUP.find(name).orElse(null);
+    MemorySegment addr = LOOKUP.find(name).orElse(null);
     if (addr == null) return null;
     return LINKER.downcallHandle(
         addr, desc, critical ? FfmHelper.CRITICAL_OPTIONS : FfmHelper.NO_OPTIONS);
