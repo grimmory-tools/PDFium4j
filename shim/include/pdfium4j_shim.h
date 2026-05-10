@@ -22,6 +22,15 @@
 extern "C" {
 #endif
 
+typedef struct {
+    int charCode;
+    float left;
+    float bottom;
+    float right;
+    float top;
+    float fontSize;
+} pdfium4j_char_info_t;
+
 SHIM_EXPORT int FPDF_CALLCONV pdfium4j_page_count(FPDF_DOCUMENT doc);
 
 SHIM_EXPORT int FPDF_CALLCONV pdfium4j_get_meta_utf8(FPDF_DOCUMENT doc, const char* key, char* buf, int buf_len);
@@ -128,6 +137,16 @@ SHIM_EXPORT int FPDF_CALLCONV pdfium4j_save_with_metadata_mem_native(
     int metadata_count
 );
 
+SHIM_EXPORT int FPDF_CALLCONV pdfium4j_save_with_metadata_mem_to_file_native(
+    const void* src_buf,
+    size_t      src_len,
+    const char* dst_path,
+    const char* xmp_metadata,
+    int xmp_len,
+    const char** metadata_pairs,
+    int metadata_count
+);
+
 /**
  * QPDF-based metadata enumeration
  */
@@ -145,6 +164,21 @@ SHIM_EXPORT int FPDF_CALLCONV pdfium4j_read_info_dict_mem(
     Pdfium4jMetaCallback callback,
     void*                userdata
 );
+
+SHIM_EXPORT int FPDF_CALLCONV pdfium4j_get_xmp_qpdf(
+    const char* src_path,
+    char*       buf,
+    int         buf_len
+);
+
+SHIM_EXPORT int FPDF_CALLCONV pdfium4j_get_xmp_qpdf_mem(
+    const char* data,
+    size_t      len,
+    char*       buf,
+    int         buf_len
+);
+
+SHIM_EXPORT void FPDF_CALLCONV pdfium4j_resolve_optional_symbols(void);
 
 #ifdef __cplusplus
 }
