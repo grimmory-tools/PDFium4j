@@ -114,7 +114,8 @@ if (!enableCorpusTools.get()) {
 
 tasks.withType<JavaCompile> {
     options.compilerArgs.addAll(listOf(
-        "--enable-preview"
+        "--enable-preview",
+        "-Xlint:-preview"
     ))
 }
 
@@ -137,19 +138,6 @@ val pdfiumPlatforms = mapOf(
 )
 
 val platformFilter = findProperty("pdfiumPlatformFilter")?.toString()
-val activePlatforms = if (platformFilter != null) {
-    pdfiumPlatforms.filterKeys { it == platformFilter }
-} else {
-    pdfiumPlatforms
-}
-
-// Optional directory containing pre-built shim artifacts (one sub-dir per platform named native-dir-<platform>).
-// When set, buildShim will copy shims from here instead of compiling for non-host-compatible platforms.
-val prebuiltShimsDir = findProperty("prebuiltShimsDir")?.toString()?.let { project.file(it) }
-
-val pdfiumArchiveDir = layout.buildDirectory.dir("pdfium-archives")
-val pdfiumNativesDir = layout.buildDirectory.dir("generated-natives")
-
 val hostOs = System.getProperty("os.name").lowercase()
 val hostArch = System.getProperty("os.arch").lowercase()
 val hostPlatform = when {
@@ -160,6 +148,21 @@ val hostPlatform = when {
     hostOs.contains("windows") && (hostArch == "x86_64" || hostArch == "amd64") -> "windows-x64"
     else -> null
 }
+
+val activePlatforms = if (platformFilter != null) {
+    pdfiumPlatforms.filterKeys { it == platformFilter }
+} else if (System.getenv("CI") == null && hostPlatform != null) {
+    pdfiumPlatforms.filterKeys { it == hostPlatform }
+} else {
+    pdfiumPlatforms
+}
+
+// Optional directory containing pre-built shim artifacts (one sub-dir per platform named native-dir-<platform>).
+// When set, buildShim will copy shims from here instead of compiling for non-host-compatible platforms.
+val prebuiltShimsDir = findProperty("prebuiltShimsDir")?.toString()?.let { project.file(it) }
+
+val pdfiumArchiveDir = layout.buildDirectory.dir("pdfium-archives")
+val pdfiumNativesDir = layout.buildDirectory.dir("generated-natives")
 
 val downloadPdfiumBinaries by tasks.registering {
     description = "Downloads prebuilt PDFium binaries for all supported platforms"
@@ -549,6 +552,7 @@ tasks.assemble {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    maxHeapSize = "2g"
     testLogging {
         showStandardStreams = true
         events("passed", "skipped", "failed")
@@ -645,7 +649,7 @@ tasks.register<JavaExec>("runCorpusProcessor") {
     group = "application"
     description = "Runs the CorpusProcessor to write metadata to PDFs"
     if (enableCorpusTools.get()) {
-        dependsOn("buildShim")
+        dependsOn("generateNativeIndex")
     }
     mainClass.set("org.grimmory.pdfium4j.CorpusProcessor")
     classpath = sourceSets["test"].runtimeClasspath
@@ -682,7 +686,7 @@ tasks.register<JavaExec>("runCorpusMetadataStress") {
     group = "application"
     description = "Runs metadata save stress validation against corpus PDFs"
     if (enableCorpusTools.get()) {
-        dependsOn("buildShim")
+        dependsOn("generateNativeIndex")
     }
     mainClass.set("org.grimmory.pdfium4j.CorpusMetadataStressRunner")
     classpath = sourceSets["test"].runtimeClasspath
