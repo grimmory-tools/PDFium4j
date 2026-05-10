@@ -14,6 +14,8 @@ public interface BookMetadata {
 
   Optional<String> title();
 
+  Optional<String> subtitle();
+
   List<String> authors();
 
   Optional<String> series();
