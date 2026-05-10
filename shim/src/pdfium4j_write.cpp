@@ -1,11 +1,106 @@
 #include "pdfium4j_shim.h"
+#include "pdfium4j_utils.h"
+#include <qpdf/Pipeline.hh>
 #include <qpdf/QPDF.hh>
-#include <qpdf/QPDFWriter.hh>
 #include <qpdf/QPDFObjectHandle.hh>
+#include <qpdf/QPDFWriter.hh>
 #include <qpdf/Pl_Buffer.hh>
+#include <cstring>
+#include <exception>
+#include <span>
+#include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
-#include <iostream>
+
+namespace {
+
+struct SaveParams {
+    std::string_view xmp;
+    std::span<const char*> pairs;
+    int metadata_count;
+};
+
+class CallbackPipeline final : public Pipeline {
+public:
+    using WriteFunc = int (*)(void*, const void*, size_t);
+
+    CallbackPipeline(WriteFunc fn, void* ctx)
+        : Pipeline("callback", nullptr), m_fn(fn), m_ctx(ctx) {}
+
+    void write(unsigned char const* data, size_t len) override {
+        if (m_fn(m_ctx, data, len) != 1) {
+            throw std::runtime_error("write callback failed");
+        }
+    }
+
+    void finish() override {}
+
+private:
+    WriteFunc m_fn;
+    void* m_ctx;
+};
+
+[[nodiscard]] static int inject_metadata(QPDF& qpdf, const SaveParams& params) noexcept {
+    if (qpdf.isEncrypted()) {
+        return -3;
+    }
+
+    if (!params.xmp.empty()) {
+        try {
+            QPDFObjectHandle root = qpdf.getRoot();
+            QPDFObjectHandle xmp_stream =
+                QPDFObjectHandle::newStream(&qpdf, std::string(params.xmp));
+            QPDFObjectHandle xmp_dict = xmp_stream.getDict();
+            xmp_dict.replaceKey("/Type", QPDFObjectHandle::newName("/Metadata"));
+            xmp_dict.replaceKey("/Subtype", QPDFObjectHandle::newName("/XML"));
+            root.replaceKey("/Metadata", xmp_stream);
+        } catch (...) {
+            return -5;
+        }
+    }
+
+    if (params.metadata_count > 0 && !params.pairs.empty()) {
+        try {
+            QPDFObjectHandle info = qpdf.getTrailer().getKey("/Info");
+            if (info.isNull()) {
+                info = qpdf.makeIndirectObject(QPDFObjectHandle::newDictionary());
+                qpdf.getTrailer().replaceKey("/Info", info);
+            }
+
+            std::string qkey;
+            for (int i = 0; i < params.metadata_count; ++i) {
+                const char* key = params.pairs[static_cast<size_t>(i) * 2];
+                const char* val = params.pairs[static_cast<size_t>(i) * 2 + 1];
+                if (!key || !val) {
+                    continue;
+                }
+
+                qkey.clear();
+                if (key[0] != '/') {
+                    qkey.reserve(std::strlen(key) + 1);
+                    qkey.push_back('/');
+                }
+                qkey += key;
+
+                info.replaceKey(qkey, QPDFObjectHandle::newUnicodeString(val));
+            }
+        } catch (...) {
+            return -5;
+        }
+    }
+
+    return 0;
+}
+
+static void configure_writer(QPDFWriter& writer) {
+    writer.setPreserveUnreferencedObjects(false);
+    writer.setLinearization(false);
+    writer.setObjectStreamMode(qpdf_o_generate);
+    writer.setCompressStreams(true);
+}
+
+} // namespace
 
 extern "C" {
 
@@ -36,66 +131,39 @@ SHIM_EXPORT int FPDF_CALLCONV pdfium4j_save_with_metadata_native(
     if (metadata_count < 0) return -1;
     if (metadata_count > 0 && !metadata_pairs) return -1;
 
+    std::span<const char*> pairs(
+        metadata_pairs ? metadata_pairs : nullptr,
+        static_cast<size_t>(metadata_count) * 2);
+    std::string_view xmp =
+        (xmp_metadata && xmp_len > 0)
+            ? std::string_view(xmp_metadata, static_cast<size_t>(xmp_len))
+            : std::string_view();
+
+    SaveParams params{xmp, pairs, metadata_count};
+
     try {
         QPDF qpdf;
         try {
             qpdf.processFile(src_path);
-        } catch (...) {
-            return -2; // Failed to open/parse source
+        } catch (const std::exception&) {
+            return -2;
         }
 
-        if (qpdf.isEncrypted()) {
-            return -3; // Reject encrypted writes
+        if (int rc = inject_metadata(qpdf, params); rc != 0) {
+            return rc;
         }
 
-        // 1. Inject XMP Metadata if provided
-        if (xmp_metadata && xmp_len > 0) {
-            try {
-                QPDFObjectHandle root = qpdf.getRoot();
-                QPDFObjectHandle xmp_stream = QPDFObjectHandle::newStream(&qpdf, std::string(xmp_metadata, xmp_len));
-                QPDFObjectHandle xmp_dict = xmp_stream.getDict();
-                xmp_dict.replaceKey("/Type", QPDFObjectHandle::newName("/Metadata"));
-                xmp_dict.replaceKey("/Subtype", QPDFObjectHandle::newName("/XML"));
-                root.replaceKey("/Metadata", xmp_stream);
-            } catch (...) {
-                return -5; // Failed to inject XMP
-            }
-        }
-
-        // 2. Update Info Dictionary if provided
-        if (metadata_pairs && metadata_count > 0) {
-            try {
-                QPDFObjectHandle info = qpdf.getTrailer().getKey("/Info");
-                if (info.isNull()) {
-                    info = qpdf.makeIndirectObject(QPDFObjectHandle::newDictionary());
-                    qpdf.getTrailer().replaceKey("/Info", info);
-                }
-
-                for (int i = 0; i < metadata_count; i++) {
-                    const char* key = metadata_pairs[i * 2];
-                    const char* val = metadata_pairs[i * 2 + 1];
-                    if (key && val) {
-                        std::string qkey = (key[0] == '/') ? key : ("/" + std::string(key));
-                        info.replaceKey(qkey, QPDFObjectHandle::newUnicodeString(val));
-                    }
-                }
-            } catch (...) {
-                return -5; // Failed to inject Info metadata
-            }
-        }
-
-        // 3. Write Output
         try {
             QPDFWriter writer(qpdf, dst_path);
-            writer.setPreserveUnreferencedObjects(false);
+            configure_writer(writer);
             writer.write();
         } catch (...) {
-            return -6; // Failed to write output
+            return -6;
         }
 
         return 0;
     } catch (...) {
-        return -4; // General error
+        return -4;
     }
 }
 
@@ -137,76 +205,82 @@ SHIM_EXPORT int FPDF_CALLCONV pdfium4j_save_with_metadata_mem_native(
     if (metadata_count < 0) return -1;
     if (metadata_count > 0 && !metadata_pairs) return -1;
 
+    std::span<const char*> pairs(
+        metadata_pairs ? metadata_pairs : nullptr,
+        static_cast<size_t>(metadata_count) * 2);
+    std::string_view xmp =
+        (xmp_metadata && xmp_len > 0)
+            ? std::string_view(xmp_metadata, static_cast<size_t>(xmp_len))
+            : std::string_view();
+
+    SaveParams params{xmp, pairs, metadata_count};
+
     try {
         QPDF qpdf;
         try {
             qpdf.processMemoryFile("memory", static_cast<const char*>(src_buf), src_len);
-        } catch (...) {
+        } catch (const std::exception&) {
             return -2;
         }
 
-        if (qpdf.isEncrypted()) {
-            return -3;
+        if (int rc = inject_metadata(qpdf, params); rc != 0) {
+            return rc;
         }
 
-        // 1. Inject XMP
-        if (xmp_metadata && xmp_len > 0) {
-            try {
-                QPDFObjectHandle root = qpdf.getRoot();
-                QPDFObjectHandle xmp_stream = QPDFObjectHandle::newStream(&qpdf, std::string(xmp_metadata, xmp_len));
-                QPDFObjectHandle xmp_dict = xmp_stream.getDict();
-                xmp_dict.replaceKey("/Type", QPDFObjectHandle::newName("/Metadata"));
-                xmp_dict.replaceKey("/Subtype", QPDFObjectHandle::newName("/XML"));
-                root.replaceKey("/Metadata", xmp_stream);
-            } catch (...) {
-                return -5;
-            }
-        }
-
-        // 2. Inject Info
-        if (metadata_pairs && metadata_count > 0) {
-            try {
-                QPDFObjectHandle info = qpdf.getTrailer().getKey("/Info");
-                if (info.isNull()) {
-                    info = qpdf.makeIndirectObject(QPDFObjectHandle::newDictionary());
-                    qpdf.getTrailer().replaceKey("/Info", info);
-                }
-
-                for (int i = 0; i < metadata_count; i++) {
-                    const char* key = metadata_pairs[i * 2];
-                    const char* val = metadata_pairs[i * 2 + 1];
-                    if (key && val) {
-                        std::string qkey = (key[0] == '/') ? key : ("/" + std::string(key));
-                        info.replaceKey(qkey, QPDFObjectHandle::newUnicodeString(val));
-                    }
-                }
-            } catch (...) {
-                return -5;
-            }
-        }
-
-        // 3. Write via callback
         try {
-            class CallbackPipeline : public Pipeline {
-            public:
-                CallbackPipeline(int (*write_block)(void*, const void*, size_t), void* pThis)
-                    : Pipeline("callback", nullptr), write_block(write_block), pThis(pThis) {}
-                virtual ~CallbackPipeline() {}
-                virtual void write(unsigned char const* data, size_t len) override {
-                    if (write_block(pThis, data, len) != 1) {
-                        throw std::runtime_error("write failed");
-                    }
-                }
-                virtual void finish() override {}
-            private:
-                int (*write_block)(void*, const void*, size_t);
-                void* pThis;
-            };
-
             CallbackPipeline cp(write_block, pThis);
             QPDFWriter writer(qpdf);
-            writer.setPreserveUnreferencedObjects(false);
+            configure_writer(writer);
             writer.setOutputPipeline(&cp);
+            writer.write();
+        } catch (...) {
+            return -6;
+        }
+
+        return 0;
+    } catch (...) {
+        return -4;
+    }
+}
+
+SHIM_EXPORT int FPDF_CALLCONV pdfium4j_save_with_metadata_mem_to_file_native(
+    const void* src_buf,
+    size_t      src_len,
+    const char* dst_path,
+    const char* xmp_metadata,
+    int xmp_len,
+    const char** metadata_pairs,
+    int metadata_count
+) {
+    if (!src_buf || src_len == 0 || !dst_path) return -1;
+    if (metadata_count < 0) return -1;
+    if (metadata_count > 0 && !metadata_pairs) return -1;
+
+    std::span<const char*> pairs(
+        metadata_pairs ? metadata_pairs : nullptr,
+        static_cast<size_t>(metadata_count) * 2);
+    std::string_view xmp =
+        (xmp_metadata && xmp_len > 0)
+            ? std::string_view(xmp_metadata, static_cast<size_t>(xmp_len))
+            : std::string_view();
+
+    SaveParams params{xmp, pairs, metadata_count};
+
+    try {
+        QPDF qpdf;
+        try {
+            qpdf.processMemoryFile("memory", static_cast<const char*>(src_buf), src_len);
+        } catch (const std::exception&) {
+            return -2;
+        }
+
+        if (int rc = inject_metadata(qpdf, params); rc != 0) {
+            return rc;
+        }
+
+        try {
+            QPDFWriter writer(qpdf, dst_path);
+            configure_writer(writer);
             writer.write();
         } catch (...) {
             return -6;
