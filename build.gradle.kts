@@ -340,6 +340,7 @@ val buildShim by tasks.registering {
     inputs.dir(shimDir)
     inputs.property("activePlatforms", activePlatforms.keys)
     outputs.dir(buildDir)
+    outputs.upToDateWhen { false }
 
     doLast {
         val hostIsArm64 = hostArch == "aarch64" || hostArch == "arm64"
