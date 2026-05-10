@@ -1,9 +1,0 @@
-# PDFium component libraries - load order matters
-libthird_party_abseil-cpp_absl.so
-libbase_allocator_partition_allocator_src_partition_alloc_raw_ptr.so
-libbase_allocator_partition_allocator_src_partition_alloc_allocator_base.so
-libbase_allocator_partition_allocator_src_partition_alloc_allocator_core.so
-libbase_allocator_partition_allocator_src_partition_alloc_allocator_shim.so
-libchrome_zlib.so
-libicuuc.so
-libpdfium.so
