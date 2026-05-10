@@ -159,8 +159,7 @@ class XmpMetadataParserTest {
             .customFields(customFields)
             .build();
 
-    XmpMetadataWriter writer =
-        new XmpMetadataWriter().registerNamespace("booklore", "http://booklore.org/metadata/1.0/");
+    XmpMetadataWriter writer = new XmpMetadataWriter();
     String xmpPacket = writer.write(original);
 
     // Verify the raw XML contains booklore elements

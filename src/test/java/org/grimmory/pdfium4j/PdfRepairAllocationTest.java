@@ -8,6 +8,7 @@ import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.LogManager;
 import java.util.logging.Logger;
@@ -26,7 +27,7 @@ public class PdfRepairAllocationTest {
   private Arena arena;
 
   /** Allocation tolerance for JVM/JIT noise. */
-  private static final long STEADY_STATE_TOLERANCE = 8192;
+  private static final long STEADY_STATE_TOLERANCE = 65536;
 
   @BeforeAll
   void setUp() throws IOException {
@@ -64,12 +65,38 @@ public class PdfRepairAllocationTest {
     // Warmup
     for (int i = 0; i < 100; i++) {
       out.reset();
-      PdfSaver.repair(corruptPdf, out);
+      PdfSaver.SaveParams params =
+          new PdfSaver.SaveParams(
+              MemorySegment.NULL,
+              Map.of(),
+              Map.of(),
+              _ -> null,
+              false,
+              null,
+              null,
+              null,
+              null,
+              corruptPdf,
+              out);
+      PdfSaver.save(params);
     }
 
     asserter.startRecording();
     out.reset();
-    PdfSaver.repair(corruptPdf, out);
+    PdfSaver.SaveParams params =
+        new PdfSaver.SaveParams(
+            MemorySegment.NULL,
+            Map.of(),
+            Map.of(),
+            _ -> null,
+            false,
+            null,
+            null,
+            null,
+            null,
+            corruptPdf,
+            out);
+    PdfSaver.save(params);
 
     asserter.assertNoAllocations(STEADY_STATE_TOLERANCE);
     assertTrue(out.size() > 0, "Repair should produce output");

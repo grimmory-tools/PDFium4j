@@ -11,8 +11,7 @@ class XmpMetadataRoundtripTest {
 
   @Test
   void testCustomListRoundtrip() {
-    XmpMetadataWriter writer =
-        new XmpMetadataWriter().registerNamespace("booklore", "http://booklore.org/metadata/1.0/");
+    XmpMetadataWriter writer = new XmpMetadataWriter();
 
     Map<String, List<String>> listFields = new LinkedHashMap<>();
     listFields.put("booklore:tags", List.of("tag1", "tag2", "tag3"));
@@ -74,8 +73,8 @@ class XmpMetadataRoundtripTest {
   @Test
   void testUnregisteredPrefixThrowsException() {
     XmpMetadataWriter writer = new XmpMetadataWriter();
-    // booklore is not registered
-    Map<String, String> customFields = Map.of("booklore:subtitle", "Test Subtitle");
+    // foo is not registered
+    Map<String, String> customFields = Map.of("foo:subtitle", "Test Subtitle");
 
     XmpMetadata metaWithCustom = XmpMetadata.builder().customFields(customFields).build();
 

@@ -122,7 +122,7 @@ class ZeroAllocationCallbackAllocationTest {
   private static Path findCorpusPdf() {
     try {
       return AllocationTestUtils.getTestPdf(ZeroAllocationCallbackAllocationTest.class);
-    } catch (java.io.IOException _) {
+    } catch (IOException _) {
       return SAMPLE_PDF;
     }
   }
