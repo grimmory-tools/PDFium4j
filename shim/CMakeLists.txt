@@ -130,6 +130,11 @@ add_library(pdfium4j_shim SHARED
 
 target_compile_definitions(pdfium4j_shim PRIVATE PDFIUM4J_SHIM_IMPLEMENTATION)
 
+if(SHIM_IS_MUSL)
+    # 100% Guarantee: Link C++ runtime statically so we don't depend on libstdc++.so
+    target_link_options(pdfium4j_shim PRIVATE -static-libgcc -static-libstdc++)
+endif()
+
 find_library(PDFIUM_LIB NAMES pdfium pdfium.dll libpdfium libpdfium.dylib PATHS ${PDFIUM_ROOT} ${PDFIUM_ROOT}/lib ${PDFIUM_ROOT}/bin NO_DEFAULT_PATH)
 
 if(NOT PDFIUM_LIB)

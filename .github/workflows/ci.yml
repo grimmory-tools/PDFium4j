@@ -117,9 +117,12 @@ jobs:
                   mkdir -p /usr/local/lib/pkgconfig && cp -f lib/pkgconfig/libjpeg.pc /usr/local/lib/pkgconfig/ || true && \
                   cd /workspace && \
                   ./gradlew buildShim -PpdfiumPlatformFilter=${{ matrix.platform }} -DZLIB_ROOT=/usr/local -DJPEG_ROOT=/usr/local && \
-                  echo '--- VERIFYING BINARY ---' && \
+                  echo '--- VERIFYING LINKAGE ---' && \
                   SHIM_PATH=\$(find build/shim-build/${{ matrix.platform }} -name 'pdfium4j_shim.so') && \
                   ldd \$SHIM_PATH && \
                   ! ldd \$SHIM_PATH | grep -q 'libz.so' || (echo 'ERROR: libz.so dynamic dependency detected!' && exit 1) && \
                   ! ldd \$SHIM_PATH | grep -q 'libjpeg.so' || (echo 'ERROR: libjpeg.so dynamic dependency detected!' && exit 1) && \
-                  echo 'Success: No dynamic dependencies for zlib/jpeg detected.'"
+                  ! ldd \$SHIM_PATH | grep -q 'libstdc++.so' || (echo 'ERROR: libstdc++.so dynamic dependency detected!' && exit 1) && \
+                  echo 'Success: No dynamic dependencies for zlib/jpeg/stdc++ detected.' && \
+                  echo '--- RUNNING RUNTIME SMOKE TESTS ---' && \
+                  ./gradlew check -PpdfiumPlatformFilter=${{ matrix.platform }} --info"
