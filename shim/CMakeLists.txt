@@ -99,6 +99,20 @@ set(ZLIB_LIBRARY "${ZLIB_LIB_PATH}" CACHE FILEPATH "" FORCE)
 set(JPEG_INCLUDE_DIR "${LIBJPEG_H_PATH}" CACHE PATH "" FORCE)
 set(JPEG_LIBRARY "${LIBJPEG_LIB_PATH}" CACHE FILEPATH "" FORCE)
 
+# HIJACK: Create dummy targets for 'z' and 'jpeg' to shadow the system ones.
+# This ensures that even when QPDF specifies 'z' or 'jpeg', it resolves to our static files.
+# We ONLY do this on MUSL/Alpine because we build them from source there to ensure -fPIC.
+if(SHIM_IS_MUSL AND ZLIB_FOUND AND JPEG_FOUND)
+    if(NOT TARGET z)
+        add_library(z STATIC IMPORTED GLOBAL)
+        set_target_properties(z PROPERTIES IMPORTED_LOCATION "${ZLIB_LIB_PATH}")
+    endif()
+    if(NOT TARGET jpeg)
+        add_library(jpeg STATIC IMPORTED GLOBAL)
+        set_target_properties(jpeg PROPERTIES IMPORTED_LOCATION "${LIBJPEG_LIB_PATH}")
+    endif()
+endif()
+
 add_subdirectory(vendor/qpdf EXCLUDE_FROM_ALL)
 
 include_directories(${PDFIUM_ROOT}/include)
@@ -115,6 +129,11 @@ add_library(pdfium4j_shim SHARED
 )
 
 target_compile_definitions(pdfium4j_shim PRIVATE PDFIUM4J_SHIM_IMPLEMENTATION)
+
+if(SHIM_IS_MUSL)
+    # 100% Guarantee: Link C++ runtime statically so we don't depend on libstdc++.so
+    target_link_options(pdfium4j_shim PRIVATE -static-libgcc -static-libstdc++)
+endif()
 
 find_library(PDFIUM_LIB NAMES pdfium pdfium.dll libpdfium libpdfium.dylib PATHS ${PDFIUM_ROOT} ${PDFIUM_ROOT}/lib ${PDFIUM_ROOT}/bin NO_DEFAULT_PATH)
 
@@ -152,13 +171,22 @@ if(NOT PDFIUM_LIB)
     message(FATAL_ERROR "Could not find pdfium library in ${PDFIUM_ROOT}")
 endif()
 
-if(ZLIB_FOUND AND JPEG_FOUND)
-    # Prefer imported targets when available; fallback to raw paths only if needed
-    if(TARGET ZLIB::ZLIB AND TARGET JPEG::JPEG)
-        target_link_libraries(pdfium4j_shim PRIVATE ${PDFIUM_LIB} ZLIB::ZLIB JPEG::JPEG libqpdf)
-    else()
-        target_link_libraries(pdfium4j_shim PRIVATE ${PDFIUM_LIB} ${ZLIB_LIB_PATH} ${LIBJPEG_LIB_PATH} libqpdf)
-    endif()
+if(SHIM_IS_MUSL AND ZLIB_FOUND AND JPEG_FOUND)
+    # Force use of absolute paths to static archives to ensure no runtime dependencies
+    target_link_libraries(pdfium4j_shim PRIVATE 
+        ${PDFIUM_LIB} 
+        z 
+        jpeg
+        libqpdf
+    )
+elseif(ZLIB_FOUND AND JPEG_FOUND)
+    # On non-musl, link normally (likely shared) to avoid -fPIC issues with system static libs
+    target_link_libraries(pdfium4j_shim PRIVATE 
+        ${PDFIUM_LIB} 
+        "${ZLIB_LIB_PATH}" 
+        "${LIBJPEG_LIB_PATH}" 
+        libqpdf
+    )
 else()
     # Fallback for Windows if we can't find them but QPDF might find them internally
     target_link_libraries(pdfium4j_shim PRIVATE ${PDFIUM_LIB} libqpdf)
