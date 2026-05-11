@@ -355,6 +355,9 @@ val buildShim by tasks.registering {
             val isWindows = platform.startsWith("windows")
             val cmakeConfigCmd = mutableListOf("cmake", "-S", shimDir.absolutePath, "-B", ".", "-DPDFIUM_ROOT=${pdfiumRoot.absolutePath}")
 
+            System.getenv("ZLIB_ROOT")?.let { cmakeConfigCmd.add("-DZLIB_ROOT=$it") }
+            System.getenv("JPEG_ROOT")?.let { cmakeConfigCmd.add("-DJPEG_ROOT=$it") }
+
             if (!isWindows) {
                 cmakeConfigCmd.addAll(listOf("-G", "Unix Makefiles"))
             }
@@ -375,6 +378,8 @@ val buildShim by tasks.registering {
                 if (process.waitFor() != 0) {
                     logger.error("[$platform] $stage output:\n$output")
                     error("[$platform] $stage failed. Check the logs above for details.")
+                } else {
+                    logger.lifecycle("[$platform] $stage output:\n$output")
                 }
             }
 

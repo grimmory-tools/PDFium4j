@@ -38,6 +38,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libjpeg-dev zlib1g-dev qpdf poppler-utils
+          echo "ZLIB_ROOT=/usr" >> $GITHUB_ENV
+          echo "JPEG_ROOT=/usr" >> $GITHUB_ENV
 
       - name: Install dependencies (macOS)
         if: runner.os == 'macOS'

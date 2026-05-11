@@ -15,15 +15,13 @@ endif()
 add_definitions(-DPOINTERHOLDER_TRANSITION=0)
 
 # QPDF dependency hints
-if(WIN32 OR APPLE)
-    if(DEFINED ENV{ZLIB_ROOT})
-        set(ZLIB_ROOT "$ENV{ZLIB_ROOT}")
-        list(APPEND CMAKE_PREFIX_PATH "${ZLIB_ROOT}")
-    endif()
-    if(DEFINED ENV{JPEG_ROOT})
-        set(JPEG_ROOT "$ENV{JPEG_ROOT}")
-        list(APPEND CMAKE_PREFIX_PATH "${JPEG_ROOT}")
-    endif()
+if(DEFINED ENV{ZLIB_ROOT})
+    set(ZLIB_ROOT "$ENV{ZLIB_ROOT}")
+    list(APPEND CMAKE_PREFIX_PATH "${ZLIB_ROOT}")
+endif()
+if(DEFINED ENV{JPEG_ROOT})
+    set(JPEG_ROOT "$ENV{JPEG_ROOT}")
+    list(APPEND CMAKE_PREFIX_PATH "${JPEG_ROOT}")
 endif()
 
 # Find PDFium headers and library
@@ -68,6 +66,13 @@ else()
     set(LIBJPEG_H_PATH "${JPEG_INCLUDE_DIR}" CACHE PATH "Path to jpeglib.h" FORCE)
     set(LIBJPEG_LIB_PATH "${JPEG_LIBRARY}" CACHE FILEPATH "Path to jpeg library" FORCE)
 endif()
+
+message(STATUS "ZLIB_FOUND: ${ZLIB_FOUND}")
+message(STATUS "ZLIB_H_PATH: ${ZLIB_H_PATH}")
+message(STATUS "ZLIB_LIB_PATH: ${ZLIB_LIB_PATH}")
+message(STATUS "JPEG_FOUND: ${JPEG_FOUND}")
+message(STATUS "LIBJPEG_H_PATH: ${LIBJPEG_H_PATH}")
+message(STATUS "LIBJPEG_LIB_PATH: ${LIBJPEG_LIB_PATH}")
 
 # QPDF uses these cache variables
 set(ZLIB_H_PATH "${ZLIB_H_PATH}" CACHE PATH "Path to zlib.h" FORCE)
