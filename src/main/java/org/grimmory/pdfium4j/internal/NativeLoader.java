@@ -15,7 +15,6 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
 import org.grimmory.pdfium4j.PdfiumLibrary;
 import org.grimmory.pdfium4j.exception.NativeLoadException;
 
@@ -158,27 +157,6 @@ public final class NativeLoader {
     }
   }
 
-  private static final Set<String> ALLOWED_LIBS =
-      Set.of(
-          "pdfium",
-          "pdfium4j_shim",
-          "zlib",
-          "z",
-          "jpeg",
-          "libjpeg",
-          "libpdfium.so",
-          "libpdfium.dylib",
-          "pdfium.dll",
-          "pdfium4j_shim.so",
-          "pdfium4j_shim.dylib",
-          "pdfium4j_shim.dll",
-          "zlib.dll",
-          "zlib1.dll",
-          "libjpeg.so",
-          "libjpeg.dylib",
-          "libjpeg.dll",
-          "jpeg.dll");
-
   private static void tryLoadFromClasspath() {
     String platform = System.getProperty("pdfium4j.platform");
     if (platform == null || platform.isBlank()) {
@@ -244,6 +222,7 @@ public final class NativeLoader {
     }
   }
 
+  @SuppressWarnings("unused")
   private static boolean isAllowed(String lib) {
     return true; // Trust our own native-libs.txt which was generated during build
   }
