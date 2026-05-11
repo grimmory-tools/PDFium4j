@@ -12,6 +12,7 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Internal helper for performing native PDFium saves (e.g. FPDF_SaveAsCopy) into Java
@@ -37,10 +38,15 @@ public final class PdfDocumentNativeSaver {
 
   private PdfDocumentNativeSaver() {}
 
+  private static final AtomicLong ID_GEN = new AtomicLong(1);
+  private static final Map<Long, WriteContext> CONTEXTS = new ConcurrentHashMap<>();
+
   /** Saves the native document handle to the provided stream. */
   public static void save(MemorySegment docHandle, OutputStream out) throws IOException {
+    long id = ID_GEN.getAndIncrement();
     try (Arena arena = Arena.ofConfined()) {
       WriteContext ctx = new WriteContext(out);
+      CONTEXTS.put(id, ctx);
 
       // Create upcall stub for the callback
       MemorySegment callback =
@@ -48,9 +54,9 @@ public final class PdfDocumentNativeSaver {
 
       // Populate FPDF_FILEWRITE struct
       MemorySegment fileWrite = arena.allocate(EditBindings.FPDF_FILEWRITE_LAYOUT);
-      fileWrite.set(JAVA_INT, 0, 1); // version
+      fileWrite.set(ValueLayout.JAVA_INT, 0, 1); // version
       fileWrite.set(ValueLayout.ADDRESS, 8, callback); // WriteBlock
-      fileWrite.set(ValueLayout.ADDRESS, 16, ctx.pointer()); // bufferId
+      fileWrite.set(ValueLayout.ADDRESS, 16, MemorySegment.ofAddress(id)); // bufferId (as pointer value)
 
       int rc = (int) EditBindings.fpdfSaveAsCopy().invokeExact(docHandle, fileWrite, 0);
 
@@ -61,17 +67,12 @@ public final class PdfDocumentNativeSaver {
     } catch (Throwable t) {
       if (t instanceof IOException e) throw e;
       throw new IOException("Native save error", t);
+    } finally {
+      CONTEXTS.remove(id);
     }
   }
 
-  private static final Map<Long, WriteContext> CONTEXTS = new ConcurrentHashMap<>();
-
-  private record WriteContext(OutputStream out, MemorySegment pointer) {
-    WriteContext(OutputStream out) {
-      this(out, MemorySegment.ofAddress(System.identityHashCode(out)));
-      CONTEXTS.put(this.pointer.address(), this);
-    }
-  }
+  private record WriteContext(OutputStream out) {}
 
   @SuppressWarnings("unused")
   private static int writeBlock(MemorySegment pThis, MemorySegment pData, long size) {

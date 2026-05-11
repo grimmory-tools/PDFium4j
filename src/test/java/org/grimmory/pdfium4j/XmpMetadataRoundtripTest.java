@@ -2,6 +2,7 @@ package org.grimmory.pdfium4j;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.io.IOException;
 import java.util.*;
 import org.grimmory.pdfium4j.model.XmpMetadata;
 import org.grimmory.pdfium4j.model.XmpMetadata.QualifiedIdentifier;
@@ -71,13 +72,15 @@ class XmpMetadataRoundtripTest {
   }
 
   @Test
-  void testUnregisteredPrefixThrowsException() {
+  void testUnregisteredPrefixAutoGeneratesNamespace() throws IOException {
     XmpMetadataWriter writer = new XmpMetadataWriter();
-    // foo is not registered
+    // foo is not registered, but will be auto-generated
     Map<String, String> customFields = Map.of("foo:subtitle", "Test Subtitle");
 
     XmpMetadata metaWithCustom = XmpMetadata.builder().customFields(customFields).build();
 
-    assertThrows(IllegalArgumentException.class, () -> writer.write(metaWithCustom));
+    String xmp = writer.write(metaWithCustom);
+    assertTrue(xmp.contains("xmlns:foo="), "Should contain auto-generated namespace for foo");
+    assertTrue(xmp.contains("<foo:subtitle>Test Subtitle</foo:subtitle>"), "Should contain custom field");
   }
 }

@@ -42,10 +42,14 @@ public class PdfSaveAllocationTest {
     Logger.getLogger("").setLevel(Level.OFF);
 
     // Aggressive Warmup
-    warmup();
+    try {
+      warmup();
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
   }
 
-  private void warmup() {
+  private void warmup() throws IOException {
     ByteArrayOutputStream out = new ByteArrayOutputStream(1024 * 1024);
     for (int i = 0; i < 100; i++) {
       out.reset();
@@ -64,7 +68,7 @@ public class PdfSaveAllocationTest {
   }
 
   @Test
-  void metadataSaveToOutputStreamDoesNotAllocateAfterWarmup() throws IOException {
+  void metadataSaveToOutputStreamDoesNotAllocateAfterWarmup() throws Exception {
     warmup(); // Local warmup for this thread
 
     ByteArrayOutputStream bos = new ByteArrayOutputStream(1024 * 1024);

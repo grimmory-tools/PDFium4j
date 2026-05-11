@@ -1522,14 +1522,13 @@ class PdfDocumentTest {
     // Verify the PDF structure: /Length value must match actual stream bytes
     byte[] savedBytes = Files.readAllBytes(pdf);
     String savedText = new String(savedBytes, StandardCharsets.ISO_8859_1);
-    int metaIdx = savedText.indexOf("/Type /Metadata /Subtype /XML /Length ");
-    assertTrue(metaIdx > 0, "XMP metadata stream object should be present");
-
-    // Extract the declared /Length value
-    int lengthStart = metaIdx + "/Type /Metadata /Subtype /XML /Length ".length();
-    int lengthEnd = savedText.indexOf(' ', lengthStart);
-    if (lengthEnd < 0) lengthEnd = savedText.indexOf('>', lengthStart);
-    int declaredLength = Integer.parseInt(savedText.substring(lengthStart, lengthEnd).trim());
+    
+    // Search for the Metadata object using a more flexible pattern
+    java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("/Type\\s*/Metadata\\s*/Subtype\\s*/XML\\s*/Length\\s+(\\d+)");
+    java.util.regex.Matcher matcher = pattern.matcher(savedText);
+    assertTrue(matcher.find(), "XMP metadata stream object should be present");
+    int metaIdx = matcher.start();
+    int declaredLength = Integer.parseInt(matcher.group(1));
 
     // Find actual stream content between "stream\n" and "\nendstream"
     int streamKeyword = savedText.indexOf("stream\n", metaIdx);
