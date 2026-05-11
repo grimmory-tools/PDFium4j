@@ -101,9 +101,9 @@ jobs:
                   cd libjpeg-turbo-3.0.1 && mkdir build && cd build && \
                   cmake .. -G 'Unix Makefiles' -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_INSTALL_LIBDIR=lib -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DREQUIRE_SIMD=OFF && \
                   make -j$(nproc) && make install && \
-                  cp -f libjpeg.a /usr/local/lib/ || true && \
-                  mkdir -p /usr/local/lib/pkgconfig && cp -f pkgconfig/libjpeg.pc /usr/local/lib/pkgconfig/ || true && \
-                  cd ../../../ && \
+                  cp -f lib/libjpeg.a /usr/local/lib/ || true && \
+                  mkdir -p /usr/local/lib/pkgconfig && cp -f lib/pkgconfig/libjpeg.pc /usr/local/lib/pkgconfig/ || true && \
+                  cd /workspace && \
                   ./gradlew buildShim -PpdfiumPlatformFilter=linux-musl-x64 -DZLIB_ROOT=/usr/local -DJPEG_ROOT=/usr/local && \
                   echo '--- VERIFYING BINARY ---' && \
                   SHIM_PATH=\$(find build/shim-build/linux-musl-x64 -name 'pdfium4j_shim.so') && \
