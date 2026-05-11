@@ -68,7 +68,20 @@ public final class XmpMetadataWriter {
   private static final String RDF_SEQ_END = "    </rdf:Seq>\n";
   private static final String ATTRIBUTE_END = "\">\n";
 
+  private boolean paddingEnabled = true;
+  private int paddingLines = 20;
   private final Map<String, String> customNamespaces = LinkedHashMap.newLinkedHashMap(8);
+
+  public synchronized XmpMetadataWriter setPaddingEnabled(boolean enabled) {
+    this.paddingEnabled = enabled;
+    return this;
+  }
+
+  public synchronized XmpMetadataWriter setPaddingLines(int lines) {
+    if (lines < 0) throw new IllegalArgumentException("Padding lines must be >= 0");
+    this.paddingLines = lines;
+    return this;
+  }
 
   public synchronized XmpMetadataWriter registerNamespace(String prefix, String uri) {
     Objects.requireNonNull(prefix, "prefix");
@@ -114,12 +127,7 @@ public final class XmpMetadataWriter {
     void write(int cp) throws IOException;
   }
 
-  private static final class WriterSink implements Sink {
-    private final Writer writer;
-
-    WriterSink(Writer writer) {
-      this.writer = writer;
-    }
+  private record WriterSink(Writer writer) implements Sink {
 
     @Override
     public void write(String s) throws IOException {
@@ -137,12 +145,7 @@ public final class XmpMetadataWriter {
     }
   }
 
-  private static final class OutputStreamSink implements Sink {
-    private final OutputStream out;
-
-    OutputStreamSink(OutputStream out) {
-      this.out = out;
-    }
+  private record OutputStreamSink(OutputStream out) implements Sink {
 
     @Override
     public void write(String s) throws IOException {
@@ -447,10 +450,11 @@ public final class XmpMetadataWriter {
     s.write(">\n");
   }
 
-  private static void writePadding(Sink s) throws IOException {
+  private void writePadding(Sink s) throws IOException {
+    if (!paddingEnabled || paddingLines <= 0) return;
     String padding =
         "                                                                                \n";
-    for (int i = 0; i < 20; i++) s.write(padding);
+    for (int i = 0; i < paddingLines; i++) s.write(padding);
   }
 
   private static void writeEscaped(Sink s, String text) throws IOException {
@@ -552,11 +556,9 @@ public final class XmpMetadataWriter {
     int colonIdx = key.indexOf(':');
     if (colonIdx > 0) {
       String prefix = key.substring(0, colonIdx);
-      if ("xmp".equals(prefix)) unprefixed.put(key, value);
-      else
-        grouped
-            .computeIfAbsent(prefix, _ -> LinkedHashMap.newLinkedHashMap(8))
-            .put(key.substring(colonIdx + 1), value);
+      grouped
+          .computeIfAbsent(prefix, _ -> LinkedHashMap.newLinkedHashMap(8))
+          .put(key.substring(colonIdx + 1), value);
     } else unprefixed.put(key, value);
   }
 

@@ -167,7 +167,8 @@ public final class XmpMetadataParser {
     for (int i = 0; i < xmp.length(); i++) {
       char c = xmp.charAt(i);
       if (c != '\0' && c != '\uFEFF') {
-        buffer[len++] = c;
+        buffer[len] = c;
+        len++;
       }
     }
 
