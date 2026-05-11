@@ -99,6 +99,19 @@ set(ZLIB_LIBRARY "${ZLIB_LIB_PATH}" CACHE FILEPATH "" FORCE)
 set(JPEG_INCLUDE_DIR "${LIBJPEG_H_PATH}" CACHE PATH "" FORCE)
 set(JPEG_LIBRARY "${LIBJPEG_LIB_PATH}" CACHE FILEPATH "" FORCE)
 
+# HIJACK: Create dummy targets for 'z' and 'jpeg' to shadow the system ones.
+# This ensures that even when QPDF specifies 'z' or 'jpeg', it resolves to our static files.
+if(ZLIB_FOUND AND JPEG_FOUND)
+    if(NOT TARGET z)
+        add_library(z STATIC IMPORTED GLOBAL)
+        set_target_properties(z PROPERTIES IMPORTED_LOCATION "${ZLIB_LIB_PATH}")
+    endif()
+    if(NOT TARGET jpeg)
+        add_library(jpeg STATIC IMPORTED GLOBAL)
+        set_target_properties(jpeg PROPERTIES IMPORTED_LOCATION "${LIBJPEG_LIB_PATH}")
+    endif()
+endif()
+
 add_subdirectory(vendor/qpdf EXCLUDE_FROM_ALL)
 
 include_directories(${PDFIUM_ROOT}/include)
@@ -156,8 +169,8 @@ if(ZLIB_FOUND AND JPEG_FOUND)
     # Force use of absolute paths to static archives to ensure no runtime dependencies
     target_link_libraries(pdfium4j_shim PRIVATE 
         ${PDFIUM_LIB} 
-        "${ZLIB_LIB_PATH}" 
-        "${LIBJPEG_LIB_PATH}" 
+        z 
+        jpeg
         libqpdf
     )
 else()
