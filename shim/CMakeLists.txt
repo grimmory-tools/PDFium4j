@@ -123,7 +123,7 @@ if(NOT PDFIUM_LIB)
 endif()
 
 if(ZLIB_FOUND AND JPEG_FOUND)
-    target_link_libraries(pdfium4j_shim PRIVATE ${PDFIUM_LIB} ZLIB::ZLIB JPEG::JPEG libqpdf)
+    target_link_libraries(pdfium4j_shim PRIVATE ${PDFIUM_LIB} ${ZLIB_LIB_PATH} ${LIBJPEG_LIB_PATH} libqpdf)
 else()
     # Fallback for Windows if we can't find them but QPDF might find them internally
     target_link_libraries(pdfium4j_shim PRIVATE ${PDFIUM_LIB} libqpdf)
