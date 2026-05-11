@@ -32,7 +32,7 @@ public final class XmpMetadataWriter {
   private static final String NS_EXIF = "http://ns.adobe.com/exif/1.0/";
   private static final String NS_ST_REF = "http://ns.adobe.com/xap/1.0/sType/ResourceRef#";
   private static final String NS_ST_EVT = "http://ns.adobe.com/xap/1.0/sType/ResourceEvent#";
-  private static final String NS_BOOKLORE = "http://booklore.org/xmp/1.0/";
+  private static final String NS_BOOKLORE = "http://booklore.org/metadata/1.0/";
   private static final String NS_GRIMMORY = "http://grimmory.org/xmp/1.0/";
   private static final String NS_XAP_G = "http://ns.adobe.com/xap/1.0/g/";
 
