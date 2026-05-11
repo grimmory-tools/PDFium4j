@@ -53,8 +53,8 @@ endif()
 # --- ZLIB ---
 find_package(ZLIB QUIET)
 if(NOT ZLIB_FOUND)
-    find_path(ZLIB_H_PATH zlib.h HINTS ${ZLIB_ROOT} ${ZLIB_ROOT}/include)
-    find_library(ZLIB_LIB_PATH NAMES zlibstatic z zlib-static libz.a zlib.lib HINTS ${ZLIB_ROOT} ${ZLIB_ROOT}/lib)
+    find_path(ZLIB_H_PATH zlib.h HINTS ${ZLIB_ROOT} ${ZLIB_ROOT}/include PATHS /usr/include /usr/local/include)
+    find_library(ZLIB_LIB_PATH NAMES zlibstatic z zlib-static libz.a zlib.lib HINTS ${ZLIB_ROOT} ${ZLIB_ROOT}/lib PATHS /usr/lib /usr/local/lib)
     if(ZLIB_H_PATH AND ZLIB_LIB_PATH)
         set(ZLIB_FOUND ON)
     endif()
@@ -66,8 +66,8 @@ endif()
 # --- JPEG ---
 find_package(JPEG QUIET)
 if(NOT JPEG_FOUND)
-    find_path(LIBJPEG_H_PATH jpeglib.h HINTS ${JPEG_ROOT} ${JPEG_ROOT}/include)
-    find_library(LIBJPEG_LIB_PATH NAMES jpeg-static jpeg libjpeg.a jpeg.lib HINTS ${JPEG_ROOT} ${JPEG_ROOT}/lib)
+    find_path(LIBJPEG_H_PATH jpeglib.h HINTS ${JPEG_ROOT} ${JPEG_ROOT}/include PATHS /usr/include /usr/local/include)
+    find_library(LIBJPEG_LIB_PATH NAMES jpeg-static jpeg libjpeg.a jpeg.lib HINTS ${JPEG_ROOT} ${JPEG_ROOT}/lib PATHS /usr/lib /usr/local/lib)
     if(LIBJPEG_H_PATH AND LIBJPEG_LIB_PATH)
         set(JPEG_FOUND ON)
     endif()
@@ -76,16 +76,28 @@ else()
     set(LIBJPEG_LIB_PATH "${JPEG_LIBRARY}" CACHE FILEPATH "Path to jpeg library" FORCE)
 endif()
 
+# --- Restore suffixes ---
 set(CMAKE_FIND_LIBRARY_SUFFIXES "${_saved_find_suffixes}")
 
-message(STATUS "ZLIB_FOUND: ${ZLIB_FOUND} (Path: ${ZLIB_LIB_PATH})")
-message(STATUS "JPEG_FOUND: ${JPEG_FOUND} (Path: ${LIBJPEG_LIB_PATH})")
+message(STATUS "ZLIB_FOUND: ${ZLIB_FOUND}")
+message(STATUS "  - Header: ${ZLIB_H_PATH}")
+message(STATUS "  - Library: ${ZLIB_LIB_PATH}")
+
+message(STATUS "JPEG_FOUND: ${JPEG_FOUND}")
+message(STATUS "  - Header: ${LIBJPEG_H_PATH}")
+message(STATUS "  - Library: ${LIBJPEG_LIB_PATH}")
 
 # QPDF uses these cache variables
 set(ZLIB_H_PATH "${ZLIB_H_PATH}" CACHE PATH "Path to zlib.h" FORCE)
 set(ZLIB_LIB_PATH "${ZLIB_LIB_PATH}" CACHE FILEPATH "Path to zlib library" FORCE)
 set(LIBJPEG_H_PATH "${LIBJPEG_H_PATH}" CACHE PATH "Path to jpeglib.h" FORCE)
 set(LIBJPEG_LIB_PATH "${LIBJPEG_LIB_PATH}" CACHE FILEPATH "Path to jpeg library" FORCE)
+
+# Set standard variables for subdirectories that use find_package
+set(ZLIB_INCLUDE_DIR "${ZLIB_H_PATH}" CACHE PATH "" FORCE)
+set(ZLIB_LIBRARY "${ZLIB_LIB_PATH}" CACHE FILEPATH "" FORCE)
+set(JPEG_INCLUDE_DIR "${LIBJPEG_H_PATH}" CACHE PATH "" FORCE)
+set(JPEG_LIBRARY "${LIBJPEG_LIB_PATH}" CACHE FILEPATH "" FORCE)
 
 add_subdirectory(vendor/qpdf EXCLUDE_FROM_ALL)
 
