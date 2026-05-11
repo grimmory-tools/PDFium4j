@@ -85,28 +85,40 @@ jobs:
           path: '**/build/reports/tests/**'
 
   verify-musl-hardening:
-    name: Verify Linux Musl (Alpine) Hardening
+    name: Verify Musl Hardening (${{ matrix.arch }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - arch: x64
+            platform: linux-musl-x64
+            docker_platform: linux/amd64
+          - arch: arm64
+            platform: linux-musl-arm64
+            docker_platform: linux/arm64
     steps:
       - uses: actions/checkout@v4
+      - name: Set up QEMU
+        if: matrix.arch == 'arm64'
+        uses: docker/setup-qemu-action@v3
       - name: Build and Verify Static Linkage
         run: |
-          docker run --rm -v "$PWD":/workspace -w /workspace \
+          docker run --rm --platform ${{ matrix.docker_platform }} -v "$PWD":/workspace -w /workspace \
             gradle:9.4.1-jdk25-alpine \
             sh -c "apk add --no-cache cmake make g++ curl tar pkgconf && \
                   mkdir -p build/deps && cd build/deps && \
                   curl -L https://github.com/madler/zlib/archive/refs/tags/v1.3.1.tar.gz | tar xz && \
                   cd zlib-1.3.1 && ./configure --static && make -j$(nproc) CFLAGS='-fPIC' && make install && cd .. && \
-                  curl -L https://github.com/libjpeg-turbo/libjpeg-turbo/archive/refs/tags/3.0.1.tar.gz | tar xz && \
-                  cd libjpeg-turbo-3.0.1 && mkdir build && cd build && \
+                  curl -L https://github.com/libjpeg-turbo/libjpeg-turbo/archive/refs/tags/3.1.4.1.tar.gz | tar xz && \
+                  cd libjpeg-turbo-3.1.4.1 && mkdir build && cd build && \
                   cmake .. -G 'Unix Makefiles' -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_INSTALL_LIBDIR=lib -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DREQUIRE_SIMD=OFF && \
                   make -j$(nproc) && make install && \
                   cp -f lib/libjpeg.a /usr/local/lib/ || true && \
                   mkdir -p /usr/local/lib/pkgconfig && cp -f lib/pkgconfig/libjpeg.pc /usr/local/lib/pkgconfig/ || true && \
                   cd /workspace && \
-                  ./gradlew buildShim -PpdfiumPlatformFilter=linux-musl-x64 -DZLIB_ROOT=/usr/local -DJPEG_ROOT=/usr/local && \
+                  ./gradlew buildShim -PpdfiumPlatformFilter=${{ matrix.platform }} -DZLIB_ROOT=/usr/local -DJPEG_ROOT=/usr/local && \
                   echo '--- VERIFYING BINARY ---' && \
-                  SHIM_PATH=\$(find build/shim-build/linux-musl-x64 -name 'pdfium4j_shim.so') && \
+                  SHIM_PATH=\$(find build/shim-build/${{ matrix.platform }} -name 'pdfium4j_shim.so') && \
                   ldd \$SHIM_PATH && \
                   ! ldd \$SHIM_PATH | grep -q 'libz.so' || (echo 'ERROR: libz.so dynamic dependency detected!' && exit 1) && \
                   ! ldd \$SHIM_PATH | grep -q 'libjpeg.so' || (echo 'ERROR: libjpeg.so dynamic dependency detected!' && exit 1) && \
