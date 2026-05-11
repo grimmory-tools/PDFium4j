@@ -42,19 +42,19 @@ jobs:
             else
               apt-get update && apt-get install -y cmake make g++ curl tar pkg-config
             fi
-            
+
             mkdir -p /tmp/deps && cd /tmp/deps
-            
+
             # Build ZLIB
             curl -L https://github.com/madler/zlib/archive/refs/tags/v1.3.1.tar.gz | tar xz
             cd zlib-1.3.1 && ./configure --static && make -j\$(nproc) CFLAGS='-fPIC' && make install DESTDIR=/tmp/install && cd ..
-            
+
             # Build LIBJPEG-TURBO
             curl -L https://github.com/libjpeg-turbo/libjpeg-turbo/archive/refs/tags/3.1.4.1.tar.gz | tar xz
             cd libjpeg-turbo-3.1.4.1 && mkdir build && cd build
             cmake .. -G 'Unix Makefiles' -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_INSTALL_LIBDIR=lib -DENABLE_SHARED=OFF -DENABLE_STATIC=ON -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DREQUIRE_SIMD=OFF
             make -j\$(nproc) && make install DESTDIR=/tmp/install
-            
+
             # Package the results
             mkdir -p /output/lib /output/include /output/lib/pkgconfig
             cp -r /tmp/install/usr/local/include/* /output/include/
@@ -85,7 +85,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Restore Hardened Deps (Linux)
         if: runner.os == 'Linux'
         uses: actions/cache@v4
