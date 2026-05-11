@@ -1243,14 +1243,14 @@ public final class PdfDocument implements AutoCloseable {
         state.updateSourceSegmentArena(sourceSegmentArena);
       }
     } catch (IOException e) {
-      handleSaveError(path, e, detachedSource);
+      handleSaveError(path, detachedSource);
       throw e;
     } finally {
       cleanupTempFile(temp);
     }
   }
 
-  private void handleSaveError(Path path, IOException e, boolean detachedSource) {
+  private void handleSaveError(Path path, boolean detachedSource) {
     if (detachedSource && channelId > 0 && docSourceChannel == null) {
       try {
         docSourceChannel = Files.newByteChannel(path, StandardOpenOption.READ);

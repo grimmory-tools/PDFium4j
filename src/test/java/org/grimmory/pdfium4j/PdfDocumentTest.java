@@ -17,6 +17,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.grimmory.pdfium4j.internal.Generators;
 import org.grimmory.pdfium4j.internal.ScratchBuffer;
 import org.grimmory.pdfium4j.model.*;
@@ -1522,10 +1524,11 @@ class PdfDocumentTest {
     // Verify the PDF structure: /Length value must match actual stream bytes
     byte[] savedBytes = Files.readAllBytes(pdf);
     String savedText = new String(savedBytes, StandardCharsets.ISO_8859_1);
-    
+
     // Search for the Metadata object using a more flexible pattern
-    java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("/Type\\s*/Metadata\\s*/Subtype\\s*/XML\\s*/Length\\s+(\\d+)");
-    java.util.regex.Matcher matcher = pattern.matcher(savedText);
+    Pattern pattern =
+        Pattern.compile("/Type\\s*/Metadata\\s*/Subtype\\s*/XML\\s*/Length\\s+(\\d+)");
+    Matcher matcher = pattern.matcher(savedText);
     assertTrue(matcher.find(), "XMP metadata stream object should be present");
     int metaIdx = matcher.start();
     int declaredLength = Integer.parseInt(matcher.group(1));

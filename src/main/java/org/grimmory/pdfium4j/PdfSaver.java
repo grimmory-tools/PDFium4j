@@ -16,6 +16,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import org.grimmory.pdfium4j.internal.ShimBindings;
@@ -74,7 +75,7 @@ final class PdfSaver {
           try {
             if (tempSource.getFileSystem().supportedFileAttributeViews().contains("posix")) {
               Files.setPosixFilePermissions(
-                  tempSource, java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+                  tempSource, PosixFilePermissions.fromString("rw-------"));
             }
           } catch (UnsupportedOperationException | IOException ignored) {
             // Ignored if POSIX is not supported

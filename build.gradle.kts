@@ -460,14 +460,14 @@ val nativeJarTasks = activePlatforms.keys.map { localName ->
         description = "Packages $localName native library"
         archiveClassifier.set("natives-$localName")
 
-        doFirst {
+        onlyIf("Native shim available for $localName") {
             val dir = pdfiumNativesDir.get().asFile.resolve("natives/$localName")
             val hasShim = dir.listFiles()?.any { it.name.contains("shim") } ?: false
             if (!hasShim) {
-                throw GradleException("Cannot package nativesJar$sanitized: Native shim missing for $localName. " +
-                    "The shim must be built for this platform before packaging. " +
-                    "To build only for the host platform, use -PpdfiumPlatformFilter=$hostPlatform")
+                logger.lifecycle("Skipping nativesJar$sanitized: shim not built for $localName " +
+                    "(use -PpdfiumPlatformFilter=$localName or supply -PprebuiltShimsDir to include it)")
             }
+            hasShim
         }
 
         from(pdfiumNativesDir.map { it.dir("natives/$localName") }) { into("natives/$localName") }
@@ -485,41 +485,44 @@ tasks.register("verifyNativeJars") {
             val jarTask = tasks.named<Jar>("nativesJar$sanitized").get()
             val jarFile = jarTask.archiveFile.get().asFile
 
-            if (jarFile.exists()) {
-                val entries = mutableSetOf<String>()
-                project.zipTree(jarFile).visit {
-                    if (!this.isDirectory) {
-                        entries.add(this.path)
-                    }
-                }
-
-                val expectedPdfium = when {
-                    platform.startsWith("linux")   -> "natives/$platform/libpdfium.so"
-                    platform.startsWith("darwin")  -> "natives/$platform/libpdfium.dylib"
-                    platform.startsWith("windows") -> "natives/$platform/pdfium.dll"
-                    else -> error("Unknown platform type for verification: $platform")
-                }
-                val expectedShim = when {
-                    platform.startsWith("linux")   -> "natives/$platform/pdfium4j_shim.so"
-                    platform.startsWith("darwin")  -> "natives/$platform/pdfium4j_shim.dylib"
-                    platform.startsWith("windows") -> "natives/$platform/pdfium4j_shim.dll"
-                    else -> error("Unknown platform type for verification: $platform")
-                }
-
-                if (!entries.contains(expectedPdfium)) {
-                    throw GradleException("Integrity check failed: Missing $expectedPdfium in ${jarFile.name}")
-                }
-                if (!entries.contains(expectedShim)) {
-                    throw GradleException("Integrity check failed: Missing $expectedShim in ${jarFile.name}")
-                }
-                if (!entries.contains("natives/$platform/QPDF-LICENSE.txt")) {
-                    throw GradleException("Integrity check failed: Missing QPDF-LICENSE.txt in ${jarFile.name}")
-                }
-                if (!entries.contains("natives/$platform/QPDF-NOTICE.md")) {
-                    throw GradleException("Integrity check failed: Missing QPDF-NOTICE.md in ${jarFile.name}")
-                }
-                logger.lifecycle("Successfully verified integrity of ${jarFile.name} (contains PDFium + Shim + QPDF License)")
+            if (!jarFile.exists()) {
+                logger.lifecycle("Skipped verification for $platform: jar was not built (shim unavailable on this host)")
+                return@forEach
             }
+
+            val entries = mutableSetOf<String>()
+            project.zipTree(jarFile).visit {
+                if (!this.isDirectory) {
+                    entries.add(this.path)
+                }
+            }
+
+            val expectedPdfium = when {
+                platform.startsWith("linux")   -> "natives/$platform/libpdfium.so"
+                platform.startsWith("darwin")  -> "natives/$platform/libpdfium.dylib"
+                platform.startsWith("windows") -> "natives/$platform/pdfium.dll"
+                else -> error("Unknown platform type for verification: $platform")
+            }
+            val expectedShim = when {
+                platform.startsWith("linux")   -> "natives/$platform/pdfium4j_shim.so"
+                platform.startsWith("darwin")  -> "natives/$platform/pdfium4j_shim.dylib"
+                platform.startsWith("windows") -> "natives/$platform/pdfium4j_shim.dll"
+                else -> error("Unknown platform type for verification: $platform")
+            }
+
+            if (!entries.contains(expectedPdfium)) {
+                throw GradleException("Integrity check failed: Missing $expectedPdfium in ${jarFile.name}")
+            }
+            if (!entries.contains(expectedShim)) {
+                throw GradleException("Integrity check failed: Missing $expectedShim in ${jarFile.name}")
+            }
+            if (!entries.contains("natives/$platform/QPDF-LICENSE.txt")) {
+                throw GradleException("Integrity check failed: Missing QPDF-LICENSE.txt in ${jarFile.name}")
+            }
+            if (!entries.contains("natives/$platform/QPDF-NOTICE.md")) {
+                throw GradleException("Integrity check failed: Missing QPDF-NOTICE.md in ${jarFile.name}")
+            }
+            logger.lifecycle("Successfully verified integrity of ${jarFile.name} (contains PDFium + Shim + QPDF License)")
         }
     }
 }
