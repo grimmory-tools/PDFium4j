@@ -84,15 +84,23 @@ jobs:
         include:
           - os: ubuntu-latest
             platform: linux-x64
+            arch: x64
+            skipTests: false
+          - os: ubuntu-24.04-arm
+            platform: linux-arm64
+            arch: arm64
             skipTests: false
           - os: macos-15-intel
             platform: darwin-x64
+            arch: x64
             skipTests: true
           - os: macos-latest
             platform: darwin-arm64
+            arch: arm64
             skipTests: false
           - os: windows-latest
             platform: windows-x64
+            arch: x64
             skipTests: true
 
     steps:
@@ -103,7 +111,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: build/hardened-libs
-          key: hardened-deps-glibc-x64-v1.3.1-v3.1.4.1
+          key: hardened-deps-glibc-${{ matrix.arch }}-v1.3.1-v3.1.4.1
 
       - name: Install dependencies (Linux)
         if: runner.os == 'Linux'
@@ -223,7 +231,7 @@ jobs:
       - name: Download Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: pdfium4j-jars-linux-x64
+          name: pdfium4j-jars-linux-${{ matrix.arch }}
           path: build/libs
       - name: Run Standalone Smoke Test
         run: |
