@@ -100,7 +100,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Set up QEMU
         if: matrix.arch == 'arm64'
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@49b3bc8e6bdd4a60e6116a5414239cba5943d3cf # v3.3.0
       - name: Build and Verify Static Linkage
         run: |
           docker run --rm --platform ${{ matrix.docker_platform }} -v "$PWD":/workspace -w /workspace \
@@ -126,3 +126,43 @@ jobs:
                   echo 'Success: No dynamic dependencies for zlib/jpeg/stdc++ detected.' && \
                   echo '--- RUNNING RUNTIME SMOKE TESTS ---' && \
                   ./gradlew check -PpdfiumPlatformFilter=${{ matrix.platform }} --info"
+
+  verify-distribution:
+    name: Final Smoke Test (${{ matrix.os }} - ${{ matrix.arch }})
+    needs: [build, verify-musl-hardening]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu
+            arch: x64
+            image: eclipse-temurin:25-jre
+            platform: linux/amd64
+          - os: alpine
+            arch: x64
+            image: eclipse-temurin:25-jre-alpine
+            platform: linux/amd64
+          - os: alpine
+            arch: arm64
+            image: eclipse-temurin:25-jre-alpine
+            platform: linux/arm64
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up QEMU
+        if: matrix.arch == 'arm64'
+        uses: docker/setup-qemu-action@49b3bc8e6bdd4a60e6116a5414239cba5943d3cf # v3.3.0
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: pdfium4j-jar
+          path: build/libs
+      - name: Run Standalone Smoke Test
+        run: |
+          # We use a JDK image to compile the smoke test on the fly
+          docker run --rm --platform ${{ matrix.platform }} -v "$PWD":/workspace -w /workspace eclipse-temurin:25-jdk${{ matrix.os == 'alpine' && '-alpine' || '' }} \
+            sh -c "cd /workspace && \
+                  # Compile with Java 25 preview enabled
+                  javac --enable-preview --release 25 -cp build/libs/PDFium4j-1.1.4.jar src/test/java/org/grimmory/pdfium4j/NativeSmokeTest.java && \
+                  # Run with native access and preview enabled
+                  java --enable-preview --enable-native-access=ALL-UNNAMED -cp build/libs/PDFium4j-1.1.4.jar:src/test/java org.grimmory.pdfium4j.NativeSmokeTest"
