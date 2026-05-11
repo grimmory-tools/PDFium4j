@@ -42,29 +42,21 @@ set(ENABLE_QTC OFF)
 set(USE_IMPLICIT_CRYPTO OFF)
 set(REQUIRE_CRYPTO_NATIVE ON)
 
-# Find ZLIB and JPEG robustly and export to QPDF
-find_package(ZLIB QUIET)
-if(NOT ZLIB_FOUND)
-    find_path(ZLIB_H_PATH zlib.h HINTS ${ZLIB_ROOT} ${ZLIB_ROOT}/include)
-    find_library(ZLIB_LIB_PATH NAMES z zlib zdll HINTS ${ZLIB_ROOT} ${ZLIB_ROOT}/lib)
-    if(ZLIB_H_PATH AND ZLIB_LIB_PATH)
-        set(ZLIB_FOUND ON)
-    endif()
-else()
-    set(ZLIB_H_PATH "${ZLIB_INCLUDE_DIR}" CACHE PATH "Path to zlib.h" FORCE)
-    set(ZLIB_LIB_PATH "${ZLIB_LIBRARY}" CACHE FILEPATH "Path to zlib library" FORCE)
+# Manually find ZLIB and JPEG static libraries to avoid external runtime dependencies
+find_path(ZLIB_H_PATH zlib.h HINTS ${ZLIB_ROOT} ${ZLIB_ROOT}/include)
+find_library(ZLIB_LIB_PATH NAMES libz.a z HINTS ${ZLIB_ROOT} ${ZLIB_ROOT}/lib)
+if(ZLIB_H_PATH AND ZLIB_LIB_PATH)
+    set(ZLIB_FOUND ON)
+    set(ZLIB_H_PATH "${ZLIB_H_PATH}" CACHE PATH "Path to zlib.h" FORCE)
+    set(ZLIB_LIB_PATH "${ZLIB_LIB_PATH}" CACHE FILEPATH "Path to zlib library" FORCE)
 endif()
 
-find_package(JPEG QUIET)
-if(NOT JPEG_FOUND)
-    find_path(LIBJPEG_H_PATH jpeglib.h HINTS ${JPEG_ROOT} ${JPEG_ROOT}/include)
-    find_library(LIBJPEG_LIB_PATH NAMES jpeg libjpeg jpeg-static HINTS ${JPEG_ROOT} ${JPEG_ROOT}/lib)
-    if(LIBJPEG_H_PATH AND LIBJPEG_LIB_PATH)
-        set(JPEG_FOUND ON)
-    endif()
-else()
-    set(LIBJPEG_H_PATH "${JPEG_INCLUDE_DIR}" CACHE PATH "Path to jpeglib.h" FORCE)
-    set(LIBJPEG_LIB_PATH "${JPEG_LIBRARY}" CACHE FILEPATH "Path to jpeg library" FORCE)
+find_path(LIBJPEG_H_PATH jpeglib.h HINTS ${JPEG_ROOT} ${JPEG_ROOT}/include)
+find_library(LIBJPEG_LIB_PATH NAMES libjpeg.a jpeg libjpeg-static HINTS ${JPEG_ROOT} ${JPEG_ROOT}/lib)
+if(LIBJPEG_H_PATH AND LIBJPEG_LIB_PATH)
+    set(JPEG_FOUND ON)
+    set(LIBJPEG_H_PATH "${LIBJPEG_H_PATH}" CACHE PATH "Path to jpeglib.h" FORCE)
+    set(LIBJPEG_LIB_PATH "${LIBJPEG_LIB_PATH}" CACHE FILEPATH "Path to jpeg library" FORCE)
 endif()
 
 message(STATUS "ZLIB_FOUND: ${ZLIB_FOUND}")
@@ -75,10 +67,7 @@ message(STATUS "LIBJPEG_H_PATH: ${LIBJPEG_H_PATH}")
 message(STATUS "LIBJPEG_LIB_PATH: ${LIBJPEG_LIB_PATH}")
 
 # QPDF uses these cache variables
-set(ZLIB_H_PATH "${ZLIB_H_PATH}" CACHE PATH "Path to zlib.h" FORCE)
-set(ZLIB_LIB_PATH "${ZLIB_LIB_PATH}" CACHE FILEPATH "Path to zlib library" FORCE)
-set(LIBJPEG_H_PATH "${LIBJPEG_H_PATH}" CACHE PATH "Path to jpeglib.h" FORCE)
-set(LIBJPEG_LIB_PATH "${LIBJPEG_LIB_PATH}" CACHE FILEPATH "Path to jpeg library" FORCE)
+# (Already set above if found)
 
 add_subdirectory(vendor/qpdf EXCLUDE_FROM_ALL)
 
@@ -149,10 +138,6 @@ set_target_properties(pdfium4j_shim PROPERTIES
     PREFIX ""
     OUTPUT_NAME "pdfium4j_shim"
 )
-
-if(UNIX AND NOT APPLE)
-    target_link_options(pdfium4j_shim PRIVATE "LINKER:-rpath,$ORIGIN")
-endif()
 
 if(UNIX AND NOT APPLE)
     target_link_options(pdfium4j_shim PRIVATE "LINKER:-rpath,$ORIGIN")
