@@ -217,9 +217,13 @@ public final class NativeLoader {
       System.load(path.toAbsolutePath().toString());
       return java.lang.foreign.SymbolLookup.libraryLookup(path, java.lang.foreign.Arena.global());
     } catch (UnsatisfiedLinkError e) {
-      String msg = "Failed to load native library: " + path.getFileName() + ". Error: " + e.getMessage();
+      String msg =
+          "Failed to load native library: " + path.getFileName() + ". Error: " + e.getMessage();
       if (System.getProperty(SYS_PROP_OS_NAME).toLowerCase(Locale.ROOT).contains("linux")) {
-        msg += " (RPATH issue? Try adding " + path.getParent() + " to LD_LIBRARY_PATH if $ORIGIN fails)";
+        msg +=
+            " (RPATH issue? Try adding "
+                + path.getParent()
+                + " to LD_LIBRARY_PATH if $ORIGIN fails)";
       }
       throw new NativeLoadException(msg, e);
     }
