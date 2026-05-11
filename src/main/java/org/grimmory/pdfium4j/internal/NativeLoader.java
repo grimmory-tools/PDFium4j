@@ -216,15 +216,18 @@ public final class NativeLoader {
       System.load(path.toAbsolutePath().toString());
       return java.lang.foreign.SymbolLookup.libraryLookup(path, java.lang.foreign.Arena.global());
     } catch (UnsatisfiedLinkError e) {
-      e.printStackTrace();
       throw new NativeLoadException(
           "Failed to load native library: " + path.getFileName() + ". Error: " + e.getMessage(), e);
     }
   }
 
-  @SuppressWarnings("unused")
   private static boolean isAllowed(String lib) {
-    return true; // Trust our own native-libs.txt which was generated during build
+    String lower = lib.toLowerCase(Locale.ROOT);
+    return lower.contains("pdfium")
+        || lower.contains("shim")
+        || lower.contains("zlib")
+        || lower.contains("libz")
+        || lower.contains("jpeg");
   }
 
   private static List<String> readLibraryIndex(String resource) {

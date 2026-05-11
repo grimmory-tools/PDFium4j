@@ -431,7 +431,11 @@ val generateNativeIndex by tasks.registering {
         nativesRoot.get().asFile.listFiles()?.filter { it.isDirectory }?.forEach { platformDir ->
             val libs = platformDir.listFiles()?.filter {
                 val name = it.name
-                name.endsWith(".so") || name.endsWith(".dylib") || name.endsWith(".dll")
+                val isLib = name.endsWith(".so") || name.endsWith(".dylib") || name.endsWith(".dll")
+                val isKnown = name.contains("pdfium") || name.contains("shim") ||
+                             name.contains("zlib") || name.contains("jpeg") ||
+                             name.contains("libz")
+                isLib && isKnown
             }?.map { it.name }?.sortedBy {
                 when {
                     it.contains("pdfium") && !it.contains("shim") -> 0
