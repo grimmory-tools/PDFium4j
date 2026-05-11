@@ -13,7 +13,7 @@ permissions:
 jobs:
   prepare-hardened-deps:
     name: Prepare Hardened Dependencies (${{ matrix.libc }} - ${{ matrix.arch }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm64' || 'ubuntu-latest' }}
     strategy:
       matrix:
         include:
@@ -34,9 +34,6 @@ jobs:
             image: alpine:latest
             docker_platform: linux/arm64
     steps:
-      - name: Set up QEMU
-        if: matrix.arch == 'arm64'
-        uses: docker/setup-qemu-action@49b3bc8e6bdd4a60e6116a5414239cba5943d3cf # v3.3.0
       - name: Cache Key Calculation
         id: cache-key
         run: echo "key=hardened-deps-${{ matrix.libc }}-${{ matrix.arch }}-v1.3.1-v3.1.4.1" >> $GITHUB_OUTPUT
@@ -172,7 +169,7 @@ jobs:
   verify-musl-hardening:
     name: Verify Musl Hardening (${{ matrix.arch }})
     needs: [prepare-hardened-deps]
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm64' || 'ubuntu-latest' }}
     strategy:
       matrix:
         include:
@@ -184,9 +181,6 @@ jobs:
             docker_platform: linux/arm64
     steps:
       - uses: actions/checkout@v4
-      - name: Set up QEMU
-        if: matrix.arch == 'arm64'
-        uses: docker/setup-qemu-action@49b3bc8e6bdd4a60e6116a5414239cba5943d3cf # v3.3.0
       - name: Restore Hardened Deps (Musl)
         uses: actions/cache@v4
         with:
@@ -220,20 +214,15 @@ jobs:
   verify-dist-glibc:
     name: Smoke Test (Ubuntu - ${{ matrix.arch }})
     needs: [build]
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm64' || 'ubuntu-latest' }}
     strategy:
       matrix:
         arch: [x64, arm64]
     steps:
       - uses: actions/checkout@v4
-      - name: Set up QEMU
-        if: matrix.arch == 'arm64'
-        uses: docker/setup-qemu-action@49b3bc8e6bdd4a60e6116a5414239cba5943d3cf # v3.3.0
       - name: Download Artifacts
         uses: actions/download-artifact@v4
         with:
-          # Note: Currently we only build glibc-x64. ARM64 glibc would need a separate build job.
-          # For now, we verify x64 on x64.
           name: pdfium4j-jars-linux-x64
           path: build/libs
       - name: Run Standalone Smoke Test
@@ -247,15 +236,12 @@ jobs:
   verify-dist-musl:
     name: Smoke Test (Alpine - ${{ matrix.arch }})
     needs: [verify-musl-hardening]
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm64' || 'ubuntu-latest' }}
     strategy:
       matrix:
         arch: [x64, arm64]
     steps:
       - uses: actions/checkout@v4
-      - name: Set up QEMU
-        if: matrix.arch == 'arm64'
-        uses: docker/setup-qemu-action@49b3bc8e6bdd4a60e6116a5414239cba5943d3cf # v3.3.0
       - name: Download Artifacts
         uses: actions/download-artifact@v4
         with:
