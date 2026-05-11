@@ -132,7 +132,7 @@ public final class ShimBindings {
     }
     return mh;
   }
-  
+
   private static volatile MethodHandle pdfium4jGetCustomXmpMH = null;
 
   public static MethodHandle pdfium4jGetCustomXmp() {

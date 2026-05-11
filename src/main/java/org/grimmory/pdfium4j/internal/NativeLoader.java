@@ -33,7 +33,6 @@ public final class NativeLoader {
   private static volatile boolean loaded = false;
   private static volatile Throwable loadError = null;
   private static volatile SymbolLookup shimLookup = null;
-  private static volatile SymbolLookup pdfiumLookup = null;
 
   public static SymbolLookup getShimLookup() {
     return shimLookup;
@@ -215,7 +214,7 @@ public final class NativeLoader {
       }
 
       // Load main PDFium library first so dependencies (like the shim) can link against it
-      pdfiumLookup = loadLibraryFile(pdfiumPath);
+      loadLibraryFile(pdfiumPath);
 
       for (String lib : libs) {
         if (!lib.equals(libName)) {

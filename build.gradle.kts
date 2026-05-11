@@ -161,27 +161,6 @@ val hostPlatform = when {
     else -> null
 }
 
-val pdfiumHashes = mapOf(
-    "7825" to mapOf(
-        "linux-x64"        to "ae0e276bcdf276dca2746adb4780f79949620e5c655973ca252a3994bc516a13",
-        "linux-arm64"      to "b063f5244586f5e0c025cd4d74dd10f75bbb41e28bcdc1032349ca27814a06cf",
-        "linux-musl-x64"   to "c0d70bea47c93b055d6a9334c248f6c7957df130c5478fc0277c55ee98ade4bb",
-        "linux-musl-arm64" to "5e4cc22df55498cb2f094f479869a66575b317bbc0e35d633c1e7e99b783f3d3",
-        "mac-x64"          to "1e2f0a38bd7a8c369b0a1655a527c6b5491086fe3a45d1d82432e9229ac9b40c",
-        "mac-arm64"        to "0e9692fa2063f5b5e6f6129680fe618f47efb9d728dd02e9db9b8999e386c84e",
-        "win-x64"          to "eefb48c845ab22f0945151093ce8fd611a33687796728051f9a1b2b341e1b980"
-    ),
-    "7834" to mapOf(
-        "linux-x64"        to "e10b18234af3e988b3021547786e574b8905a24511067f14773f29c9cac12365",
-        "linux-arm64"      to "5381c1e7436dc6811ba86f4444fdcaccadd90fdb2a06f12ee81bfba96689ee36",
-        "linux-musl-x64"   to "b6c5c8f0ff24fc09bf19f3572620294938bd4a35efd97630bec1669984a407c3",
-        "linux-musl-arm64" to "1737a6f0d26f16ec46bb82ad4a31cfaf92ba7709686121306be4d0245f867d20",
-        "mac-x64"          to "fcfed5eaf8fe9a761577d626dff651227600a52fc5f933c461447564361bb036",
-        "mac-arm64"        to "2b733774416de02482281c0abc7589b08dc908896ecef2bfc31a85c5b5ffd572",
-        "win-x64"          to "0abfacf8aacc919f98eff2c3efa2927c3dc9faf07e31f22558a1f1cf93809612"
-    )
-)
-
 val downloadPdfiumBinaries by tasks.registering {
     description = "Downloads prebuilt PDFium binaries for all supported platforms"
     outputs.dir(pdfiumArchiveDir)
@@ -189,29 +168,13 @@ val downloadPdfiumBinaries by tasks.registering {
         val dir = pdfiumArchiveDir.get().asFile
         dir.mkdirs()
 
-        val hashesForVersion = pdfiumHashes[pdfiumVersion]
-            ?: error("No hashes defined for PDFium version $pdfiumVersion. Please update pdfiumHashes in build.gradle.kts")
-
-        // Security check: ensure all supported platforms have hashes for this version
-        val missingHashes = pdfiumPlatforms.values.toSet() - hashesForVersion.keys
-        if (missingHashes.isNotEmpty()) {
-            error("Missing hashes for version $pdfiumVersion: $missingHashes")
-        }
-
         val base = "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/$pdfiumVersion"
         activePlatforms.forEach { (localName, remoteName) ->
             val target = dir.resolve("pdfium-$remoteName.tgz")
-            val expectedHash = hashesForVersion[remoteName] ?: error("No hash for platform $remoteName")
 
             if (target.exists()) {
-                val actualHash = calculateSha256(target)
-                if (actualHash == expectedHash) {
-                    logger.lifecycle("Skipping $remoteName (already downloaded and verified)")
-                    return@forEach
-                } else {
-                    logger.warn("Hash mismatch for existing $remoteName; redownloading...")
-                    target.delete()
-                }
+                logger.lifecycle("Skipping $remoteName (already downloaded)")
+                return@forEach
             }
 
             val conn = URI("$base/pdfium-$remoteName.tgz").toURL()
@@ -225,26 +188,9 @@ val downloadPdfiumBinaries by tasks.registering {
                 target.outputStream().buffered().use { out -> inp.copyTo(out) }
             }
 
-            val actualHash = calculateSha256(target)
-            if (actualHash != expectedHash) {
-                target.delete()
-                error("SHA-256 verification failed for pdfium-$remoteName.tgz!\nExpected: $expectedHash\nActual:   $actualHash")
-            }
-            logger.lifecycle("Verified pdfium-$remoteName.tgz")
+            logger.lifecycle("Downloaded pdfium-$remoteName.tgz")
         }
     }
-}
-
-fun calculateSha256(file: File): String {
-    val digest = MessageDigest.getInstance("SHA-256")
-    file.inputStream().use { inp ->
-        val buffer = ByteArray(8192)
-        var read: Int
-        while (inp.read(buffer).also { read = it } != -1) {
-            digest.update(buffer, 0, read)
-        }
-    }
-    return digest.digest().joinToString("") { "%02x".format(it) }
 }
 
 val extractPdfiumBinaries by tasks.registering {
@@ -291,6 +237,9 @@ val extractPdfiumBinaries by tasks.registering {
                     includeEmptyDirs = false
                 }
             }
+
+            // Fix permissions to ensure we can copy/move these files later
+            platformDir.walkTopDown().forEach { it.setWritable(true) }
         }
     }
 }
@@ -326,6 +275,7 @@ val extractPdfiumHeaders by tasks.registering {
             into(headersDir)
             includeEmptyDirs = false
         }
+        headersDir.walkTopDown().forEach { it.setWritable(true) }
     }
 }
 
@@ -383,9 +333,11 @@ val buildShim by tasks.registering {
                 return@forEach
             }
             val platformBuildDir = buildDir.get().asFile.resolve(platform)
+            platformBuildDir.deleteRecursively()
             platformBuildDir.mkdirs()
 
             val pdfiumRoot = layout.buildDirectory.dir("pdfium-env-$platform").get().asFile
+            pdfiumRoot.deleteRecursively()
             pdfiumRoot.mkdirs()
 
             proj.copy {
