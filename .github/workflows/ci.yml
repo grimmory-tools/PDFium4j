@@ -13,7 +13,7 @@ permissions:
 jobs:
   prepare-hardened-deps:
     name: Prepare Hardened Dependencies (${{ matrix.libc }} - ${{ matrix.arch }})
-    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm64' || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     strategy:
       matrix:
         include:
@@ -169,7 +169,7 @@ jobs:
   verify-musl-hardening:
     name: Verify Musl Hardening (${{ matrix.arch }})
     needs: [prepare-hardened-deps]
-    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm64' || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     strategy:
       matrix:
         include:
@@ -214,7 +214,7 @@ jobs:
   verify-dist-glibc:
     name: Smoke Test (Ubuntu - ${{ matrix.arch }})
     needs: [build]
-    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm64' || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     strategy:
       matrix:
         arch: [x64, arm64]
@@ -236,7 +236,7 @@ jobs:
   verify-dist-musl:
     name: Smoke Test (Alpine - ${{ matrix.arch }})
     needs: [verify-musl-hardening]
-    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm64' || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     strategy:
       matrix:
         arch: [x64, arm64]
