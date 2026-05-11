@@ -9,7 +9,6 @@ import java.io.IOException;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import org.grimmory.pdfium4j.internal.NoAllocationPathProbe;
 import org.grimmory.pdfium4j.util.AllocationTestUtils;
