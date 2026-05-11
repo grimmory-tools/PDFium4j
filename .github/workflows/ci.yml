@@ -99,6 +99,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y qpdf poppler-utils
           # Use our hardened static libraries
+          sudo mkdir -p /usr/local/include /usr/local/lib
           sudo cp -r build/hardened-libs/include/* /usr/local/include/
           sudo cp -r build/hardened-libs/lib/* /usr/local/lib/
           echo "ZLIB_ROOT=/usr/local" >> $GITHUB_ENV
@@ -183,6 +184,7 @@ jobs:
             gradle:9.4.1-jdk25-alpine \
             sh -c "apk add --no-cache cmake make g++ pkgconf && \
                   # Use our hardened static libraries
+                  mkdir -p /usr/local/include /usr/local/lib && \
                   cp -r build/hardened-libs/include/* /usr/local/include/ && \
                   cp -r build/hardened-libs/lib/* /usr/local/lib/ && \
                   ./gradlew buildShim jar verifyNativeJars -PpdfiumPlatformFilter=${{ matrix.platform }} -DZLIB_ROOT=/usr/local -DJPEG_ROOT=/usr/local && \
