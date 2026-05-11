@@ -70,7 +70,7 @@ public final class XmpMetadataWriter {
 
   private final Map<String, String> customNamespaces = LinkedHashMap.newLinkedHashMap(8);
 
-  public XmpMetadataWriter registerNamespace(String prefix, String uri) {
+  public synchronized XmpMetadataWriter registerNamespace(String prefix, String uri) {
     Objects.requireNonNull(prefix, "prefix");
     Objects.requireNonNull(uri, "uri");
     if (prefix.isEmpty()) throw new IllegalArgumentException("Prefix must not be empty");
@@ -84,7 +84,7 @@ public final class XmpMetadataWriter {
     return this;
   }
 
-  public String write(XmpMetadata metadata) {
+  public synchronized String write(XmpMetadata metadata) {
     Objects.requireNonNull(metadata, "metadata");
     validate(metadata);
     StringWriter sw = new StringWriter();
@@ -96,7 +96,7 @@ public final class XmpMetadataWriter {
     return sw.toString();
   }
 
-  public void write(XmpMetadata metadata, OutputStream out) {
+  public synchronized void write(XmpMetadata metadata, OutputStream out) {
     Objects.requireNonNull(metadata, "metadata");
     Objects.requireNonNull(out, "out");
     validate(metadata);
