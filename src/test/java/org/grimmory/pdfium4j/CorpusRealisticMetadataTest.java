@@ -11,6 +11,7 @@ import java.util.stream.Stream;
 import org.grimmory.pdfium4j.model.MetadataTag;
 import org.grimmory.pdfium4j.model.PdfProcessingPolicy;
 import org.grimmory.pdfium4j.model.XmpMetadata;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -34,18 +35,22 @@ class CorpusRealisticMetadataTest {
     if (!Files.exists(corpusDir)) {
       corpusDir = Path.of("..", "corpus", "gutenberg");
     }
-    if (!Files.exists(corpusDir)) return Stream.empty();
+    if (!Files.exists(corpusDir)) return Stream.of(Path.of("__NO_CORPUS__"));
 
-    return Files.walk(corpusDir)
-        .filter(p -> p.toString().endsWith(".pdf"))
-        .filter(p -> !p.toString().contains("/quarantine/"))
-        .limit(20) // Test a representative sample
-        .sorted();
+    List<Path> files =
+        Files.walk(corpusDir)
+            .filter(p -> p.toString().endsWith(".pdf"))
+            .filter(p -> !p.toString().contains("/quarantine/"))
+            .limit(20) // Test a representative sample
+            .sorted()
+            .toList();
+    return files.isEmpty() ? Stream.of(Path.of("__NO_CORPUS__")) : files.stream();
   }
 
   @ParameterizedTest(name = "{0}")
   @MethodSource("getGutenbergCorpus")
   void testRealisticMetadataRoundtrip(Path sourcePdf) throws Exception {
+    Assumptions.assumeTrue(Files.exists(sourcePdf), "Corpus not available");
     Path modifiedPdf = tempDir.resolve("realistic_" + sourcePdf.getFileName());
 
     // Data from the user's snippet

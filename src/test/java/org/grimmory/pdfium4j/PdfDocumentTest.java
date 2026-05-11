@@ -1525,13 +1525,26 @@ class PdfDocumentTest {
     byte[] savedBytes = Files.readAllBytes(pdf);
     String savedText = new String(savedBytes, StandardCharsets.ISO_8859_1);
 
-    // Search for the Metadata object using a more flexible pattern
+    // Search for the Metadata object - QPDF writes /Length before /Type and /Subtype,
+    // but handle all key orderings for robustness across QPDF versions
     Pattern pattern =
-        Pattern.compile("/Type\\s*/Metadata\\s*/Subtype\\s*/XML\\s*/Length\\s+(\\d+)");
+        Pattern.compile(
+            "/Length\\s+(\\d+)\\s*/Type\\s*/Metadata\\s*/Subtype\\s*/XML"
+                + "|/Length\\s+(\\d+)\\s*/Subtype\\s*/XML\\s*/Type\\s*/Metadata"
+                + "|/Type\\s*/Metadata\\s*/Subtype\\s*/XML\\s*/Length\\s+(\\d+)"
+                + "|/Subtype\\s*/XML\\s*/Type\\s*/Metadata\\s*/Length\\s+(\\d+)");
     Matcher matcher = pattern.matcher(savedText);
     assertTrue(matcher.find(), "XMP metadata stream object should be present");
     int metaIdx = matcher.start();
-    int declaredLength = Integer.parseInt(matcher.group(1));
+    // Extract /Length from whichever group matched
+    int declaredLength = 0;
+    for (int g = 1; g <= matcher.groupCount(); g++) {
+      if (matcher.group(g) != null) {
+        declaredLength = Integer.parseInt(matcher.group(g));
+        break;
+      }
+    }
+    assertTrue(declaredLength > 0, "XMP stream /Length should be positive");
 
     // Find actual stream content between "stream\n" and "\nendstream"
     int streamKeyword = savedText.indexOf("stream\n", metaIdx);
