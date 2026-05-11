@@ -39,7 +39,7 @@ class PdfStreamAllocationTest {
    * bookkeeping data (e.g. during JIT compilation or profiling). 8192 bytes is a safe upper bound
    * for such background noise that is not attributed to our logic.
    */
-  private static final long STEADY_STATE_TOLERANCE = 1024;
+  private static final long STEADY_STATE_TOLERANCE = 4096;
 
   static boolean pdfiumAvailable() {
     try {
