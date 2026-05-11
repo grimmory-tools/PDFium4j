@@ -99,17 +99,59 @@ set(ZLIB_LIBRARY "${ZLIB_LIB_PATH}" CACHE FILEPATH "" FORCE)
 set(JPEG_INCLUDE_DIR "${LIBJPEG_H_PATH}" CACHE PATH "" FORCE)
 set(JPEG_LIBRARY "${LIBJPEG_LIB_PATH}" CACHE FILEPATH "" FORCE)
 
-# HIJACK: Create dummy targets for 'z' and 'jpeg' to shadow the system ones.
-# This ensures that even when QPDF specifies 'z' or 'jpeg', it resolves to our static files.
-# We ONLY do this on MUSL/Alpine because system static libraries on Ubuntu are not -fPIC.
-if(SHIM_IS_MUSL AND ZLIB_FOUND AND JPEG_FOUND)
+if(SHIM_IS_MUSL)
+    include(FetchContent)
+    
+    message(STATUS "Hardening: Building ZLIB from source...")
+    FetchContent_Declare(
+        zlib_source
+        URL https://github.com/madler/zlib/archive/refs/tags/v1.3.2.tar.gz
+    )
+    # ZLIB's CMakeLists is a bit old-school, we need to force PIC
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+    FetchContent_MakeAvailable(zlib_source)
+    set(ZLIB_H_PATH "${zlib_source_SOURCE_DIR}")
+    # zlib's target name varies by platform, but 'zlibstatic' is common for static
+    if(TARGET zlibstatic)
+        set(ZLIB_LIB zlibstatic)
+    else()
+        set(ZLIB_LIB zlib)
+    endif()
+
+    message(STATUS "Hardening: Building LIBJPEG-TURBO from source...")
+    FetchContent_Declare(
+        libjpeg_turbo
+        URL https://github.com/libjpeg-turbo/libjpeg-turbo/archive/refs/tags/3.1.4.1.tar.gz
+    )
+    set(ENABLE_SHARED OFF CACHE BOOL "" FORCE)
+    set(ENABLE_STATIC ON CACHE BOOL "" FORCE)
+    set(REQUIRE_SIMD OFF CACHE BOOL "" FORCE) # Disable SIMD to avoid needing NASM in CI
+    FetchContent_MakeAvailable(libjpeg_turbo)
+    set(LIBJPEG_H_PATH "${libjpeg_turbo_SOURCE_DIR}")
+    set(LIBJPEG_LIB jpeg-static)
+
+    # Inform QPDF where to find our just-built libraries
+    set(ZLIB_H_PATH "${ZLIB_H_PATH}" CACHE PATH "" FORCE)
+    set(ZLIB_LIB_PATH "$<TARGET_FILE:${ZLIB_LIB}>" CACHE FILEPATH "" FORCE)
+    set(LIBJPEG_H_PATH "${LIBJPEG_H_PATH}" CACHE PATH "" FORCE)
+    set(LIBJPEG_LIB_PATH "$<TARGET_FILE:${LIBJPEG_LIB}>" CACHE FILEPATH "" FORCE)
+    
+    set(ZLIB_INCLUDE_DIR "${ZLIB_H_PATH}" CACHE PATH "" FORCE)
+    set(ZLIB_LIBRARY ${ZLIB_LIB} CACHE FILEPATH "" FORCE)
+    set(JPEG_INCLUDE_DIR "${LIBJPEG_H_PATH}" CACHE PATH "" FORCE)
+    set(JPEG_LIBRARY ${LIBJPEG_LIB} CACHE FILEPATH "" FORCE)
+    
+    set(ZLIB_FOUND ON)
+    set(JPEG_FOUND ON)
+    
+    # Define the dummy targets for QPDF to pick up
     if(NOT TARGET z)
-        add_library(z STATIC IMPORTED GLOBAL)
-        set_target_properties(z PROPERTIES IMPORTED_LOCATION "${ZLIB_LIB_PATH}")
+        add_library(z INTERFACE GLOBAL)
+        target_link_libraries(z INTERFACE ${ZLIB_LIB})
     endif()
     if(NOT TARGET jpeg)
-        add_library(jpeg STATIC IMPORTED GLOBAL)
-        set_target_properties(jpeg PROPERTIES IMPORTED_LOCATION "${LIBJPEG_LIB_PATH}")
+        add_library(jpeg INTERFACE GLOBAL)
+        target_link_libraries(jpeg INTERFACE ${LIBJPEG_LIB})
     endif()
 endif()
 
