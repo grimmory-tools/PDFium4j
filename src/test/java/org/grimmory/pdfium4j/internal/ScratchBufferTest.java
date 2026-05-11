@@ -84,20 +84,21 @@ class ScratchBufferTest {
 
   @Test
   void shrinksAfterOversizedRequest() {
-    ScratchBuffer.get(10L * 1024L * 1024L);
+    // Must exceed STEADY_STATE_SIZE (16MB) to trigger revert-to-steady on next small request
+    ScratchBuffer.get(20L * 1024L * 1024L);
     long largeCapacity = ScratchBuffer.currentCapacity();
-    assertTrue(largeCapacity >= 10L * 1024L * 1024L);
+    assertTrue(largeCapacity >= 20L * 1024L * 1024L);
 
     ScratchBuffer.get(8);
     long shrunkCapacity = ScratchBuffer.currentCapacity();
     assertTrue(shrunkCapacity < largeCapacity);
     assertTrue(shrunkCapacity >= 8);
-    assertTrue(shrunkCapacity <= 64L * 1024L);
+    assertTrue(shrunkCapacity <= 16L * 1024L * 1024L);
   }
 
   @Test
   void utf8ProbeBufferClampsToMax() {
-    long maxSize = 1024L * 1024L * 128L;
+    long maxSize = 1024L * 1024L * 256L; // matches ScratchBuffer.MAX_SIZE
     assertEquals(maxSize, ScratchBuffer.probeSize(maxSize));
     assertEquals(maxSize, ScratchBuffer.probeSize(Long.MAX_VALUE));
   }
@@ -126,7 +127,7 @@ class ScratchBufferTest {
 
   @Test
   void rejectsSizesAboveSafetyLimit() {
-    assertThrows(IllegalArgumentException.class, () -> ScratchBuffer.get(128L * 1024L * 1024L + 1));
+    assertThrows(IllegalArgumentException.class, () -> ScratchBuffer.get(256L * 1024L * 1024L + 1));
   }
 
   @Test
@@ -203,5 +204,16 @@ class ScratchBufferTest {
     assertNotEquals(0, address1.get());
     assertNotEquals(0, address2.get());
     assertNotEquals(address1.get(), address2.get());
+  }
+
+  @Test
+  void callWithScratchReturnsResult() throws Exception {
+    String result =
+        ScratchBuffer.callWithScratch(
+            () -> {
+              ScratchBuffer.get(8);
+              return "success";
+            });
+    assertEquals("success", result);
   }
 }

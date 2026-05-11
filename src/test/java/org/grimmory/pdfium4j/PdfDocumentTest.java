@@ -7,6 +7,7 @@ import edu.umd.cs.findbugs.annotations.CheckForNull;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.lang.foreign.MemorySegment;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
@@ -568,6 +569,33 @@ class PdfDocumentTest {
       // Verify it starts with %PDF
       String header = new String(saved, 0, Math.min(5, saved.length), StandardCharsets.ISO_8859_1);
       assertTrue(header.startsWith("%PDF"), "Saved file should be a valid PDF");
+    }
+  }
+
+  @Test
+  @EnabledIf("pdfiumAvailable")
+  void saveToOutputStreamCallbackFailureMapsToWriteError() throws IOException {
+    Path testPdf = getTestPdf();
+    if (testPdf == null) return;
+
+    try (PdfDocument doc = PdfDocument.open(testPdf)) {
+      doc.setMetadata(MetadataTag.TITLE, "write-failure");
+      try (OutputStream failingOut =
+          new OutputStream() {
+            @Override
+            public void write(int b) throws IOException {
+              throw new IOException("intentional write failure");
+            }
+
+            @Override
+            public void write(byte[] b, int off, int len) throws IOException {
+              throw new IOException("intentional write failure");
+            }
+          }) {
+
+        IOException ex = assertThrows(IOException.class, () -> doc.save(failingOut));
+        assertTrue(ex.getMessage().contains("Failed to write output PDF file"));
+      }
     }
   }
 
@@ -1637,24 +1665,38 @@ class PdfDocumentTest {
     byte[] xrefData = new byte[5 * 5]; // 5 entries × 5 bytes
     int di = 0;
     // Object 0: free entry
-    xrefData[di++] = 0;
-    xrefData[di++] = 0;
-    xrefData[di++] = 0;
-    xrefData[di++] = 0;
-    xrefData[di++] = 0;
+    xrefData[di] = 0;
+    di++;
+    xrefData[di] = 0;
+    di++;
+    xrefData[di] = 0;
+    di++;
+    xrefData[di] = 0;
+    di++;
+    xrefData[di] = 0;
+    di++;
     // Objects 1–3: in-use
     for (int off : offsets) {
-      xrefData[di++] = 1;
-      xrefData[di++] = (byte) ((off >> 24) & 0xFF);
-      xrefData[di++] = (byte) ((off >> 16) & 0xFF);
-      xrefData[di++] = (byte) ((off >> 8) & 0xFF);
-      xrefData[di++] = (byte) (off & 0xFF);
+      xrefData[di] = 1;
+      di++;
+      xrefData[di] = (byte) ((off >> 24) & 0xFF);
+      di++;
+      xrefData[di] = (byte) ((off >> 16) & 0xFF);
+      di++;
+      xrefData[di] = (byte) ((off >> 8) & 0xFF);
+      di++;
+      xrefData[di] = (byte) (off & 0xFF);
+      di++;
     }
     // Object 4: the xref stream itself
-    xrefData[di++] = 1;
-    xrefData[di++] = (byte) ((xrefStreamOffset >> 24) & 0xFF);
-    xrefData[di++] = (byte) ((xrefStreamOffset >> 16) & 0xFF);
-    xrefData[di++] = (byte) ((xrefStreamOffset >> 8) & 0xFF);
+    xrefData[di] = 1;
+    di++;
+    xrefData[di] = (byte) ((xrefStreamOffset >> 24) & 0xFF);
+    di++;
+    xrefData[di] = (byte) ((xrefStreamOffset >> 16) & 0xFF);
+    di++;
+    xrefData[di] = (byte) ((xrefStreamOffset >> 8) & 0xFF);
+    di++;
     xrefData[di] = (byte) (xrefStreamOffset & 0xFF);
 
     writeBytes(

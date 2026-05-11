@@ -9,27 +9,29 @@ import org.junit.jupiter.api.Test;
 class XmpMetadataParserTest {
 
   private static final String BASIC_XMP =
-      "<?xpacket begin=\"\uFEFF\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>"
-          + "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\">"
-          + "<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">"
-          + "<rdf:Description rdf:about=\"\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\">"
-          + "<dc:title><rdf:Alt><rdf:li xml:lang=\"x-default\">My Book Title</rdf:li></rdf:Alt></dc:title>"
-          + "<dc:creator><rdf:Seq><rdf:li>Author A</rdf:li><rdf:li>Author B</rdf:li></rdf:Seq></dc:creator>"
-          + "<dc:description><rdf:Alt><rdf:li xml:lang=\"x-default\">A great description</rdf:li></rdf:Alt></dc:description>"
-          + "<dc:subject><rdf:Bag><rdf:li>Fantasy</rdf:li><rdf:li>Adventure</rdf:li></rdf:Bag></dc:subject>"
-          + "<dc:publisher><rdf:Bag><rdf:li>My Publisher</rdf:li></rdf:Bag></dc:publisher>"
-          + "<dc:language><rdf:Bag><rdf:li>en</rdf:li></rdf:Bag></dc:language>"
-          + "<dc:date><rdf:Seq><rdf:li>2024-06-15</rdf:li></rdf:Seq></dc:date>"
-          + "<dc:rights><rdf:Alt><rdf:li xml:lang=\"x-default\">Copyright 2024</rdf:li></rdf:Alt></dc:rights>"
-          + "<dc:identifier><rdf:Bag><rdf:li>urn:isbn:978-1234567890</rdf:li></rdf:Bag></dc:identifier>"
-          + "</rdf:Description>"
-          + "<rdf:Description rdf:about=\"\" xmlns:calibre=\"http://calibre-ebook.com/xmp-namespace\" xmlns:calibreSI=\"http://calibre-ebook.com/xmp-namespace/seriesIndex\">"
-          + "<calibre:series>Epic Series</calibre:series>"
-          + "<calibre:series_index><calibreSI:series_index>3.5</calibreSI:series_index></calibre:series_index>"
-          + "<calibre:rating>8</calibre:rating>"
-          + "<calibre:tags><rdf:Bag><rdf:li>Tag 1</rdf:li><rdf:li>Tag 2</rdf:li></rdf:Bag></calibre:tags>"
-          + "</rdf:Description>"
-          + "</rdf:RDF></x:xmpmeta><?xpacket end=\"w\"?>";
+      """
+      <?xpacket begin="\uFEFF" id="W5M0MpCehiHzreSzNTczkc9d"?>\
+      <x:xmpmeta xmlns:x="adobe:ns:meta/">\
+      <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">\
+      <rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/">\
+      <dc:title><rdf:Alt><rdf:li xml:lang="x-default">My Book Title</rdf:li></rdf:Alt></dc:title>\
+      <dc:creator><rdf:Seq><rdf:li>Author A</rdf:li><rdf:li>Author B</rdf:li></rdf:Seq></dc:creator>\
+      <dc:description><rdf:Alt><rdf:li xml:lang="x-default">A great description</rdf:li></rdf:Alt></dc:description>\
+      <dc:subject><rdf:Bag><rdf:li>Fantasy</rdf:li><rdf:li>Adventure</rdf:li></rdf:Bag></dc:subject>\
+      <dc:publisher><rdf:Bag><rdf:li>My Publisher</rdf:li></rdf:Bag></dc:publisher>\
+      <dc:language><rdf:Bag><rdf:li>en</rdf:li></rdf:Bag></dc:language>\
+      <dc:date><rdf:Seq><rdf:li>2024-06-15</rdf:li></rdf:Seq></dc:date>\
+      <dc:rights><rdf:Alt><rdf:li xml:lang="x-default">Copyright 2024</rdf:li></rdf:Alt></dc:rights>\
+      <dc:identifier><rdf:Bag><rdf:li>urn:isbn:978-1234567890</rdf:li></rdf:Bag></dc:identifier>\
+      </rdf:Description>\
+      <rdf:Description rdf:about="" xmlns:calibre="http://calibre-ebook.com/xmp-namespace" xmlns:calibreSI="http://calibre-ebook.com/xmp-namespace/seriesIndex">\
+      <calibre:series>Epic Series</calibre:series>\
+      <calibre:series_index><calibreSI:series_index>3.5</calibreSI:series_index></calibre:series_index>\
+      <calibre:rating>8</calibre:rating>\
+      <calibre:tags><rdf:Bag><rdf:li>Tag 1</rdf:li><rdf:li>Tag 2</rdf:li></rdf:Bag></calibre:tags>\
+      </rdf:Description>\
+      </rdf:RDF></x:xmpmeta><?xpacket end="w"?>\
+      """;
 
   private static final String BOOKLORE_XMP =
       "<?xpacket begin=\"\uFEFF\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>"
@@ -69,7 +71,7 @@ class XmpMetadataParserTest {
   void parsesCalibreFields() {
     XmpMetadata meta = XmpMetadataParser.parse(BASIC_XMP);
     assertEquals("Epic Series", meta.calibreSeries().orElse(""));
-    assertEquals(3.5, meta.calibreSeriesIndex().orElse(0), 0.01);
+    assertEquals(3.5, meta.calibreSeriesIndex().orElse(0.0), 0.01);
     assertEquals(8, meta.calibreRating().orElse(0));
     assertEquals(List.of("Tag 1", "Tag 2"), meta.calibreTags());
   }
@@ -121,7 +123,8 @@ class XmpMetadataParserTest {
     assertEquals(original.date(), parsed.date());
     assertEquals(original.rights(), parsed.rights());
     assertEquals(original.calibreSeries().orElse(""), parsed.calibreSeries().orElse(""));
-    assertEquals(original.calibreSeriesIndex().orElse(0), parsed.calibreSeriesIndex().orElse(0));
+    assertEquals(
+        original.calibreSeriesIndex().orElse(0.0), parsed.calibreSeriesIndex().orElse(0.0));
   }
 
   @Test
@@ -202,6 +205,184 @@ class XmpMetadataParserTest {
             + "<calibre:series_index><calibreSI:series_index>12.5</calibreSI:series_index></calibre:series_index>"
             + "</rdf:Description></rdf:RDF></x:xmpmeta>";
     XmpMetadata meta = XmpMetadataParser.parse(xmp);
-    assertEquals(12.5, meta.calibreSeriesIndex().orElse(0), 0.01);
+    assertEquals(12.5, meta.calibreSeriesIndex().orElse(0.0), 0.01);
+  }
+
+  private static final String BOOKLORE_FULL_XMP =
+      """
+      <?xpacket begin="\uFEFF" id="W5M0MpCehiHzreSzNTczkc9d"?>
+      <x:xmpmeta xmlns:x="adobe:ns:meta/">
+      <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+      <rdf:Description rdf:about=""
+          xmlns:dc="http://purl.org/dc/elements/1.1/">
+        <dc:title><rdf:Alt><rdf:li xml:lang="x-default">\u00e1\u00e9\u0151\u00fa\u00e9\u0151\u00e1\u00fa\u00e9\u0151\u00e9\u0151\u00fa\
+      rrvsevrsevser</rdf:li></rdf:Alt></dc:title>
+        <dc:creator><rdf:Seq>\
+      <rdf:li>Andrzej Sapkowski</rdf:li>\
+      <rdf:li>David French</rdf:li>\
+      </rdf:Seq></dc:creator>
+        <dc:description><rdf:Alt><rdf:li xml:lang="x-default">\
+      World fantasy award lifetime achievement winner, Andrzej Sapkowski, introduces Geralt of Rivia.\
+      </rdf:li></rdf:Alt></dc:description>
+        <dc:subject><rdf:Bag>\
+      <rdf:li>Science Fiction &amp; Fantasy</rdf:li>\
+      <rdf:li>Adventure</rdf:li>\
+      <rdf:li>Science fiction</rdf:li>\
+      <rdf:li>Adulte</rdf:li>\
+      <rdf:li>Biography</rdf:li>\
+      <rdf:li>Fantasy</rdf:li>\
+      <rdf:li>Assassins</rdf:li>\
+      <rdf:li>Aventure</rdf:li>\
+      <rdf:li>Fiction</rdf:li>\
+      <rdf:li>Humor</rdf:li>\
+      </rdf:Bag></dc:subject>
+        <dc:publisher><rdf:Bag><rdf:li>Orbit</rdf:li></rdf:Bag></dc:publisher>
+        <dc:language><rdf:Bag><rdf:li>en</rdf:li></rdf:Bag></dc:language>
+        <dc:date><rdf:Seq><rdf:li>2013-11-06</rdf:li></rdf:Seq></dc:date>
+      </rdf:Description>
+      <rdf:Description rdf:about=""
+          xmlns:booklore="http://booklore.org/metadata/1.0/">
+        <booklore:googleId>GAg_swEACAAJ</booklore:googleId>
+        <booklore:pageCount>329</booklore:pageCount>
+        <booklore:hardcoverRating>3.9</booklore:hardcoverRating>
+        <booklore:subtitle>\u0151\u00e1\u00fc\u0151\u00fc\u00e1\u00fc\u0151\u00e1\
+      \u00fc\u0151\u00e1\u00fc\u0151\u00e1\u00fc\u00e1</booklore:subtitle>
+        <booklore:goodreadsRating>4.0</booklore:goodreadsRating>
+        <booklore:seriesTotal>5</booklore:seriesTotal>
+        <booklore:isbn13>9780316441636</booklore:isbn13>
+        <booklore:isbn10>0678452202</booklore:isbn10>
+        <booklore:seriesNumber>0.6</booklore:seriesNumber>
+        <booklore:hardcoverBookId>461967</booklore:hardcoverBookId>
+        <booklore:seriesName>The Witcher</booklore:seriesName>
+        <booklore:goodreadsId>36099978</booklore:goodreadsId>
+        <booklore:hardcoverId>season-of-storms</booklore:hardcoverId>
+      </rdf:Description>
+      <rdf:Description rdf:about=""
+          xmlns:xmp="http://ns.adobe.com/xap/1.0/">
+        <xmp:MetadataDate>2026-05-12T11:22:50.667354886Z</xmp:MetadataDate>
+        <xmp:ModifyDate>2026-05-12T11:22:50.667354886Z</xmp:ModifyDate>
+        <xmp:CreateDate>2013-11-06</xmp:CreateDate>
+        <xmp:CreatorTool>Booklore</xmp:CreatorTool>
+      </rdf:Description>
+      <rdf:Description rdf:about=""
+          xmlns:booklore="http://booklore.org/metadata/1.0/">
+        <booklore:tags><rdf:Bag>
+          <rdf:li>Loveable Characters</rdf:li>
+          <rdf:li>Not Diverse Characters</rdf:li>
+          <rdf:li>Plot Driven</rdf:li>
+          <rdf:li>Weak Character Development</rdf:li>
+        </rdf:Bag></booklore:tags>
+      </rdf:Description>
+      </rdf:RDF>
+      </x:xmpmeta>
+      <?xpacket end="w"?>""";
+
+  @Test
+  void parsesBookloreSampleDublinCore() {
+    XmpMetadata meta = XmpMetadataParser.parse(BOOKLORE_FULL_XMP);
+
+    // Unicode title round-trip
+    assertTrue(meta.title().isPresent(), "title should be present");
+    assertTrue(meta.title().get().contains("rrvsevrsevser"), "title should contain ASCII suffix");
+    assertTrue(meta.title().get().startsWith("\u00e1"), "title should start with unicode char");
+
+    // Multiple creators
+    assertEquals(List.of("Andrzej Sapkowski", "David French"), meta.creators());
+
+    // Publisher wrapped in rdf:Bag
+    assertEquals("Orbit", meta.publisher().orElse(""));
+
+    // Language
+    assertEquals("en", meta.language().orElse(""));
+
+    // Date in rdf:Seq
+    assertEquals("2013-11-06", meta.date().orElse(""));
+
+    // 10 subjects
+    assertEquals(10, meta.subjects().size());
+    assertTrue(meta.subjects().contains("Science Fiction & Fantasy"));
+    assertTrue(meta.subjects().contains("Fantasy"));
+    assertTrue(meta.subjects().contains("Humor"));
+  }
+
+  @Test
+  void parsesBookloreSampleCustomFields() {
+    XmpMetadata meta = XmpMetadataParser.parse(BOOKLORE_FULL_XMP);
+
+    // Simple booklore fields
+    assertEquals("GAg_swEACAAJ", meta.customFields().get("booklore:googleId"));
+    assertEquals("329", meta.customFields().get("booklore:pageCount"));
+    assertEquals("3.9", meta.customFields().get("booklore:hardcoverRating"));
+    assertEquals("4.0", meta.customFields().get("booklore:goodreadsRating"));
+    assertEquals("5", meta.customFields().get("booklore:seriesTotal"));
+    assertEquals("9780316441636", meta.customFields().get("booklore:isbn13"));
+    assertEquals("0678452202", meta.customFields().get("booklore:isbn10"));
+    assertEquals("0.6", meta.customFields().get("booklore:seriesNumber"));
+    assertEquals("461967", meta.customFields().get("booklore:hardcoverBookId"));
+    assertEquals("The Witcher", meta.customFields().get("booklore:seriesName"));
+    assertEquals("36099978", meta.customFields().get("booklore:goodreadsId"));
+    assertEquals("season-of-storms", meta.customFields().get("booklore:hardcoverId"));
+
+    // Unicode subtitle
+    String subtitle = meta.customFields().get("booklore:subtitle");
+    assertNotNull(subtitle, "booklore:subtitle should be present");
+    assertTrue(subtitle.startsWith("\u0151"), "subtitle should start with unicode char");
+
+    // xmp namespace fields
+    assertEquals("Booklore", meta.customFields().get("xmp:CreatorTool"));
+    assertEquals("2013-11-06", meta.customFields().get("xmp:CreateDate"));
+    assertNotNull(meta.customFields().get("xmp:MetadataDate"));
+    assertNotNull(meta.customFields().get("xmp:ModifyDate"));
+  }
+
+  @Test
+  void parsesBookloreSampleTagsBag() {
+    XmpMetadata meta = XmpMetadataParser.parse(BOOKLORE_FULL_XMP);
+
+    // booklore:tags in a second booklore rdf:Description block (multi-block same NS)
+    List<String> tags = meta.customListFields().get("booklore:tags");
+    assertNotNull(tags, "booklore:tags list field should be present");
+    assertEquals(4, tags.size());
+    assertTrue(tags.contains("Loveable Characters"));
+    assertTrue(tags.contains("Not Diverse Characters"));
+    assertTrue(tags.contains("Plot Driven"));
+    assertTrue(tags.contains("Weak Character Development"));
+  }
+
+  @Test
+  void parsesBookloreSampleWriteRoundTrip() {
+    XmpMetadata parsed = XmpMetadataParser.parse(BOOKLORE_FULL_XMP);
+
+    // Write and re-parse
+    XmpMetadataWriter writer = new XmpMetadataWriter();
+    String rewritten = writer.write(parsed);
+    XmpMetadata reparsed = XmpMetadataParser.parse(rewritten);
+
+    // DC fields survive round-trip
+    assertEquals(parsed.title(), reparsed.title());
+    assertEquals(parsed.creators(), reparsed.creators());
+    assertEquals(parsed.publisher(), reparsed.publisher());
+    assertEquals(parsed.language(), reparsed.language());
+    assertEquals(parsed.date(), reparsed.date());
+    assertEquals(parsed.subjects(), reparsed.subjects());
+
+    // booklore simple fields survive
+    assertEquals(
+        parsed.customFields().get("booklore:isbn13"),
+        reparsed.customFields().get("booklore:isbn13"));
+    assertEquals(
+        parsed.customFields().get("booklore:seriesName"),
+        reparsed.customFields().get("booklore:seriesName"));
+    assertEquals(
+        parsed.customFields().get("booklore:subtitle"),
+        reparsed.customFields().get("booklore:subtitle"));
+    assertEquals(
+        parsed.customFields().get("xmp:CreatorTool"),
+        reparsed.customFields().get("xmp:CreatorTool"));
+
+    // booklore:tags list survives
+    assertEquals(
+        parsed.customListFields().get("booklore:tags"),
+        reparsed.customListFields().get("booklore:tags"));
   }
 }

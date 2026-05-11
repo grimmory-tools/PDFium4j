@@ -1,7 +1,7 @@
 package org.grimmory.pdfium4j;
 
 public class NativeSmokeTest {
-  public static void main(String[] args) {
+  static void main(String[] args) {
     try {
       System.out.println("Starting PDFium4j Smoke Test...");
       System.out.println("OS: " + System.getProperty("os.name"));
