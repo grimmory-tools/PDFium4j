@@ -114,15 +114,15 @@ public final class PdfDocument implements AutoCloseable {
   private volatile int cachedPageCount = -1;
 
   /** Lazy-parsed fallback Info dict key→value map (populated at most once per document). */
-  private Map<String, String> cachedFallbackMeta;
+  private volatile Map<String, String> cachedFallbackMeta;
 
   /** Memoized XMP bytes from file-system fallback path. */
-  private byte[] cachedFallbackXmp;
+  private volatile byte[] cachedFallbackXmp;
 
   private final Map<MetadataTag, String> pendingMetadata = new EnumMap<>(MetadataTag.class);
   private final Map<String, String> pendingCustomMetadata =
       new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-  private XmpUpdate pendingXmp = null;
+  private volatile XmpUpdate pendingXmp = null;
   private final PdfSaver.MetadataProvider nativeMetadataProvider = this::metadataString;
   final CleanupState state;
   private final Cleaner.Cleanable cleanable;
@@ -130,7 +130,7 @@ public final class PdfDocument implements AutoCloseable {
   private final IntObjectCache<PdfPage> pageCache;
   private final IntObjectCache<PageSize> pageSizeCache;
   private final IntObjectCache<Integer> rotationCache;
-  private Map<Long, int[]> textIndex = null;
+  private volatile Map<Long, int[]> textIndex = null;
   private volatile boolean structurallyModified = false;
 
   /** Internal metadata about the document source. */
@@ -796,7 +796,7 @@ public final class PdfDocument implements AutoCloseable {
     }
   }
 
-  private Optional<String> metadataFallback(MetadataTag tag) {
+  private synchronized Optional<String> metadataFallback(MetadataTag tag) {
     PdfDocumentMetadata.ensureInitialized();
     Map<String, String> cache = getOrBuildFallbackMeta();
     String val = cache.get(tag.pdfKey());
@@ -807,7 +807,7 @@ public final class PdfDocument implements AutoCloseable {
    * Returns (and lazily builds) the per-document Info-dict cache. The file is mapped at most once
    * regardless of how many metadata tags are requested.
    */
-  private Map<String, String> getOrBuildFallbackMeta() {
+  private synchronized Map<String, String> getOrBuildFallbackMeta() {
     if (cachedFallbackMeta != null) return cachedFallbackMeta;
     Map<String, String> result =
         PdfDocumentMetadata.readAllInfoDict(sourcePath, sourceBytes, sourceSegment);
@@ -1058,7 +1058,7 @@ public final class PdfDocument implements AutoCloseable {
     }
   }
 
-  public byte[] xmpMetadata() {
+  public synchronized byte[] xmpMetadata() {
     ensureOpen();
     if (pendingXmp != null) {
       if (pendingXmp instanceof XmpUpdate.Raw(String xmp)) {
