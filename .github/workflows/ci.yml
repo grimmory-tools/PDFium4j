@@ -41,14 +41,17 @@ jobs:
 
       - name: Install dependencies (macOS)
         if: runner.os == 'macOS'
-        run: brew install jpeg-turbo
+        run: |
+          brew install jpeg-turbo
+          echo "JPEG_ROOT=$(brew --prefix jpeg-turbo)" >> $GITHUB_ENV
 
       - name: Install dependencies (Windows)
         if: runner.os == 'Windows'
+        shell: bash
         run: |
           vcpkg install zlib:x64-windows libjpeg-turbo:x64-windows
-          echo "ZLIB_ROOT=C:/vcpkg/installed/x64-windows" >> $GITHUB_ENV
-          echo "JPEG_ROOT=C:/vcpkg/installed/x64-windows" >> $GITHUB_ENV
+          echo "ZLIB_ROOT=$VCPKG_INSTALLATION_ROOT/installed/x64-windows" >> $GITHUB_ENV
+          echo "JPEG_ROOT=$VCPKG_INSTALLATION_ROOT/installed/x64-windows" >> $GITHUB_ENV
 
       - name: Setup Java
         uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0

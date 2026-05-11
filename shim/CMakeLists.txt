@@ -10,27 +10,15 @@ if(UNIX AND NOT APPLE)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
 endif()
 
-# QPDF dependency hints for Windows
-if(WIN32)
+# QPDF dependency hints
+if(WIN32 OR APPLE)
     if(DEFINED ENV{ZLIB_ROOT})
         set(ZLIB_ROOT "$ENV{ZLIB_ROOT}")
-        set(ZLIB_H_PATH "${ZLIB_ROOT}/include" CACHE PATH "Path to zlib.h" FORCE)
-        file(GLOB ZLIB_LIBS "${ZLIB_ROOT}/lib/*.lib")
-        foreach(lib ${ZLIB_LIBS})
-            if(lib MATCHES "zlib\\.lib$")
-                set(ZLIB_LIB_PATH "${lib}" CACHE FILEPATH "Path to zlib library" FORCE)
-            endif()
-        endforeach()
+        list(APPEND CMAKE_PREFIX_PATH "${ZLIB_ROOT}")
     endif()
     if(DEFINED ENV{JPEG_ROOT})
         set(JPEG_ROOT "$ENV{JPEG_ROOT}")
-        set(LIBJPEG_H_PATH "${JPEG_ROOT}/include" CACHE PATH "Path to jpeglib.h" FORCE)
-        file(GLOB JPEG_LIBS "${JPEG_ROOT}/lib/*.lib")
-        foreach(lib ${JPEG_LIBS})
-            if(lib MATCHES "jpeg\\.lib$" OR lib MATCHES "libjpeg\\.lib$")
-                set(LIBJPEG_LIB_PATH "${lib}" CACHE FILEPATH "Path to jpeg library" FORCE)
-            endif()
-        endforeach()
+        list(APPEND CMAKE_PREFIX_PATH "${JPEG_ROOT}")
     endif()
 endif()
 
@@ -52,6 +40,37 @@ set(ENABLE_QTC OFF)
 set(USE_IMPLICIT_CRYPTO OFF)
 set(REQUIRE_CRYPTO_NATIVE ON)
 
+# Find ZLIB and JPEG robustly and export to QPDF
+find_package(ZLIB QUIET)
+if(NOT ZLIB_FOUND)
+    find_path(ZLIB_H_PATH zlib.h HINTS ${ZLIB_ROOT} ${ZLIB_ROOT}/include)
+    find_library(ZLIB_LIB_PATH NAMES z zlib zdll HINTS ${ZLIB_ROOT} ${ZLIB_ROOT}/lib)
+    if(ZLIB_H_PATH AND ZLIB_LIB_PATH)
+        set(ZLIB_FOUND ON)
+    endif()
+else()
+    set(ZLIB_H_PATH "${ZLIB_INCLUDE_DIR}" CACHE PATH "Path to zlib.h" FORCE)
+    set(ZLIB_LIB_PATH "${ZLIB_LIBRARY}" CACHE FILEPATH "Path to zlib library" FORCE)
+endif()
+
+find_package(JPEG QUIET)
+if(NOT JPEG_FOUND)
+    find_path(LIBJPEG_H_PATH jpeglib.h HINTS ${JPEG_ROOT} ${JPEG_ROOT}/include)
+    find_library(LIBJPEG_LIB_PATH NAMES jpeg libjpeg jpeg-static HINTS ${JPEG_ROOT} ${JPEG_ROOT}/lib)
+    if(LIBJPEG_H_PATH AND LIBJPEG_LIB_PATH)
+        set(JPEG_FOUND ON)
+    endif()
+else()
+    set(LIBJPEG_H_PATH "${JPEG_INCLUDE_DIR}" CACHE PATH "Path to jpeglib.h" FORCE)
+    set(LIBJPEG_LIB_PATH "${JPEG_LIBRARY}" CACHE FILEPATH "Path to jpeg library" FORCE)
+endif()
+
+# QPDF uses these cache variables
+set(ZLIB_H_PATH "${ZLIB_H_PATH}" CACHE PATH "Path to zlib.h" FORCE)
+set(ZLIB_LIB_PATH "${ZLIB_LIB_PATH}" CACHE FILEPATH "Path to zlib library" FORCE)
+set(LIBJPEG_H_PATH "${LIBJPEG_H_PATH}" CACHE PATH "Path to jpeglib.h" FORCE)
+set(LIBJPEG_LIB_PATH "${LIBJPEG_LIB_PATH}" CACHE FILEPATH "Path to jpeg library" FORCE)
+
 add_subdirectory(vendor/qpdf EXCLUDE_FROM_ALL)
 
 include_directories(${PDFIUM_ROOT}/include)
@@ -59,48 +78,6 @@ include_directories(include)
 include_directories(vendor/pugixml)
 include_directories(vendor/qpdf/include)
 include_directories(vendor/qpdf/libqpdf)
-
-if(WIN32)
-    # Check environment variables for vcpkg or other paths
-    if(DEFINED ENV{ZLIB_ROOT})
-        set(ZLIB_ROOT "$ENV{ZLIB_ROOT}")
-    endif()
-    if(DEFINED ENV{JPEG_ROOT})
-        set(JPEG_ROOT "$ENV{JPEG_ROOT}")
-    endif()
-
-    find_package(ZLIB)
-    find_package(JPEG)
-    
-    if(NOT ZLIB_FOUND)
-        message(STATUS "ZLIB not found via find_package, trying manual search in ${ZLIB_ROOT}")
-        find_path(ZLIB_INCLUDE_DIR zlib.h PATHS ${ZLIB_ROOT}/include NO_DEFAULT_PATH)
-        find_library(ZLIB_LIBRARY NAMES z zlib zdll PATHS ${ZLIB_ROOT}/lib NO_DEFAULT_PATH)
-        if(ZLIB_INCLUDE_DIR AND ZLIB_LIBRARY)
-            set(ZLIB_FOUND ON)
-            add_library(ZLIB::ZLIB UNKNOWN IMPORTED)
-            set_target_properties(ZLIB::ZLIB PROPERTIES
-                INTERFACE_INCLUDE_DIRECTORIES "${ZLIB_INCLUDE_DIR}"
-                IMPORTED_LOCATION "${ZLIB_LIBRARY}")
-        endif()
-    endif()
-
-    if(NOT JPEG_FOUND)
-        message(STATUS "JPEG not found via find_package, trying manual search in ${JPEG_ROOT}")
-        find_path(JPEG_INCLUDE_DIR jpeglib.h PATHS ${JPEG_ROOT}/include NO_DEFAULT_PATH)
-        find_library(JPEG_LIBRARY NAMES jpeg libjpeg jpeg-static PATHS ${JPEG_ROOT}/lib NO_DEFAULT_PATH)
-        if(JPEG_INCLUDE_DIR AND JPEG_LIBRARY)
-            set(JPEG_FOUND ON)
-            add_library(JPEG::JPEG UNKNOWN IMPORTED)
-            set_target_properties(JPEG::JPEG PROPERTIES
-                INTERFACE_INCLUDE_DIRECTORIES "${JPEG_INCLUDE_DIR}"
-                IMPORTED_LOCATION "${JPEG_LIBRARY}")
-        endif()
-    endif()
-else()
-    find_package(ZLIB REQUIRED)
-    find_package(JPEG REQUIRED)
-endif()
 
 add_library(pdfium4j_shim SHARED
     src/pdfium4j_read.cpp
