@@ -149,3 +149,7 @@ set_target_properties(pdfium4j_shim PROPERTIES
     PREFIX ""
     OUTPUT_NAME "pdfium4j_shim"
 )
+
+if(UNIX AND NOT APPLE)
+    target_link_options(pdfium4j_shim PRIVATE "-Wl,-rpath,'$ORIGIN'")
+endif()
