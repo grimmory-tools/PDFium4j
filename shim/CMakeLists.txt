@@ -45,8 +45,18 @@ set(REQUIRE_CRYPTO_NATIVE ON)
 find_package(ZLIB QUIET)
 if(NOT ZLIB_FOUND)
     find_path(ZLIB_H_PATH zlib.h HINTS ${ZLIB_ROOT} ${ZLIB_ROOT}/include)
-    # Prefer static library
+    
+    # Force archive lookup to ensure static linking
+    set(_saved_find_suffixes "${CMAKE_FIND_LIBRARY_SUFFIXES}")
+    if(WIN32)
+        set(CMAKE_FIND_LIBRARY_SUFFIXES .lib .a)
+    else()
+        set(CMAKE_FIND_LIBRARY_SUFFIXES .a)
+    endif()
+    
     find_library(ZLIB_LIB_PATH NAMES zlibstatic z zlib-static libz.a zlib.lib HINTS ${ZLIB_ROOT} ${ZLIB_ROOT}/lib)
+    set(CMAKE_FIND_LIBRARY_SUFFIXES "${_saved_find_suffixes}")
+    
     if(ZLIB_H_PATH AND ZLIB_LIB_PATH)
         set(ZLIB_FOUND ON)
     endif()
@@ -58,8 +68,18 @@ endif()
 find_package(JPEG QUIET)
 if(NOT JPEG_FOUND)
     find_path(LIBJPEG_H_PATH jpeglib.h HINTS ${JPEG_ROOT} ${JPEG_ROOT}/include)
-    # Prefer static library
+    
+    # Force archive lookup to ensure static linking
+    set(_saved_find_suffixes "${CMAKE_FIND_LIBRARY_SUFFIXES}")
+    if(WIN32)
+        set(CMAKE_FIND_LIBRARY_SUFFIXES .lib .a)
+    else()
+        set(CMAKE_FIND_LIBRARY_SUFFIXES .a)
+    endif()
+    
     find_library(LIBJPEG_LIB_PATH NAMES jpeg-static jpeg libjpeg.a jpeg.lib HINTS ${JPEG_ROOT} ${JPEG_ROOT}/lib)
+    set(CMAKE_FIND_LIBRARY_SUFFIXES "${_saved_find_suffixes}")
+    
     if(LIBJPEG_H_PATH AND LIBJPEG_LIB_PATH)
         set(JPEG_FOUND ON)
     endif()
@@ -131,8 +151,12 @@ if(NOT PDFIUM_LIB)
 endif()
 
 if(ZLIB_FOUND AND JPEG_FOUND)
-    # Use the discovered library paths directly to ensure static archives are linked
-    target_link_libraries(pdfium4j_shim PRIVATE ${PDFIUM_LIB} ${ZLIB_LIB_PATH} ${LIBJPEG_LIB_PATH} libqpdf)
+    # Prefer imported targets when available; fallback to raw paths only if needed
+    if(TARGET ZLIB::ZLIB AND TARGET JPEG::JPEG)
+        target_link_libraries(pdfium4j_shim PRIVATE ${PDFIUM_LIB} ZLIB::ZLIB JPEG::JPEG libqpdf)
+    else()
+        target_link_libraries(pdfium4j_shim PRIVATE ${PDFIUM_LIB} ${ZLIB_LIB_PATH} ${LIBJPEG_LIB_PATH} libqpdf)
+    endif()
 else()
     # Fallback for Windows if we can't find them but QPDF might find them internally
     target_link_libraries(pdfium4j_shim PRIVATE ${PDFIUM_LIB} libqpdf)
