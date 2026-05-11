@@ -42,7 +42,6 @@ set(ENABLE_QTC OFF)
 set(USE_IMPLICIT_CRYPTO OFF)
 set(REQUIRE_CRYPTO_NATIVE ON)
 
-# Find ZLIB and JPEG robustly and export to QPDF
 find_package(ZLIB QUIET)
 if(NOT ZLIB_FOUND)
     find_path(ZLIB_H_PATH zlib.h HINTS ${ZLIB_ROOT} ${ZLIB_ROOT}/include)
@@ -149,10 +148,6 @@ set_target_properties(pdfium4j_shim PROPERTIES
     PREFIX ""
     OUTPUT_NAME "pdfium4j_shim"
 )
-
-if(UNIX AND NOT APPLE)
-    target_link_options(pdfium4j_shim PRIVATE "LINKER:-rpath,$ORIGIN")
-endif()
 
 if(UNIX AND NOT APPLE)
     target_link_options(pdfium4j_shim PRIVATE "LINKER:-rpath,$ORIGIN")
