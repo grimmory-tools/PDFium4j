@@ -320,12 +320,16 @@ val buildShim by tasks.registering {
             if (!isHostCompatible) {
                 val prebuilt = prebuiltShimsDir
                 if (prebuilt != null) {
-                    val shimFile = prebuilt.resolve("native-dir-$platform/$shimLibName")
-                    if (shimFile.exists()) {
-                        logger.lifecycle("[$platform] Restoring pre-built shim from ${shimFile.absolutePath}")
-                        proj.copy { from(shimFile); into(libDir) }
+                    val platformPrebuiltDir = prebuilt.resolve(platform)
+                    if (platformPrebuiltDir.exists()) {
+                        logger.lifecycle("[$platform] Restoring pre-built natives from ${platformPrebuiltDir.absolutePath}")
+                        proj.copy {
+                            from(platformPrebuiltDir)
+                            into(libDir)
+                            duplicatesStrategy = DuplicatesStrategy.INCLUDE
+                        }
                     } else {
-                        logger.warn("[$platform] Pre-built shim not found at ${shimFile.absolutePath}; skipping")
+                        logger.warn("[$platform] Pre-built natives not found at ${platformPrebuiltDir.absolutePath}; skipping")
                     }
                 } else {
                     logger.warn("[$platform] Platform not compatible with host OS $hostOs; skipping shim build")
