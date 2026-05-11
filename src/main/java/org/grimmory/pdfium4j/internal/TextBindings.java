@@ -39,176 +39,86 @@ public final class TextBindings {
     }
   }
 
-  private static volatile MethodHandle FPDFText_LoadPage_MH = null;
+  private static final StableValue<MethodHandle> FPDFText_LoadPage_V = StableValue.of();
 
   public static MethodHandle fpdfTextLoadPage() {
-    MethodHandle mh = FPDFText_LoadPage_MH;
-    if (mh == null) {
-      synchronized (TextBindings.class) {
-        mh = FPDFText_LoadPage_MH;
-        if (mh == null) {
-          mh = find("FPDFText_LoadPage", FunctionDescriptor.of(C_POINTER, C_POINTER), false);
-          FPDFText_LoadPage_MH = mh;
-        }
-      }
-    }
-    return mh;
+    return FPDFText_LoadPage_V.orElseSet(
+        () -> find("FPDFText_LoadPage", FunctionDescriptor.of(C_POINTER, C_POINTER), false));
   }
 
-  private static volatile MethodHandle FPDFText_ClosePage_MH = null;
+  private static final StableValue<MethodHandle> FPDFText_ClosePage_V = StableValue.of();
 
   public static MethodHandle fpdfTextClosePage() {
-    MethodHandle mh = FPDFText_ClosePage_MH;
-    if (mh == null) {
-      synchronized (TextBindings.class) {
-        mh = FPDFText_ClosePage_MH;
-        if (mh == null) {
-          mh = find("FPDFText_ClosePage", FunctionDescriptor.ofVoid(C_POINTER), false);
-          FPDFText_ClosePage_MH = mh;
-        }
-      }
-    }
-    return mh;
+    return FPDFText_ClosePage_V.orElseSet(
+        () -> find("FPDFText_ClosePage", FunctionDescriptor.ofVoid(C_POINTER), false));
   }
 
-  private static volatile MethodHandle FPDFText_CountChars_MH = null;
+  private static final StableValue<MethodHandle> FPDFText_CountChars_V = StableValue.of();
 
   public static MethodHandle fpdfTextCountChars() {
-    MethodHandle mh = FPDFText_CountChars_MH;
-    if (mh == null) {
-      synchronized (TextBindings.class) {
-        mh = FPDFText_CountChars_MH;
-        if (mh == null) {
-          mh = find("FPDFText_CountChars", FunctionDescriptor.of(C_INT, C_POINTER), true);
-          FPDFText_CountChars_MH = mh;
-        }
-      }
-    }
-    return mh;
+    return FPDFText_CountChars_V.orElseSet(
+        () -> find("FPDFText_CountChars", FunctionDescriptor.of(C_INT, C_POINTER), true));
   }
 
-  private static volatile MethodHandle FPDFText_GetText_MH = null;
+  private static final StableValue<MethodHandle> FPDFText_GetText_V = StableValue.of();
 
   public static MethodHandle fpdfTextGetText() {
-    MethodHandle mh = FPDFText_GetText_MH;
-    if (mh == null) {
-      synchronized (TextBindings.class) {
-        mh = FPDFText_GetText_MH;
-        if (mh == null) {
-          mh =
-              find(
-                  "FPDFText_GetText",
-                  FunctionDescriptor.of(C_INT, C_POINTER, C_INT, C_INT, C_POINTER),
-                  false);
-          FPDFText_GetText_MH = mh;
-        }
-      }
-    }
-    return mh;
+    return FPDFText_GetText_V.orElseSet(
+        () ->
+            find(
+                "FPDFText_GetText",
+                FunctionDescriptor.of(C_INT, C_POINTER, C_INT, C_INT, C_POINTER),
+                false));
   }
 
-  private static volatile MethodHandle FPDFLink_LoadWebLinks_MH = null;
+  private static final StableValue<MethodHandle> FPDFLink_LoadWebLinks_V = StableValue.of();
 
   public static MethodHandle fpdfLinkLoadWebLinks() {
-    MethodHandle mh = FPDFLink_LoadWebLinks_MH;
-    if (mh == null) {
-      synchronized (TextBindings.class) {
-        mh = FPDFLink_LoadWebLinks_MH;
-        if (mh == null) {
-          mh = find("FPDFLink_LoadWebLinks", FunctionDescriptor.of(C_POINTER, C_POINTER), false);
-          FPDFLink_LoadWebLinks_MH = mh;
-        }
-      }
-    }
-    return mh;
+    return FPDFLink_LoadWebLinks_V.orElseSet(
+        () -> find("FPDFLink_LoadWebLinks", FunctionDescriptor.of(C_POINTER, C_POINTER), false));
   }
 
-  private static volatile MethodHandle FPDFLink_CountWebLinks_MH = null;
+  private static final StableValue<MethodHandle> FPDFLink_CountWebLinks_V = StableValue.of();
 
   public static MethodHandle fpdfLinkCountWebLinks() {
-    MethodHandle mh = FPDFLink_CountWebLinks_MH;
-    if (mh == null) {
-      synchronized (TextBindings.class) {
-        mh = FPDFLink_CountWebLinks_MH;
-        if (mh == null) {
-          mh = find("FPDFLink_CountWebLinks", FunctionDescriptor.of(C_INT, C_POINTER), true);
-          FPDFLink_CountWebLinks_MH = mh;
-        }
-      }
-    }
-    return mh;
+    return FPDFLink_CountWebLinks_V.orElseSet(
+        () -> find("FPDFLink_CountWebLinks", FunctionDescriptor.of(C_INT, C_POINTER), true));
   }
 
-  private static volatile MethodHandle FPDFLink_GetURL_MH = null;
+  private static final StableValue<MethodHandle> FPDFLink_GetURL_V = StableValue.of();
 
   public static MethodHandle fpdfLinkGetURL() {
-    MethodHandle mh = FPDFLink_GetURL_MH;
-    if (mh == null) {
-      synchronized (TextBindings.class) {
-        mh = FPDFLink_GetURL_MH;
-        if (mh == null) {
-          mh =
-              find(
-                  "FPDFLink_GetURL",
-                  FunctionDescriptor.of(C_INT, C_POINTER, C_INT, C_POINTER, C_INT),
-                  false);
-          FPDFLink_GetURL_MH = mh;
-        }
-      }
-    }
-    return mh;
+    return FPDFLink_GetURL_V.orElseSet(
+        () ->
+            find(
+                "FPDFLink_GetURL",
+                FunctionDescriptor.of(C_INT, C_POINTER, C_INT, C_POINTER, C_INT),
+                false));
   }
 
-  private static volatile MethodHandle FPDFLink_CountRects_MH = null;
+  private static final StableValue<MethodHandle> FPDFLink_CountRects_V = StableValue.of();
 
   public static MethodHandle fpdfLinkCountRects() {
-    MethodHandle mh = FPDFLink_CountRects_MH;
-    if (mh == null) {
-      synchronized (TextBindings.class) {
-        mh = FPDFLink_CountRects_MH;
-        if (mh == null) {
-          mh = find("FPDFLink_CountRects", FunctionDescriptor.of(C_INT, C_POINTER, C_INT), true);
-          FPDFLink_CountRects_MH = mh;
-        }
-      }
-    }
-    return mh;
+    return FPDFLink_CountRects_V.orElseSet(
+        () -> find("FPDFLink_CountRects", FunctionDescriptor.of(C_INT, C_POINTER, C_INT), true));
   }
 
-  private static volatile MethodHandle FPDFLink_GetRect_MH = null;
+  private static final StableValue<MethodHandle> FPDFLink_GetRect_V = StableValue.of();
 
   public static MethodHandle fpdfLinkGetRect() {
-    MethodHandle mh = FPDFLink_GetRect_MH;
-    if (mh == null) {
-      synchronized (TextBindings.class) {
-        mh = FPDFLink_GetRect_MH;
-        if (mh == null) {
-          mh =
-              find(
-                  "FPDFLink_GetRect",
-                  FunctionDescriptor.of(
-                      C_INT, C_POINTER, C_INT, C_INT, C_POINTER, C_POINTER, C_POINTER, C_POINTER),
-                  false);
-          FPDFLink_GetRect_MH = mh;
-        }
-      }
-    }
-    return mh;
+    return FPDFLink_GetRect_V.orElseSet(
+        () ->
+            find(
+                "FPDFLink_GetRect",
+                FunctionDescriptor.of(
+                    C_INT, C_POINTER, C_INT, C_INT, C_POINTER, C_POINTER, C_POINTER, C_POINTER),
+                false));
   }
 
-  private static volatile MethodHandle FPDFLink_CloseWebLinks_MH = null;
+  private static final StableValue<MethodHandle> FPDFLink_CloseWebLinks_V = StableValue.of();
 
   public static MethodHandle fpdfLinkCloseWebLinks() {
-    MethodHandle mh = FPDFLink_CloseWebLinks_MH;
-    if (mh == null) {
-      synchronized (TextBindings.class) {
-        mh = FPDFLink_CloseWebLinks_MH;
-        if (mh == null) {
-          mh = find("FPDFLink_CloseWebLinks", FunctionDescriptor.ofVoid(C_POINTER), false);
-          FPDFLink_CloseWebLinks_MH = mh;
-        }
-      }
-    }
-    return mh;
+    return FPDFLink_CloseWebLinks_V.orElseSet(
+        () -> find("FPDFLink_CloseWebLinks", FunctionDescriptor.ofVoid(C_POINTER), false));
   }
 }

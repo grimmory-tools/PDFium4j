@@ -12,6 +12,7 @@ import java.lang.invoke.MethodHandle;
 import java.util.Optional;
 
 /** FFM bindings for PDFium document attachment functions from {@code fpdf_attachment.h}. */
+@SuppressWarnings("preview")
 public final class AttachmentBindings {
 
   private AttachmentBindings() {}

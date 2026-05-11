@@ -1,6 +1,5 @@
 package org.grimmory.pdfium4j.internal;
 
-import static java.lang.foreign.ValueLayout.*;
 import static org.grimmory.pdfium4j.internal.FfmHelper.C_INT;
 import static org.grimmory.pdfium4j.internal.FfmHelper.C_POINTER;
 import static org.grimmory.pdfium4j.internal.FfmHelper.C_SIZE_T;
@@ -10,10 +9,12 @@ import static org.grimmory.pdfium4j.internal.FfmHelper.LOOKUP;
 import java.lang.foreign.Arena;
 import java.lang.foreign.FunctionDescriptor;
 import java.lang.foreign.MemorySegment;
+import java.lang.foreign.SymbolLookup;
 import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandle;
 
 /** FFM bindings for the pdfium4j C++ shim library. */
+@SuppressWarnings("preview")
 public final class ShimBindings {
 
   private ShimBindings() {}
@@ -21,39 +22,6 @@ public final class ShimBindings {
   /** Ensures all required shim symbols are available. */
   public static void checkRequired() {
     check("pdfium4j_page_count", pdfium4jPageCount());
-    check("pdfium4j_get_meta_utf8", pdfium4jGetMetaUtf8());
-    check("pdfium4j_set_meta_utf8", pdfium4jSetMetaUtf8());
-    check("pdfium4j_get_custom_xmp", pdfium4jGetCustomXmp());
-    check("pdfium4j_get_custom_xmp_bag", pdfium4jGetCustomXmpBag());
-    check("pdfium4j_get_xmp_metadata", pdfium4jGetXmpMetadata());
-    check("pdfium4j_page_label", pdfium4jPageLabel());
-    check("pdfium4j_page_width", pdfium4jPageWidth());
-    check("pdfium4j_page_height", pdfium4jPageHeight());
-    check("pdfium4j_bookmark_first", pdfium4jBookmarkFirst());
-    check("pdfium4j_bookmark_next", pdfium4jBookmarkNext());
-    check("pdfium4j_bookmark_first_child", pdfium4jBookmarkFirstChild());
-    check("pdfium4j_bookmark_title", pdfium4jBookmarkTitle());
-    check("pdfium4j_bookmark_page_index", pdfium4jBookmarkPageIndex());
-    check("pdfium4j_struct_tree_get", pdfium4jStructTreeGet());
-    check("pdfium4j_struct_tree_close", pdfium4jStructTreeClose());
-    check("pdfium4j_struct_tree_count_children", pdfium4jStructTreeCountChildren());
-    check("pdfium4j_struct_tree_get_child", pdfium4jStructTreeGetChild());
-    check("pdfium4j_struct_element_count_children", pdfium4jStructElementCountChildren());
-    check("pdfium4j_struct_element_get_child", pdfium4jStructElementGetChild());
-    check("pdfium4j_struct_element_get_mcid", pdfium4jStructElementGetMcid());
-    check("pdfium4j_struct_element_get_type", pdfium4jStructElementGetType());
-    check("pdfium4j_struct_element_get_title", pdfium4jStructElementGetTitle());
-    check("pdfium4j_struct_element_get_alt_text", pdfium4jStructElementGetAltText());
-    check("pdfium4j_struct_element_get_actual_text", pdfium4jStructElementGetActualText());
-    check("pdfium4j_struct_element_get_lang", pdfium4jStructElementGetLang());
-    check("pdfium4j_struct_element_get_attribute_count", pdfium4jStructElementGetAttributeCount());
-    check("pdfium4j_text_get_chars_with_bounds", pdfium4jTextGetCharsWithBounds());
-    check("pdfium4j_save_incremental", pdfium4jSaveIncremental());
-    check("pdfium4j_save_copy", pdfium4jSaveCopy());
-    check("pdfium4j_read_info_dict", pdfium4jReadInfoDict());
-    check("pdfium4j_read_info_dict_mem", pdfium4jReadInfoDictMem());
-    check("pdfium4j_save_with_metadata_native", pdfium4jSaveWithMetadata());
-    check("pdfium4j_save_with_metadata_mem_native", pdfium4jSaveWithMetadataMem());
   }
 
   private static void check(String name, MethodHandle mh) {
@@ -64,7 +32,7 @@ public final class ShimBindings {
   }
 
   private static MethodHandle find(String name, FunctionDescriptor desc, boolean critical) {
-    java.lang.foreign.SymbolLookup shim = NativeLoader.getShimLookup();
+    SymbolLookup shim = NativeLoader.getShimLookup();
     MemorySegment addr = null;
     if (shim != null) {
       addr = shim.find(name).orElse(null);
@@ -77,668 +45,410 @@ public final class ShimBindings {
         addr, desc, critical ? FfmHelper.CRITICAL_OPTIONS : FfmHelper.NO_OPTIONS);
   }
 
-  private static volatile MethodHandle pdfium4jPageCountMH = null;
+  private static final StableValue<MethodHandle> pdfium4jPageCountV = StableValue.of();
 
   public static MethodHandle pdfium4jPageCount() {
-    MethodHandle mh = pdfium4jPageCountMH;
-    if (mh == null) {
-      synchronized (ShimBindings.class) {
-        mh = pdfium4jPageCountMH;
-        if (mh == null) {
-          mh = find("pdfium4j_page_count", FunctionDescriptor.of(C_INT, C_POINTER), true);
-          pdfium4jPageCountMH = mh;
-        }
-      }
-    }
-    return mh;
+    return pdfium4jPageCountV.orElseSet(
+        () -> find("pdfium4j_page_count", FunctionDescriptor.of(C_INT, C_POINTER), true));
   }
 
-  private static volatile MethodHandle pdfium4jGetMetaUtf8MH = null;
+  private static final StableValue<MethodHandle> pdfium4jGetMetaUtf8V = StableValue.of();
 
   public static MethodHandle pdfium4jGetMetaUtf8() {
-    MethodHandle mh = pdfium4jGetMetaUtf8MH;
-    if (mh == null) {
-      synchronized (ShimBindings.class) {
-        mh = pdfium4jGetMetaUtf8MH;
-        if (mh == null) {
-          mh =
-              find(
-                  "pdfium4j_get_meta_utf8",
-                  FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER, C_INT),
-                  false);
-          pdfium4jGetMetaUtf8MH = mh;
-        }
-      }
-    }
-    return mh;
+    return pdfium4jGetMetaUtf8V.orElseSet(
+        () ->
+            find(
+                "pdfium4j_get_meta_utf8",
+                FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER, C_INT),
+                false));
   }
 
-  private static volatile MethodHandle pdfium4jSetMetaUtf8MH = null;
+  private static final StableValue<MethodHandle> pdfium4jSetMetaUtf8V = StableValue.of();
 
   public static MethodHandle pdfium4jSetMetaUtf8() {
-    MethodHandle mh = pdfium4jSetMetaUtf8MH;
-    if (mh == null) {
-      synchronized (ShimBindings.class) {
-        mh = pdfium4jSetMetaUtf8MH;
-        if (mh == null) {
-          mh =
-              find(
-                  "pdfium4j_set_meta_utf8",
-                  FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER),
-                  false);
-          pdfium4jSetMetaUtf8MH = mh;
-        }
-      }
-    }
-    return mh;
+    return pdfium4jSetMetaUtf8V.orElseSet(
+        () ->
+            find(
+                "pdfium4j_set_meta_utf8",
+                FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER),
+                false));
   }
 
-  private static volatile MethodHandle pdfium4jGetCustomXmpMH = null;
+  private static final StableValue<MethodHandle> pdfium4jGetCustomXmpV = StableValue.of();
 
   public static MethodHandle pdfium4jGetCustomXmp() {
-    MethodHandle mh = pdfium4jGetCustomXmpMH;
-    if (mh == null) {
-      synchronized (ShimBindings.class) {
-        mh = pdfium4jGetCustomXmpMH;
-        if (mh == null) {
-          mh =
-              find(
-                  "pdfium4j_get_custom_xmp",
-                  FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_INT),
-                  false);
-          pdfium4jGetCustomXmpMH = mh;
-        }
-      }
-    }
-    return mh;
+    return pdfium4jGetCustomXmpV.orElseSet(
+        () ->
+            find(
+                "pdfium4j_get_custom_xmp",
+                FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_INT),
+                false));
   }
 
-  private static volatile MethodHandle pdfium4jGetCustomXmpBagMH = null;
+  private static final StableValue<MethodHandle> pdfium4jGetCustomXmpBagV = StableValue.of();
 
   public static MethodHandle pdfium4jGetCustomXmpBag() {
-    MethodHandle mh = pdfium4jGetCustomXmpBagMH;
-    if (mh == null) {
-      synchronized (ShimBindings.class) {
-        mh = pdfium4jGetCustomXmpBagMH;
-        if (mh == null) {
-          mh =
-              find(
-                  "pdfium4j_get_custom_xmp_bag",
-                  FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_INT),
-                  false);
-          pdfium4jGetCustomXmpBagMH = mh;
-        }
-      }
-    }
-    return mh;
+    return pdfium4jGetCustomXmpBagV.orElseSet(
+        () ->
+            find(
+                "pdfium4j_get_custom_xmp_bag",
+                FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER, C_POINTER, C_INT),
+                false));
   }
 
-  private static volatile MethodHandle pdfium4jGetXmpMetadataMH = null;
+  private static final StableValue<MethodHandle> pdfium4jGetXmpMetadataV = StableValue.of();
 
   public static MethodHandle pdfium4jGetXmpMetadata() {
-    MethodHandle mh = pdfium4jGetXmpMetadataMH;
-    if (mh == null) {
-      synchronized (ShimBindings.class) {
-        mh = pdfium4jGetXmpMetadataMH;
-        if (mh == null) {
-          mh =
-              find(
-                  "pdfium4j_get_xmp_metadata",
-                  FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_INT),
-                  false);
-          pdfium4jGetXmpMetadataMH = mh;
-        }
-      }
-    }
-    return mh;
+    return pdfium4jGetXmpMetadataV.orElseSet(
+        () ->
+            find(
+                "pdfium4j_get_xmp_metadata",
+                FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_INT),
+                false));
   }
 
-  private static volatile MethodHandle pdfium4jPageLabelMH = null;
+  private static final StableValue<MethodHandle> pdfium4jPageLabelV = StableValue.of();
 
   public static MethodHandle pdfium4jPageLabel() {
-    MethodHandle mh = pdfium4jPageLabelMH;
-    if (mh == null) {
-      synchronized (ShimBindings.class) {
-        mh = pdfium4jPageLabelMH;
-        if (mh == null) {
-          mh =
-              find(
-                  "pdfium4j_page_label",
-                  FunctionDescriptor.of(C_INT, C_POINTER, C_INT, C_POINTER, C_INT),
-                  false);
-          pdfium4jPageLabelMH = mh;
-        }
-      }
-    }
-    return mh;
+    return pdfium4jPageLabelV.orElseSet(
+        () ->
+            find(
+                "pdfium4j_page_label",
+                FunctionDescriptor.of(C_INT, C_POINTER, C_INT, C_POINTER, C_INT),
+                false));
   }
 
-  private static volatile MethodHandle pdfium4jPageWidthMH = null;
+  private static final StableValue<MethodHandle> pdfium4jPageWidthV = StableValue.of();
 
   public static MethodHandle pdfium4jPageWidth() {
-    MethodHandle mh = pdfium4jPageWidthMH;
-    if (mh == null) {
-      synchronized (ShimBindings.class) {
-        mh = pdfium4jPageWidthMH;
-        if (mh == null) {
-          mh =
-              find(
-                  "pdfium4j_page_width",
-                  FunctionDescriptor.of(ValueLayout.JAVA_FLOAT, C_POINTER, C_INT),
-                  true);
-          pdfium4jPageWidthMH = mh;
-        }
-      }
-    }
-    return mh;
+    return pdfium4jPageWidthV.orElseSet(
+        () ->
+            find(
+                "pdfium4j_page_width",
+                FunctionDescriptor.of(ValueLayout.JAVA_FLOAT, C_POINTER, C_INT),
+                true));
   }
 
-  private static volatile MethodHandle pdfium4jPageHeightMH = null;
+  private static final StableValue<MethodHandle> pdfium4jPageHeightV = StableValue.of();
 
   public static MethodHandle pdfium4jPageHeight() {
-    MethodHandle mh = pdfium4jPageHeightMH;
-    if (mh == null) {
-      synchronized (ShimBindings.class) {
-        mh = pdfium4jPageHeightMH;
-        if (mh == null) {
-          mh =
-              find(
-                  "pdfium4j_page_height",
-                  FunctionDescriptor.of(ValueLayout.JAVA_FLOAT, C_POINTER, C_INT),
-                  true);
-          pdfium4jPageHeightMH = mh;
-        }
-      }
-    }
-    return mh;
+    return pdfium4jPageHeightV.orElseSet(
+        () ->
+            find(
+                "pdfium4j_page_height",
+                FunctionDescriptor.of(ValueLayout.JAVA_FLOAT, C_POINTER, C_INT),
+                true));
   }
 
-  private static volatile MethodHandle pdfium4jBookmarkFirstMH = null;
+  private static final StableValue<MethodHandle> pdfium4jBookmarkFirstV = StableValue.of();
 
   public static MethodHandle pdfium4jBookmarkFirst() {
-    MethodHandle mh = pdfium4jBookmarkFirstMH;
-    if (mh == null) {
-      synchronized (ShimBindings.class) {
-        mh = pdfium4jBookmarkFirstMH;
-        if (mh == null) {
-          mh = find("pdfium4j_bookmark_first", FunctionDescriptor.of(C_POINTER, C_POINTER), true);
-          pdfium4jBookmarkFirstMH = mh;
-        }
-      }
-    }
-    return mh;
+    return pdfium4jBookmarkFirstV.orElseSet(
+        () -> find("pdfium4j_bookmark_first", FunctionDescriptor.of(C_POINTER, C_POINTER), true));
   }
 
-  private static volatile MethodHandle pdfium4jBookmarkNextMH = null;
+  private static final StableValue<MethodHandle> pdfium4jBookmarkNextV = StableValue.of();
 
   public static MethodHandle pdfium4jBookmarkNext() {
-    MethodHandle mh = pdfium4jBookmarkNextMH;
-    if (mh == null) {
-      synchronized (ShimBindings.class) {
-        mh = pdfium4jBookmarkNextMH;
-        if (mh == null) {
-          mh =
-              find(
-                  "pdfium4j_bookmark_next",
-                  FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER),
-                  true);
-          pdfium4jBookmarkNextMH = mh;
-        }
-      }
-    }
-    return mh;
+    return pdfium4jBookmarkNextV.orElseSet(
+        () ->
+            find(
+                "pdfium4j_bookmark_next",
+                FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER),
+                true));
   }
 
-  private static volatile MethodHandle pdfium4jBookmarkFirstChildMH = null;
+  private static final StableValue<MethodHandle> pdfium4jBookmarkFirstChildV = StableValue.of();
 
   public static MethodHandle pdfium4jBookmarkFirstChild() {
-    MethodHandle mh = pdfium4jBookmarkFirstChildMH;
-    if (mh == null) {
-      synchronized (ShimBindings.class) {
-        mh = pdfium4jBookmarkFirstChildMH;
-        if (mh == null) {
-          mh =
-              find(
-                  "pdfium4j_bookmark_first_child",
-                  FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER),
-                  true);
-          pdfium4jBookmarkFirstChildMH = mh;
-        }
-      }
-    }
-    return mh;
+    return pdfium4jBookmarkFirstChildV.orElseSet(
+        () ->
+            find(
+                "pdfium4j_bookmark_first_child",
+                FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER),
+                true));
   }
 
-  private static volatile MethodHandle pdfium4jBookmarkTitleMH = null;
+  private static final StableValue<MethodHandle> pdfium4jBookmarkTitleV = StableValue.of();
 
   public static MethodHandle pdfium4jBookmarkTitle() {
-    MethodHandle mh = pdfium4jBookmarkTitleMH;
-    if (mh == null) {
-      synchronized (ShimBindings.class) {
-        mh = pdfium4jBookmarkTitleMH;
-        if (mh == null) {
-          mh =
-              find(
-                  "pdfium4j_bookmark_title",
-                  FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_INT),
-                  false);
-          pdfium4jBookmarkTitleMH = mh;
-        }
-      }
-    }
-    return mh;
+    return pdfium4jBookmarkTitleV.orElseSet(
+        () ->
+            find(
+                "pdfium4j_bookmark_title",
+                FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_INT),
+                false));
   }
 
-  private static volatile MethodHandle pdfium4jBookmarkPageIndexMH = null;
+  private static final StableValue<MethodHandle> pdfium4jBookmarkPageIndexV = StableValue.of();
 
   public static MethodHandle pdfium4jBookmarkPageIndex() {
-    MethodHandle mh = pdfium4jBookmarkPageIndexMH;
-    if (mh == null) {
-      synchronized (ShimBindings.class) {
-        mh = pdfium4jBookmarkPageIndexMH;
-        if (mh == null) {
-          mh =
-              find(
-                  "pdfium4j_bookmark_page_index",
-                  FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER),
-                  true);
-          pdfium4jBookmarkPageIndexMH = mh;
-        }
-      }
-    }
-    return mh;
+    return pdfium4jBookmarkPageIndexV.orElseSet(
+        () ->
+            find(
+                "pdfium4j_bookmark_page_index",
+                FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER),
+                true));
   }
 
-  private static volatile MethodHandle pdfium4jStructTreeGetMH = null;
+  private static final StableValue<MethodHandle> pdfium4jStructTreeGetV = StableValue.of();
 
   public static MethodHandle pdfium4jStructTreeGet() {
-    MethodHandle mh = pdfium4jStructTreeGetMH;
-    if (mh == null) {
-      synchronized (ShimBindings.class) {
-        mh = pdfium4jStructTreeGetMH;
-        if (mh == null) {
-          mh = find("pdfium4j_struct_tree_get", FunctionDescriptor.of(C_POINTER, C_POINTER), false);
-          pdfium4jStructTreeGetMH = mh;
-        }
-      }
-    }
-    return mh;
+    return pdfium4jStructTreeGetV.orElseSet(
+        () -> find("pdfium4j_struct_tree_get", FunctionDescriptor.of(C_POINTER, C_POINTER), false));
   }
 
-  private static volatile MethodHandle pdfium4jStructTreeCloseMH = null;
+  private static final StableValue<MethodHandle> pdfium4jStructTreeCloseV = StableValue.of();
 
   public static MethodHandle pdfium4jStructTreeClose() {
-    MethodHandle mh = pdfium4jStructTreeCloseMH;
-    if (mh == null) {
-      synchronized (ShimBindings.class) {
-        mh = pdfium4jStructTreeCloseMH;
-        if (mh == null) {
-          mh = find("pdfium4j_struct_tree_close", FunctionDescriptor.ofVoid(C_POINTER), false);
-          pdfium4jStructTreeCloseMH = mh;
-        }
-      }
-    }
-    return mh;
+    return pdfium4jStructTreeCloseV.orElseSet(
+        () -> find("pdfium4j_struct_tree_close", FunctionDescriptor.ofVoid(C_POINTER), false));
   }
 
-  private static volatile MethodHandle pdfium4jStructTreeCountChildrenMH = null;
+  private static final StableValue<MethodHandle> pdfium4jStructTreeCountChildrenV =
+      StableValue.of();
 
   public static MethodHandle pdfium4jStructTreeCountChildren() {
-    MethodHandle mh = pdfium4jStructTreeCountChildrenMH;
-    if (mh == null) {
-      synchronized (ShimBindings.class) {
-        mh = pdfium4jStructTreeCountChildrenMH;
-        if (mh == null) {
-          mh =
-              find(
-                  "pdfium4j_struct_tree_count_children",
-                  FunctionDescriptor.of(C_INT, C_POINTER),
-                  true);
-          pdfium4jStructTreeCountChildrenMH = mh;
-        }
-      }
-    }
-    return mh;
+    return pdfium4jStructTreeCountChildrenV.orElseSet(
+        () ->
+            find(
+                "pdfium4j_struct_tree_count_children",
+                FunctionDescriptor.of(C_INT, C_POINTER),
+                true));
   }
 
-  private static volatile MethodHandle pdfium4jStructTreeGetChildMH = null;
+  private static final StableValue<MethodHandle> pdfium4jStructTreeGetChildV = StableValue.of();
 
   public static MethodHandle pdfium4jStructTreeGetChild() {
-    MethodHandle mh = pdfium4jStructTreeGetChildMH;
-    if (mh == null) {
-      synchronized (ShimBindings.class) {
-        mh = pdfium4jStructTreeGetChildMH;
-        if (mh == null) {
-          mh =
-              find(
-                  "pdfium4j_struct_tree_get_child",
-                  FunctionDescriptor.of(C_POINTER, C_POINTER, C_INT),
-                  true);
-          pdfium4jStructTreeGetChildMH = mh;
-        }
-      }
-    }
-    return mh;
+    return pdfium4jStructTreeGetChildV.orElseSet(
+        () ->
+            find(
+                "pdfium4j_struct_tree_get_child",
+                FunctionDescriptor.of(C_POINTER, C_POINTER, C_INT),
+                true));
   }
 
-  private static volatile MethodHandle pdfium4jStructElementCountChildrenMH = null;
+  private static final StableValue<MethodHandle> pdfium4jStructElementCountChildrenV =
+      StableValue.of();
 
   public static MethodHandle pdfium4jStructElementCountChildren() {
-    MethodHandle mh = pdfium4jStructElementCountChildrenMH;
-    if (mh == null) {
-      synchronized (ShimBindings.class) {
-        mh = pdfium4jStructElementCountChildrenMH;
-        if (mh == null) {
-          mh =
-              find(
-                  "pdfium4j_struct_element_count_children",
-                  FunctionDescriptor.of(C_INT, C_POINTER),
-                  true);
-          pdfium4jStructElementCountChildrenMH = mh;
-        }
-      }
-    }
-    return mh;
+    return pdfium4jStructElementCountChildrenV.orElseSet(
+        () ->
+            find(
+                "pdfium4j_struct_element_count_children",
+                FunctionDescriptor.of(C_INT, C_POINTER),
+                true));
   }
 
-  private static volatile MethodHandle pdfium4jStructElementGetChildMH = null;
+  private static final StableValue<MethodHandle> pdfium4jStructElementGetChildV = StableValue.of();
 
   public static MethodHandle pdfium4jStructElementGetChild() {
-    MethodHandle mh = pdfium4jStructElementGetChildMH;
-    if (mh == null) {
-      synchronized (ShimBindings.class) {
-        mh = pdfium4jStructElementGetChildMH;
-        if (mh == null) {
-          mh =
-              find(
-                  "pdfium4j_struct_element_get_child",
-                  FunctionDescriptor.of(C_POINTER, C_POINTER, C_INT),
-                  true);
-          pdfium4jStructElementGetChildMH = mh;
-        }
-      }
-    }
-    return mh;
+    return pdfium4jStructElementGetChildV.orElseSet(
+        () ->
+            find(
+                "pdfium4j_struct_element_get_child",
+                FunctionDescriptor.of(C_POINTER, C_POINTER, C_INT),
+                true));
   }
 
-  private static volatile MethodHandle pdfium4jStructElementGetMcidMH = null;
+  private static final StableValue<MethodHandle> pdfium4jStructElementGetMcidV = StableValue.of();
 
   public static MethodHandle pdfium4jStructElementGetMcid() {
-    MethodHandle mh = pdfium4jStructElementGetMcidMH;
-    if (mh == null) {
-      synchronized (ShimBindings.class) {
-        mh = pdfium4jStructElementGetMcidMH;
-        if (mh == null) {
-          mh =
-              find(
-                  "pdfium4j_struct_element_get_mcid",
-                  FunctionDescriptor.of(C_INT, C_POINTER, C_INT),
-                  true);
-          pdfium4jStructElementGetMcidMH = mh;
-        }
-      }
-    }
-    return mh;
+    return pdfium4jStructElementGetMcidV.orElseSet(
+        () ->
+            find(
+                "pdfium4j_struct_element_get_mcid",
+                FunctionDescriptor.of(C_INT, C_POINTER, C_INT),
+                true));
   }
 
-  private static volatile MethodHandle pdfium4jStructElementGetTypeMH = null;
+  private static final StableValue<MethodHandle> pdfium4jStructElementGetTypeV = StableValue.of();
 
   public static MethodHandle pdfium4jStructElementGetType() {
-    MethodHandle mh = pdfium4jStructElementGetTypeMH;
-    if (mh == null) {
-      synchronized (ShimBindings.class) {
-        mh = pdfium4jStructElementGetTypeMH;
-        if (mh == null) {
-          mh =
-              find(
-                  "pdfium4j_struct_element_get_type",
-                  FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_INT),
-                  false);
-          pdfium4jStructElementGetTypeMH = mh;
-        }
-      }
-    }
-    return mh;
+    return pdfium4jStructElementGetTypeV.orElseSet(
+        () ->
+            find(
+                "pdfium4j_struct_element_get_type",
+                FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_INT),
+                false));
   }
 
-  private static volatile MethodHandle pdfium4jStructElementGetTitleMH = null;
+  private static final StableValue<MethodHandle> pdfium4jStructElementGetTitleV = StableValue.of();
 
   public static MethodHandle pdfium4jStructElementGetTitle() {
-    MethodHandle mh = pdfium4jStructElementGetTitleMH;
-    if (mh == null) {
-      synchronized (ShimBindings.class) {
-        mh = pdfium4jStructElementGetTitleMH;
-        if (mh == null) {
-          mh =
-              find(
-                  "pdfium4j_struct_element_get_title",
-                  FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_INT),
-                  false);
-          pdfium4jStructElementGetTitleMH = mh;
-        }
-      }
-    }
-    return mh;
+    return pdfium4jStructElementGetTitleV.orElseSet(
+        () ->
+            find(
+                "pdfium4j_struct_element_get_title",
+                FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_INT),
+                false));
   }
 
-  private static volatile MethodHandle pdfium4jStructElementGetAltTextMH = null;
+  private static final StableValue<MethodHandle> pdfium4jStructElementGetAltTextV =
+      StableValue.of();
 
   public static MethodHandle pdfium4jStructElementGetAltText() {
-    MethodHandle mh = pdfium4jStructElementGetAltTextMH;
-    if (mh == null) {
-      synchronized (ShimBindings.class) {
-        mh = pdfium4jStructElementGetAltTextMH;
-        if (mh == null) {
-          mh =
-              find(
-                  "pdfium4j_struct_element_get_alt_text",
-                  FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_INT),
-                  false);
-          pdfium4jStructElementGetAltTextMH = mh;
-        }
-      }
-    }
-    return mh;
+    return pdfium4jStructElementGetAltTextV.orElseSet(
+        () ->
+            find(
+                "pdfium4j_struct_element_get_alt_text",
+                FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_INT),
+                false));
   }
 
-  private static volatile MethodHandle pdfium4jStructElementGetActualTextMH = null;
+  private static final StableValue<MethodHandle> pdfium4jStructElementGetActualTextV =
+      StableValue.of();
 
   public static MethodHandle pdfium4jStructElementGetActualText() {
-    MethodHandle mh = pdfium4jStructElementGetActualTextMH;
-    if (mh == null) {
-      synchronized (ShimBindings.class) {
-        mh = pdfium4jStructElementGetActualTextMH;
-        if (mh == null) {
-          mh =
-              find(
-                  "pdfium4j_struct_element_get_actual_text",
-                  FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_INT),
-                  false);
-          pdfium4jStructElementGetActualTextMH = mh;
-        }
-      }
-    }
-    return mh;
+    return pdfium4jStructElementGetActualTextV.orElseSet(
+        () ->
+            find(
+                "pdfium4j_struct_element_get_actual_text",
+                FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_INT),
+                false));
   }
 
-  private static volatile MethodHandle pdfium4jStructElementGetLangMH = null;
+  private static final StableValue<MethodHandle> pdfium4jStructElementGetLangV = StableValue.of();
 
   public static MethodHandle pdfium4jStructElementGetLang() {
-    MethodHandle mh = pdfium4jStructElementGetLangMH;
-    if (mh == null) {
-      synchronized (ShimBindings.class) {
-        mh = pdfium4jStructElementGetLangMH;
-        if (mh == null) {
-          mh =
-              find(
-                  "pdfium4j_struct_element_get_lang",
-                  FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_INT),
-                  false);
-          pdfium4jStructElementGetLangMH = mh;
-        }
-      }
-    }
-    return mh;
+    return pdfium4jStructElementGetLangV.orElseSet(
+        () ->
+            find(
+                "pdfium4j_struct_element_get_lang",
+                FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_INT),
+                false));
   }
 
-  private static volatile MethodHandle pdfium4jStructElementGetAttributeCountMH = null;
+  private static final StableValue<MethodHandle> pdfium4jStructElementGetAttributeCountV =
+      StableValue.of();
 
   public static MethodHandle pdfium4jStructElementGetAttributeCount() {
-    MethodHandle mh = pdfium4jStructElementGetAttributeCountMH;
-    if (mh == null) {
-      synchronized (ShimBindings.class) {
-        mh = pdfium4jStructElementGetAttributeCountMH;
-        if (mh == null) {
-          mh =
-              find(
-                  "pdfium4j_struct_element_get_attribute_count",
-                  FunctionDescriptor.of(C_INT, C_POINTER),
-                  false);
-          pdfium4jStructElementGetAttributeCountMH = mh;
-        }
-      }
-    }
-    return mh;
+    return pdfium4jStructElementGetAttributeCountV.orElseSet(
+        () ->
+            find(
+                "pdfium4j_struct_element_get_attribute_count",
+                FunctionDescriptor.of(C_INT, C_POINTER),
+                false));
   }
 
-  private static volatile MethodHandle pdfium4jTextGetCharsWithBoundsMH = null;
+  private static final StableValue<MethodHandle> pdfium4jTextGetCharsWithBoundsV = StableValue.of();
 
   public static MethodHandle pdfium4jTextGetCharsWithBounds() {
-    MethodHandle mh = pdfium4jTextGetCharsWithBoundsMH;
-    if (mh == null) {
-      synchronized (ShimBindings.class) {
-        mh = pdfium4jTextGetCharsWithBoundsMH;
-        if (mh == null) {
-          mh =
-              find(
-                  "pdfium4j_text_get_chars_with_bounds",
-                  FunctionDescriptor.of(C_INT, C_POINTER, C_INT, C_INT, C_POINTER),
-                  false);
-          pdfium4jTextGetCharsWithBoundsMH = mh;
-        }
-      }
-    }
-    return mh;
+    return pdfium4jTextGetCharsWithBoundsV.orElseSet(
+        () ->
+            find(
+                "pdfium4j_text_get_chars_with_bounds",
+                FunctionDescriptor.of(C_INT, C_POINTER, C_INT, C_INT, C_POINTER),
+                false));
   }
 
-  private static volatile MethodHandle pdfium4jSaveIncrementalMH = null;
+  private static final StableValue<MethodHandle> pdfium4jSaveIncrementalV = StableValue.of();
 
   public static MethodHandle pdfium4jSaveIncremental() {
-    MethodHandle mh = pdfium4jSaveIncrementalMH;
-    if (mh == null) {
-      synchronized (ShimBindings.class) {
-        mh = pdfium4jSaveIncrementalMH;
-        if (mh == null) {
-          mh =
-              find(
-                  "pdfium4j_save_incremental",
-                  FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER),
-                  false);
-          pdfium4jSaveIncrementalMH = mh;
-        }
-      }
-    }
-    return mh;
+    return pdfium4jSaveIncrementalV.orElseSet(
+        () ->
+            find(
+                "pdfium4j_save_incremental",
+                FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER),
+                false));
   }
 
-  private static volatile MethodHandle pdfium4jSaveCopyMH = null;
+  private static final StableValue<MethodHandle> pdfium4jSaveCopyV = StableValue.of();
 
   public static MethodHandle pdfium4jSaveCopy() {
-    MethodHandle mh = pdfium4jSaveCopyMH;
-    if (mh == null) {
-      synchronized (ShimBindings.class) {
-        mh = pdfium4jSaveCopyMH;
-        if (mh == null) {
-          mh =
-              find("pdfium4j_save_copy", FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER), false);
-          pdfium4jSaveCopyMH = mh;
-        }
-      }
-    }
-    return mh;
+    return pdfium4jSaveCopyV.orElseSet(
+        () ->
+            find("pdfium4j_save_copy", FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER), false));
   }
 
-  private static volatile MethodHandle pdfium4jReadInfoDictMH = null;
+  private static final StableValue<MethodHandle> pdfium4jReadInfoDictV = StableValue.of();
 
   public static MethodHandle pdfium4jReadInfoDict() {
-    MethodHandle mh = pdfium4jReadInfoDictMH;
-    if (mh == null) {
-      synchronized (ShimBindings.class) {
-        mh = pdfium4jReadInfoDictMH;
-        if (mh == null) {
-          mh =
-              find(
-                  "pdfium4j_read_info_dict",
-                  FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER),
-                  false);
-          pdfium4jReadInfoDictMH = mh;
-        }
-      }
-    }
-    return mh;
+    return pdfium4jReadInfoDictV.orElseSet(
+        () ->
+            find(
+                "pdfium4j_read_info_dict",
+                FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_POINTER),
+                false));
   }
 
-  private static volatile MethodHandle pdfium4jReadInfoDictMemMH = null;
+  private static final StableValue<MethodHandle> pdfium4jReadInfoDictMemV = StableValue.of();
 
   public static MethodHandle pdfium4jReadInfoDictMem() {
-    MethodHandle mh = pdfium4jReadInfoDictMemMH;
-    if (mh == null) {
-      synchronized (ShimBindings.class) {
-        mh = pdfium4jReadInfoDictMemMH;
-        if (mh == null) {
-          mh =
-              find(
-                  "pdfium4j_read_info_dict_mem",
-                  FunctionDescriptor.of(C_INT, C_POINTER, C_SIZE_T, C_POINTER, C_POINTER),
-                  false);
-          pdfium4jReadInfoDictMemMH = mh;
-        }
-      }
-    }
-    return mh;
+    return pdfium4jReadInfoDictMemV.orElseSet(
+        () ->
+            find(
+                "pdfium4j_read_info_dict_mem",
+                FunctionDescriptor.of(C_INT, C_POINTER, C_SIZE_T, C_POINTER, C_POINTER),
+                false));
   }
 
-  private static volatile MethodHandle pdfium4jSaveWithMetadataMH = null;
+  private static final StableValue<MethodHandle> pdfium4jSaveWithMetadataV = StableValue.of();
 
   public static MethodHandle pdfium4jSaveWithMetadata() {
-    MethodHandle mh = pdfium4jSaveWithMetadataMH;
-    if (mh == null) {
-      synchronized (ShimBindings.class) {
-        mh = pdfium4jSaveWithMetadataMH;
-        if (mh == null) {
-          mh =
-              find(
-                  "pdfium4j_save_with_metadata_native",
-                  FunctionDescriptor.of(
-                      C_INT, C_POINTER, C_POINTER, C_POINTER, C_INT, C_POINTER, C_INT),
-                  false);
-          pdfium4jSaveWithMetadataMH = mh;
-        }
-      }
-    }
-    return mh;
+    return pdfium4jSaveWithMetadataV.orElseSet(
+        () ->
+            find(
+                "pdfium4j_save_with_metadata_native",
+                FunctionDescriptor.of(
+                    C_INT, C_POINTER, C_POINTER, C_POINTER, C_INT, C_POINTER, C_INT),
+                false));
   }
 
-  private static volatile MethodHandle pdfium4jSaveWithMetadataMemMH = null;
+  private static final StableValue<MethodHandle> pdfium4jSaveWithMetadataMemV = StableValue.of();
 
   public static MethodHandle pdfium4jSaveWithMetadataMem() {
-    MethodHandle mh = pdfium4jSaveWithMetadataMemMH;
-    if (mh == null) {
-      synchronized (ShimBindings.class) {
-        mh = pdfium4jSaveWithMetadataMemMH;
-        if (mh == null) {
-          mh =
-              find(
-                  "pdfium4j_save_with_metadata_mem_native",
-                  FunctionDescriptor.of(
-                      C_INT, C_POINTER, C_SIZE_T, C_POINTER, C_POINTER, C_POINTER, C_INT, C_POINTER,
-                      C_INT),
-                  false);
-          pdfium4jSaveWithMetadataMemMH = mh;
-        }
-      }
-    }
-    return mh;
+    return pdfium4jSaveWithMetadataMemV.orElseSet(
+        () ->
+            find(
+                "pdfium4j_save_with_metadata_mem_native",
+                FunctionDescriptor.of(
+                    C_INT, C_POINTER, C_SIZE_T, C_POINTER, C_POINTER, C_POINTER, C_INT, C_POINTER,
+                    C_INT),
+                false));
+  }
+
+  private static final StableValue<MethodHandle> pdfium4jSaveWithMetadataMemToFileV =
+      StableValue.of();
+
+  public static MethodHandle pdfium4jSaveWithMetadataMemToFile() {
+    return pdfium4jSaveWithMetadataMemToFileV.orElseSet(
+        () ->
+            find(
+                "pdfium4j_save_with_metadata_mem_to_file_native",
+                FunctionDescriptor.of(
+                    C_INT, C_POINTER, C_SIZE_T, C_POINTER, C_POINTER, C_INT, C_POINTER, C_INT),
+                false));
+  }
+
+  private static final StableValue<MethodHandle> pdfium4jGetXmpQpdfV = StableValue.of();
+
+  public static MethodHandle pdfium4jGetXmpQpdf() {
+    return pdfium4jGetXmpQpdfV.orElseSet(
+        () ->
+            find(
+                "pdfium4j_get_xmp_qpdf",
+                FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER, C_INT),
+                false));
+  }
+
+  private static final StableValue<MethodHandle> pdfium4jGetXmpQpdfMemV = StableValue.of();
+
+  public static MethodHandle pdfium4jGetXmpQpdfMem() {
+    return pdfium4jGetXmpQpdfMemV.orElseSet(
+        () ->
+            find(
+                "pdfium4j_get_xmp_qpdf_mem",
+                FunctionDescriptor.of(C_INT, C_POINTER, C_SIZE_T, C_POINTER, C_INT),
+                false));
+  }
+
+  private static final StableValue<MethodHandle> pdfium4jResolveOptionalSymbolsV =
+      StableValue.of();
+
+  public static MethodHandle pdfium4jResolveOptionalSymbols() {
+    return pdfium4jResolveOptionalSymbolsV.orElseSet(
+        () -> find("pdfium4j_resolve_optional_symbols", FunctionDescriptor.ofVoid(), false));
   }
 
   private static volatile MemorySegment WRITE_BLOCK_CALLBACK_STUB = null;
