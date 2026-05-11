@@ -352,13 +352,18 @@ val buildShim by tasks.registering {
                 into(pdfiumRoot)
             }
 
-            val isWindows = platform.startsWith("windows")
+            val zlibRoot = System.getenv("ZLIB_ROOT")
+            val jpegRoot = System.getenv("JPEG_ROOT")
             val cmakeConfigCmd = mutableListOf("cmake", "-S", shimDir.absolutePath, "-B", ".", "-DPDFIUM_ROOT=${pdfiumRoot.absolutePath}")
 
-            System.getenv("ZLIB_ROOT")?.let { cmakeConfigCmd.add("-DZLIB_ROOT=$it") }
-            System.getenv("JPEG_ROOT")?.let { cmakeConfigCmd.add("-DJPEG_ROOT=$it") }
+            if (zlibRoot != null && !zlibRoot.isBlank()) {
+                cmakeConfigCmd.add("-DZLIB_ROOT=$zlibRoot")
+            }
+            if (jpegRoot != null && !jpegRoot.isBlank()) {
+                cmakeConfigCmd.add("-DJPEG_ROOT=$jpegRoot")
+            }
 
-            if (!isWindows) {
+            if (!platform.startsWith("windows")) {
                 cmakeConfigCmd.addAll(listOf("-G", "Unix Makefiles"))
             }
 
