@@ -7,6 +7,7 @@ import java.util.function.Supplier;
 /**
  * Utility for providing shared constant instances of commonly used objects to avoid allocations.
  */
+@SuppressWarnings("preview")
 public final class Generators {
 
   private static final StableValue<FileAttribute<?>[]> EMPTY_FILE_ATTRIBUTES = StableValue.of();

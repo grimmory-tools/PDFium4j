@@ -24,11 +24,15 @@ import java.util.Objects;
 public final class ScratchBuffer {
 
   private static final long INITIAL_SIZE = 4096;
-  private static final long STEADY_STATE_SIZE = 1024L * 1024L;
-  private static final long MAX_SIZE = 1024L * 1024L * 128L; // 128MB safety limit
+  private static final long STEADY_STATE_SIZE =
+      Long.getLong("pdfium4j.scratch.steadyStateSize", 16L * 1024L * 1024L);
+  private static final long MAX_SIZE =
+      Long.getLong("pdfium4j.scratch.maxSize", 256L * 1024L * 1024L);
+  private static final long WARN_THRESHOLD =
+      Long.getLong("pdfium4j.scratch.warnThreshold", 32L * 1024L * 1024L);
 
-  private static final ThreadLocal<State> STATE = new ThreadLocal<>();
-  private static final ThreadLocal<int[]> USE_COUNT = ThreadLocal.withInitial(() -> new int[] {0});
+  private static final ScopedValue<State> STATE = ScopedValue.newInstance();
+  private static final ThreadLocal<State> BRIDGE = new ThreadLocal<>();
 
   private ScratchBuffer() {}
 
@@ -47,10 +51,10 @@ public final class ScratchBuffer {
     if (minBytes < 0 || minBytes > MAX_SIZE) {
       throw new IllegalArgumentException("Invalid scratch buffer size: " + minBytes);
     }
-    if (USE_COUNT.get()[0] <= 0) {
+    State s = getOrCreateState();
+    if (s.useCount <= 0) {
       throw new IllegalStateException("ScratchBuffer.get() called without active acquire()");
     }
-    State s = getOrCreateState();
     return s.getSegment(minBytes);
   }
 
@@ -59,31 +63,6 @@ public final class ScratchBuffer {
     long len = FfmHelper.utf8ByteLengthWithNull(s);
     MemorySegment seg = get(len);
     return FfmHelper.writeUtf8String(seg, s);
-  }
-
-  /** Returns a scratch segment containing a null-terminated UTF-16LE string. */
-  public static MemorySegment getWide(String s) {
-    long len = (long) s.length() * 2 + 2;
-    MemorySegment seg = get(len);
-    return FfmHelper.writeWideString(seg, s);
-  }
-
-  static long probeSize(long keyBytes) {
-    if (keyBytes < 0) {
-      throw new IllegalArgumentException("Invalid UTF-8 probe size: " + keyBytes);
-    }
-    if (keyBytes >= MAX_SIZE - 1024) {
-      return MAX_SIZE;
-    }
-    return keyBytes + 1024;
-  }
-
-  /**
-   * Returns a zero-allocation InputStream wrapping the given segment. The stream MUST be closed to
-   * release the scratch buffer acquisition.
-   */
-  public static InputStream wrap(MemorySegment segment, long size) {
-    return new SegmentInputStream(segment, size);
   }
 
   /**
@@ -109,23 +88,19 @@ public final class ScratchBuffer {
 
   /** Wrap existing key and value segments into the reusable thread-local slot holder. */
   public static KeyValueSlots keyAndWideValue(MemorySegment keySeg, MemorySegment valueSeg) {
-    if (USE_COUNT.get()[0] <= 0) {
+    State s = getOrCreateState();
+    if (s.useCount <= 0) {
       throw new IllegalStateException(
           "ScratchBuffer.keyAndWideValue() called without active acquire()");
     }
-    State s = getOrCreateState();
     s.keyValueSlots.keySeg = keySeg;
     s.keyValueSlots.valueSeg = valueSeg;
     return s.keyValueSlots;
   }
 
-  /**
-   * Acquire a usage slot for managed lifecycle owners (for example, PdfDocument instances).
-   *
-   * <p>Uses a thread-local primitive array to avoid boxing allocations on increment/decrement.
-   */
+  /** Acquire a usage slot for managed lifecycle owners. */
   public static void acquire() {
-    USE_COUNT.get()[0]++;
+    getOrCreateState().useCount++;
   }
 
   /**
@@ -161,56 +136,102 @@ public final class ScratchBuffer {
 
   /** Release and close all thread-local scratch state for the current thread. */
   public static void release() {
-    int[] countRef = USE_COUNT.get();
-    int count = countRef[0];
-    if (count <= 0) return;
-    count--;
-    countRef[0] = count;
+    State s = getOrCreateState();
+    if (s.useCount <= 0) return;
+    s.useCount--;
 
-    if (count == 0 && currentCapacity() > STEADY_STATE_SIZE) {
+    if (s.useCount == 0 && s.segment.byteSize() > STEADY_STATE_SIZE) {
       purge();
+    }
+  }
+
+  /** Returns a clamped size that fits within the maximum scratch buffer limits. */
+  public static long probeSize(long size) {
+    return Math.min(Math.max(0, size), MAX_SIZE);
+  }
+
+  /**
+   * Executes the given action within a managed scratch buffer scope using ScopedValues.
+   *
+   * @param action the action to run
+   */
+  public static void withScratch(Runnable action) {
+    State s = new State();
+    s.useCount = 1;
+    try {
+      ScopedValue.where(STATE, s).run(action);
+    } finally {
+      s.close();
+    }
+  }
+
+  /**
+   * Executes the given task within a managed scratch buffer scope and returns its result.
+   *
+   * @param action the task to run
+   * @param <T> the result type
+   * @return the task result
+   * @throws Exception if the task fails
+   */
+  public static <T> T callWithScratch(java.util.concurrent.Callable<T> action) throws Exception {
+    State s = new State();
+    s.useCount = 1;
+    try {
+      return ScopedValue.where(STATE, s).call(() -> action.call());
+    } finally {
+      s.close();
     }
   }
 
   /** Clear all thread-local buffers and close their arenas. */
   public static void purge() {
-    USE_COUNT.get()[0] = 0;
-    State s = STATE.get();
-    if (s != null) {
+    if (STATE.isBound()) {
+      State s = STATE.get();
+      s.useCount = 0;
       s.close();
-      STATE.remove();
+    }
+    State s = BRIDGE.get();
+    if (s != null) {
+      s.useCount = 0;
+      s.close();
+      BRIDGE.remove();
     }
   }
 
   /** Returns a thread-local byte array for temporary UTF-16LE decode staging. */
   public static byte[] getByteArray(int minBytes) {
-    if (USE_COUNT.get()[0] <= 0) {
+    State s = getOrCreateState();
+    if (s.useCount <= 0) {
       throw new IllegalStateException(
           "ScratchBuffer.getByteArray() called without active acquire()");
     }
-    State s = getOrCreateState();
     return s.getByteArray(minBytes);
   }
 
   /** Returns a dedicated 8KB scratch segment for metadata reads. */
   public static MemorySegment getMetadataBuffer() {
-    if (USE_COUNT.get()[0] <= 0) {
+    State s = getOrCreateState();
+    if (s.useCount <= 0) {
       throw new IllegalStateException(
           "ScratchBuffer.getMetadataBuffer() called without active acquire()");
     }
-    return getOrCreateState().getMetadataBuffer();
+    return s.getMetadataBuffer();
   }
 
   static long currentCapacity() {
-    State s = STATE.get();
+    if (STATE.isBound()) return STATE.get().segment.byteSize();
+    State s = BRIDGE.get();
     return s == null ? 0 : s.segment.byteSize();
   }
 
   private static State getOrCreateState() {
-    State s = STATE.get();
+    if (STATE.isBound()) {
+      return STATE.get();
+    }
+    State s = BRIDGE.get();
     if (s == null) {
       s = new State();
-      STATE.set(s);
+      BRIDGE.set(s);
     }
     return s;
   }
@@ -248,21 +269,19 @@ public final class ScratchBuffer {
   }
 
   private static final class State {
+    int useCount;
     private final List<Arena> arenas;
     private Arena arena;
-    private Arena loopArena;
     private MemorySegment segment;
     private MemorySegment steadySegment;
     private MemorySegment largestSegment;
-    private MemorySegment loopScratch;
-    private char[] charArray;
     private byte[] byteArray;
     private final MemorySegment metadataBuffer;
     private final KeyValueSlots keyValueSlots;
 
     /**
      * State is only valid between construction and the {@link #close()} call. Subsequent accesses
-     * are protected by the {@link ThreadLocal#remove()} in {@link ScratchBuffer#release()}.
+     * are protected by the binding lifecycle or {@link BRIDGE#remove()}.
      */
     State() {
       this.arenas = new ArrayList<>(2);
@@ -271,20 +290,9 @@ public final class ScratchBuffer {
       this.segment = arena.allocate(INITIAL_SIZE, 8);
       this.steadySegment = segment;
       this.largestSegment = segment;
-      this.loopArena = Arena.ofConfined();
-      this.arenas.add(this.loopArena);
-      this.loopScratch = loopArena.allocate(64, 8);
-      this.charArray = new char[1024];
       this.byteArray = new byte[2048];
       this.metadataBuffer = arena.allocate(8192, 8);
       this.keyValueSlots = new KeyValueSlots();
-    }
-
-    char[] getCharArray(int minChars) {
-      if (charArray.length < minChars) {
-        charArray = new char[Math.max(charArray.length * 2, minChars)];
-      }
-      return charArray;
     }
 
     byte[] getByteArray(int minBytes) {
@@ -292,18 +300,6 @@ public final class ScratchBuffer {
         byteArray = new byte[Math.max(byteArray.length * 2, minBytes)];
       }
       return byteArray;
-    }
-
-    MemorySegment getLoopScratch(long minBytes) {
-      if (minBytes < 0 || minBytes > MAX_SIZE) {
-        throw new IllegalArgumentException("Invalid loop scratch size: " + minBytes);
-      }
-      if (loopScratch.byteSize() < minBytes) {
-        this.loopArena = Arena.ofConfined();
-        this.arenas.add(this.loopArena);
-        this.loopScratch = loopArena.allocate(minBytes, 8);
-      }
-      return loopScratch;
     }
 
     MemorySegment getMetadataBuffer() {
@@ -325,7 +321,7 @@ public final class ScratchBuffer {
           segment = largestSegment;
           return segment;
         }
-        if (minBytes > 1024 * 1024) {
+        if (minBytes > WARN_THRESHOLD) {
           // Large scratch allocations are rare and might indicate a logic error or
           // extremely large metadata.
           InternalLogger.warn("Large scratch allocation requested: " + minBytes + " bytes");
@@ -370,21 +366,18 @@ public final class ScratchBuffer {
     private final long size;
 
     SegmentInputStream(MemorySegment segment, long size) {
-      MemorySegment checked = Objects.requireNonNull(segment, "segment");
-      acquire();
-      this.segment = checked;
-      if (size < 0 || size > checked.byteSize()) {
-        release();
-        throw new IllegalArgumentException("size must be between 0 and segment.byteSize()");
-      }
+      this.segment = segment;
       this.size = size;
       this.pos = 0;
+      acquire();
     }
 
     @Override
     public int read() {
       if (segment == null || pos >= size) return -1;
-      return segment.get(ValueLayout.JAVA_BYTE, pos++) & 0xFF;
+      int i = segment.get(ValueLayout.JAVA_BYTE, pos) & 0xFF;
+      pos++;
+      return i;
     }
 
     @Override

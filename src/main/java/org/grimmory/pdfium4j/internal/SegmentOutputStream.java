@@ -26,7 +26,8 @@ public final class SegmentOutputStream extends OutputStream {
   @Override
   public void write(int b) {
     ensureCapacity(1);
-    segment.set(ValueLayout.JAVA_BYTE, pos++, (byte) b);
+    segment.set(ValueLayout.JAVA_BYTE, pos, (byte) b);
+    pos++;
   }
 
   @Override

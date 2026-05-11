@@ -47,103 +47,49 @@ public final class AnnotBindings {
           ValueLayout.JAVA_FLOAT.withName("right"),
           ValueLayout.JAVA_FLOAT.withName("bottom"));
 
-  private static volatile MethodHandle FPDFPage_GetAnnotCount_MH = null;
+  private static final StableValue<MethodHandle> FPDFPage_GetAnnotCount_V = StableValue.of();
 
   public static MethodHandle fpdfPageGetAnnotCount() {
-    MethodHandle mh = FPDFPage_GetAnnotCount_MH;
-    if (mh == null) {
-      synchronized (AnnotBindings.class) {
-        mh = FPDFPage_GetAnnotCount_MH;
-        if (mh == null) {
-          mh = find("FPDFPage_GetAnnotCount", FunctionDescriptor.of(C_INT, C_POINTER), true);
-          FPDFPage_GetAnnotCount_MH = mh;
-        }
-      }
-    }
-    return mh;
+    return FPDFPage_GetAnnotCount_V.orElseSet(
+        () -> find("FPDFPage_GetAnnotCount", FunctionDescriptor.of(C_INT, C_POINTER), true));
   }
 
-  private static volatile MethodHandle FPDFPage_GetAnnot_MH = null;
+  private static final StableValue<MethodHandle> FPDFPage_GetAnnot_V = StableValue.of();
 
   public static MethodHandle fpdfPageGetAnnot() {
-    MethodHandle mh = FPDFPage_GetAnnot_MH;
-    if (mh == null) {
-      synchronized (AnnotBindings.class) {
-        mh = FPDFPage_GetAnnot_MH;
-        if (mh == null) {
-          mh = find("FPDFPage_GetAnnot", FunctionDescriptor.of(C_POINTER, C_POINTER, C_INT), true);
-          FPDFPage_GetAnnot_MH = mh;
-        }
-      }
-    }
-    return mh;
+    return FPDFPage_GetAnnot_V.orElseSet(
+        () -> find("FPDFPage_GetAnnot", FunctionDescriptor.of(C_POINTER, C_POINTER, C_INT), true));
   }
 
-  private static volatile MethodHandle FPDFPage_CloseAnnot_MH = null;
+  private static final StableValue<MethodHandle> FPDFPage_CloseAnnot_V = StableValue.of();
 
   public static MethodHandle fpdfPageCloseAnnot() {
-    MethodHandle mh = FPDFPage_CloseAnnot_MH;
-    if (mh == null) {
-      synchronized (AnnotBindings.class) {
-        mh = FPDFPage_CloseAnnot_MH;
-        if (mh == null) {
-          mh = find("FPDFPage_CloseAnnot", FunctionDescriptor.ofVoid(C_POINTER), true);
-          FPDFPage_CloseAnnot_MH = mh;
-        }
-      }
-    }
-    return mh;
+    return FPDFPage_CloseAnnot_V.orElseSet(
+        () -> find("FPDFPage_CloseAnnot", FunctionDescriptor.ofVoid(C_POINTER), true));
   }
 
-  private static volatile MethodHandle FPDFAnnot_GetSubtype_MH = null;
+  private static final StableValue<MethodHandle> FPDFAnnot_GetSubtype_V = StableValue.of();
 
   public static MethodHandle fpdfAnnotGetSubtype() {
-    MethodHandle mh = FPDFAnnot_GetSubtype_MH;
-    if (mh == null) {
-      synchronized (AnnotBindings.class) {
-        mh = FPDFAnnot_GetSubtype_MH;
-        if (mh == null) {
-          mh = find("FPDFAnnot_GetSubtype", FunctionDescriptor.of(C_INT, C_POINTER), true);
-          FPDFAnnot_GetSubtype_MH = mh;
-        }
-      }
-    }
-    return mh;
+    return FPDFAnnot_GetSubtype_V.orElseSet(
+        () -> find("FPDFAnnot_GetSubtype", FunctionDescriptor.of(C_INT, C_POINTER), true));
   }
 
-  private static volatile MethodHandle FPDFAnnot_GetStringValue_MH = null;
+  private static final StableValue<MethodHandle> FPDFAnnot_GetStringValue_V = StableValue.of();
 
   public static MethodHandle fpdfAnnotGetStringValue() {
-    MethodHandle mh = FPDFAnnot_GetStringValue_MH;
-    if (mh == null) {
-      synchronized (AnnotBindings.class) {
-        mh = FPDFAnnot_GetStringValue_MH;
-        if (mh == null) {
-          mh =
-              find(
-                  "FPDFAnnot_GetStringValue",
-                  FunctionDescriptor.of(C_LONG, C_POINTER, C_POINTER, C_POINTER, C_LONG),
-                  false);
-          FPDFAnnot_GetStringValue_MH = mh;
-        }
-      }
-    }
-    return mh;
+    return FPDFAnnot_GetStringValue_V.orElseSet(
+        () ->
+            find(
+                "FPDFAnnot_GetStringValue",
+                FunctionDescriptor.of(C_LONG, C_POINTER, C_POINTER, C_POINTER, C_LONG),
+                false));
   }
 
-  private static volatile MethodHandle FPDFAnnot_GetRect_MH = null;
+  private static final StableValue<MethodHandle> FPDFAnnot_GetRect_V = StableValue.of();
 
   public static MethodHandle fpdfAnnotGetRect() {
-    MethodHandle mh = FPDFAnnot_GetRect_MH;
-    if (mh == null) {
-      synchronized (AnnotBindings.class) {
-        mh = FPDFAnnot_GetRect_MH;
-        if (mh == null) {
-          mh = find("FPDFAnnot_GetRect", FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER), true);
-          FPDFAnnot_GetRect_MH = mh;
-        }
-      }
-    }
-    return mh;
+    return FPDFAnnot_GetRect_V.orElseSet(
+        () -> find("FPDFAnnot_GetRect", FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER), true));
   }
 }

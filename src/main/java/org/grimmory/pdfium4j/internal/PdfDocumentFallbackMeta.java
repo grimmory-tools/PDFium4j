@@ -178,7 +178,7 @@ public final class PdfDocumentFallbackMeta {
         i++;
       }
     }
-    return new String(out.toByteArray(), StandardCharsets.ISO_8859_1);
+    return out.toString(StandardCharsets.ISO_8859_1);
   }
 
   private static int processEscape(byte[] raw, int nextIdx, ByteArrayOutputStream out) {

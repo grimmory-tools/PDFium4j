@@ -9,6 +9,8 @@ import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SymbolLookup;
 import java.lang.foreign.ValueLayout;
+import java.lang.foreign.ValueLayout.OfInt;
+import java.lang.foreign.ValueLayout.OfLong;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.Map;
@@ -25,7 +27,7 @@ public final class FfmHelper {
   public static final Linker LINKER = Linker.nativeLinker();
   public static final SymbolLookup LOOKUP = SymbolLookup.loaderLookup();
 
-  private static volatile Map<String, MemoryLayout> CANONICAL_LAYOUTS = null;
+  private static final StableValue<Map<String, MemoryLayout>> CANONICAL_LAYOUTS = StableValue.of();
 
   private static Map<String, MemoryLayout> getCanonicalLayoutsSafe() {
     try {
@@ -37,24 +39,16 @@ public final class FfmHelper {
   }
 
   private static Map<String, MemoryLayout> layouts() {
-    Map<String, MemoryLayout> l = CANONICAL_LAYOUTS;
-    if (l == null) {
-      synchronized (FfmHelper.class) {
-        l = CANONICAL_LAYOUTS;
-        if (l == null) {
-          l = getCanonicalLayoutsSafe();
-          CANONICAL_LAYOUTS = l;
-        }
-      }
-    }
-    return l;
+    return CANONICAL_LAYOUTS.orElseSet(FfmHelper::getCanonicalLayoutsSafe);
   }
 
-  public static final ValueLayout.OfInt C_INT =
-      (ValueLayout.OfInt) layouts().getOrDefault("int", ValueLayout.JAVA_INT);
+  public static final OfInt C_INT =
+      (OfInt) layouts().getOrDefault("int", ValueLayout.JAVA_INT);
+
+  private static final StableValue<ValueLayout> C_LONG_V = StableValue.of();
 
   public static final ValueLayout C_LONG =
-      (ValueLayout) layouts().getOrDefault("long", detectCLongLayout());
+      (ValueLayout) layouts().getOrDefault("long", C_LONG_V.orElseSet(FfmHelper::detectCLongLayout));
 
   private static ValueLayout detectCLongLayout() {
     String os = System.getProperty("os.name").toLowerCase(Locale.ROOT);
@@ -66,27 +60,27 @@ public final class FfmHelper {
 
   /** Read a platform-dependent C 'long' value from the given memory segment. */
   public static long readCLong(MemorySegment seg, long offset) {
-    if (C_LONG instanceof ValueLayout.OfLong ofLong) {
+    if (C_LONG instanceof OfLong ofLong) {
       return seg.get(ofLong, offset);
     } else {
-      return seg.get((ValueLayout.OfInt) C_LONG, offset);
+      return seg.get((OfInt) C_LONG, offset);
     }
   }
 
   /** Write a platform-dependent C 'long' value to the given memory segment. */
   public static void writeCLong(MemorySegment seg, long offset, long value) {
-    if (C_LONG instanceof ValueLayout.OfLong ofLong) {
+    if (C_LONG instanceof OfLong ofLong) {
       seg.set(ofLong, offset, value);
     } else {
-      seg.set((ValueLayout.OfInt) C_LONG, offset, Math.toIntExact(value));
+      seg.set((OfInt) C_LONG, offset, Math.toIntExact(value));
     }
   }
 
   public static final ValueLayout C_SIZE_T =
       (ValueLayout) layouts().getOrDefault("size_t", ValueLayout.JAVA_LONG);
 
-  public static final ValueLayout.OfInt C_BOOL =
-      (ValueLayout.OfInt) layouts().getOrDefault("int", ValueLayout.JAVA_INT);
+  public static final OfInt C_BOOL =
+      (OfInt) layouts().getOrDefault("int", ValueLayout.JAVA_INT);
 
   public static final AddressLayout C_POINTER = ValueLayout.ADDRESS;
 

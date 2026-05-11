@@ -39,228 +39,119 @@ public final class DocBindings {
     }
   }
 
-  private static volatile MethodHandle FPDF_GetMetaText_MH = null;
+  private static final StableValue<MethodHandle> FPDF_GetMetaText_V = StableValue.of();
 
   public static MethodHandle fpdfGetMetaText() {
-    MethodHandle mh = FPDF_GetMetaText_MH;
-    if (mh == null) {
-      synchronized (DocBindings.class) {
-        mh = FPDF_GetMetaText_MH;
-        if (mh == null) {
-          mh =
-              find(
-                  "FPDF_GetMetaText",
-                  FunctionDescriptor.of(C_LONG, C_POINTER, C_POINTER, C_POINTER, C_LONG),
-                  false);
-          FPDF_GetMetaText_MH = mh;
-        }
-      }
-    }
-    return mh;
+    return FPDF_GetMetaText_V.orElseSet(
+        () ->
+            find(
+                "FPDF_GetMetaText",
+                FunctionDescriptor.of(C_LONG, C_POINTER, C_POINTER, C_POINTER, C_LONG),
+                false));
   }
 
-  private static volatile MethodHandle FPDF_GetXMPMetadata_MH = null;
+  private static final StableValue<MethodHandle> FPDF_GetXMPMetadata_V = StableValue.of();
 
   public static MethodHandle fpdfGetXMPMetadata() {
-    MethodHandle mh = FPDF_GetXMPMetadata_MH;
-    if (mh == null) {
-      synchronized (DocBindings.class) {
-        mh = FPDF_GetXMPMetadata_MH;
-        if (mh == null) {
-          mh =
-              find(
-                  "FPDF_GetXMPMetadata",
-                  FunctionDescriptor.of(C_LONG, C_POINTER, C_POINTER, C_LONG),
-                  false);
-          FPDF_GetXMPMetadata_MH = mh;
-        }
-      }
-    }
-    return mh;
+    return FPDF_GetXMPMetadata_V.orElseSet(
+        () ->
+            find(
+                "FPDF_GetXMPMetadata",
+                FunctionDescriptor.of(C_LONG, C_POINTER, C_POINTER, C_LONG),
+                false));
   }
 
-  private static volatile MethodHandle FPDF_GetFileVersion_MH = null;
+  private static final StableValue<MethodHandle> FPDF_GetFileVersion_V = StableValue.of();
 
   public static MethodHandle fpdfGetFileVersion() {
-    MethodHandle mh = FPDF_GetFileVersion_MH;
-    if (mh == null) {
-      synchronized (DocBindings.class) {
-        mh = FPDF_GetFileVersion_MH;
-        if (mh == null) {
-          mh =
-              find("FPDF_GetFileVersion", FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER), true);
-          FPDF_GetFileVersion_MH = mh;
-        }
-      }
-    }
-    return mh;
+    return FPDF_GetFileVersion_V.orElseSet(
+        () -> find("FPDF_GetFileVersion", FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER), true));
   }
 
-  private static volatile MethodHandle FPDFPage_Delete_MH = null;
+  private static final StableValue<MethodHandle> FPDFPage_Delete_V = StableValue.of();
 
   public static MethodHandle fpdfPageDelete() {
-    MethodHandle mh = FPDFPage_Delete_MH;
-    if (mh == null) {
-      synchronized (DocBindings.class) {
-        mh = FPDFPage_Delete_MH;
-        if (mh == null) {
-          mh = find("FPDFPage_Delete", FunctionDescriptor.ofVoid(C_POINTER, C_INT), false);
-          FPDFPage_Delete_MH = mh;
-        }
-      }
-    }
-    return mh;
+    return FPDFPage_Delete_V.orElseSet(
+        () -> find("FPDFPage_Delete", FunctionDescriptor.ofVoid(C_POINTER, C_INT), false));
   }
 
-  private static volatile MethodHandle FPDFBookmark_GetFirstChild_MH = null;
+  private static final StableValue<MethodHandle> FPDFBookmark_GetFirstChild_V = StableValue.of();
 
   public static MethodHandle fpdfBookmarkGetFirstChild() {
-    MethodHandle mh = FPDFBookmark_GetFirstChild_MH;
-    if (mh == null) {
-      synchronized (DocBindings.class) {
-        mh = FPDFBookmark_GetFirstChild_MH;
-        if (mh == null) {
-          mh =
-              find(
-                  "FPDFBookmark_GetFirstChild",
-                  FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER),
-                  true);
-          FPDFBookmark_GetFirstChild_MH = mh;
-        }
-      }
-    }
-    return mh;
+    return FPDFBookmark_GetFirstChild_V.orElseSet(
+        () ->
+            find(
+                "FPDFBookmark_GetFirstChild",
+                FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER),
+                true));
   }
 
-  private static volatile MethodHandle FPDFBookmark_GetNextSibling_MH = null;
+  private static final StableValue<MethodHandle> FPDFBookmark_GetNextSibling_V = StableValue.of();
 
   public static MethodHandle fpdfBookmarkGetNextSibling() {
-    MethodHandle mh = FPDFBookmark_GetNextSibling_MH;
-    if (mh == null) {
-      synchronized (DocBindings.class) {
-        mh = FPDFBookmark_GetNextSibling_MH;
-        if (mh == null) {
-          mh =
-              find(
-                  "FPDFBookmark_GetNextSibling",
-                  FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER),
-                  true);
-          FPDFBookmark_GetNextSibling_MH = mh;
-        }
-      }
-    }
-    return mh;
+    return FPDFBookmark_GetNextSibling_V.orElseSet(
+        () ->
+            find(
+                "FPDFBookmark_GetNextSibling",
+                FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER),
+                true));
   }
 
-  private static volatile MethodHandle FPDFBookmark_GetTitle_MH = null;
+  private static final StableValue<MethodHandle> FPDFBookmark_GetTitle_V = StableValue.of();
 
   public static MethodHandle fpdfBookmarkGetTitle() {
-    MethodHandle mh = FPDFBookmark_GetTitle_MH;
-    if (mh == null) {
-      synchronized (DocBindings.class) {
-        mh = FPDFBookmark_GetTitle_MH;
-        if (mh == null) {
-          mh =
-              find(
-                  "FPDFBookmark_GetTitle",
-                  FunctionDescriptor.of(C_LONG, C_POINTER, C_POINTER, C_LONG),
-                  false);
-          FPDFBookmark_GetTitle_MH = mh;
-        }
-      }
-    }
-    return mh;
+    return FPDFBookmark_GetTitle_V.orElseSet(
+        () ->
+            find(
+                "FPDFBookmark_GetTitle",
+                FunctionDescriptor.of(C_LONG, C_POINTER, C_POINTER, C_LONG),
+                false));
   }
 
-  private static volatile MethodHandle FPDFBookmark_GetDest_MH = null;
+  private static final StableValue<MethodHandle> FPDFBookmark_GetDest_V = StableValue.of();
 
   public static MethodHandle fpdfBookmarkGetDest() {
-    MethodHandle mh = FPDFBookmark_GetDest_MH;
-    if (mh == null) {
-      synchronized (DocBindings.class) {
-        mh = FPDFBookmark_GetDest_MH;
-        if (mh == null) {
-          mh =
-              find(
-                  "FPDFBookmark_GetDest",
-                  FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER),
-                  true);
-          FPDFBookmark_GetDest_MH = mh;
-        }
-      }
-    }
-    return mh;
+    return FPDFBookmark_GetDest_V.orElseSet(
+        () ->
+            find(
+                "FPDFBookmark_GetDest",
+                FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER),
+                true));
   }
 
-  private static volatile MethodHandle FPDFBookmark_GetAction_MH = null;
+  private static final StableValue<MethodHandle> FPDFBookmark_GetAction_V = StableValue.of();
 
   public static MethodHandle fpdfBookmarkGetAction() {
-    MethodHandle mh = FPDFBookmark_GetAction_MH;
-    if (mh == null) {
-      synchronized (DocBindings.class) {
-        mh = FPDFBookmark_GetAction_MH;
-        if (mh == null) {
-          mh = find("FPDFBookmark_GetAction", FunctionDescriptor.of(C_POINTER, C_POINTER), true);
-          FPDFBookmark_GetAction_MH = mh;
-        }
-      }
-    }
-    return mh;
+    return FPDFBookmark_GetAction_V.orElseSet(
+        () -> find("FPDFBookmark_GetAction", FunctionDescriptor.of(C_POINTER, C_POINTER), true));
   }
 
-  private static volatile MethodHandle FPDFAction_GetType_MH = null;
+  private static final StableValue<MethodHandle> FPDFAction_GetType_V = StableValue.of();
 
   public static MethodHandle fpdfActionGetType() {
-    MethodHandle mh = FPDFAction_GetType_MH;
-    if (mh == null) {
-      synchronized (DocBindings.class) {
-        mh = FPDFAction_GetType_MH;
-        if (mh == null) {
-          mh = find("FPDFAction_GetType", FunctionDescriptor.of(C_LONG, C_POINTER), true);
-          FPDFAction_GetType_MH = mh;
-        }
-      }
-    }
-    return mh;
+    return FPDFAction_GetType_V.orElseSet(
+        () -> find("FPDFAction_GetType", FunctionDescriptor.of(C_LONG, C_POINTER), true));
   }
 
-  private static volatile MethodHandle FPDFAction_GetDest_MH = null;
+  private static final StableValue<MethodHandle> FPDFAction_GetDest_V = StableValue.of();
 
   public static MethodHandle fpdfActionGetDest() {
-    MethodHandle mh = FPDFAction_GetDest_MH;
-    if (mh == null) {
-      synchronized (DocBindings.class) {
-        mh = FPDFAction_GetDest_MH;
-        if (mh == null) {
-          mh =
-              find(
-                  "FPDFAction_GetDest",
-                  FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER),
-                  true);
-          FPDFAction_GetDest_MH = mh;
-        }
-      }
-    }
-    return mh;
+    return FPDFAction_GetDest_V.orElseSet(
+        () ->
+            find(
+                "FPDFAction_GetDest",
+                FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER),
+                true));
   }
 
-  private static volatile MethodHandle FPDFDest_GetDestPageIndex_MH = null;
+  private static final StableValue<MethodHandle> FPDFDest_GetDestPageIndex_V = StableValue.of();
 
   public static MethodHandle fpdfGetDestPageIndex() {
-    MethodHandle mh = FPDFDest_GetDestPageIndex_MH;
-    if (mh == null) {
-      synchronized (DocBindings.class) {
-        mh = FPDFDest_GetDestPageIndex_MH;
-        if (mh == null) {
-          mh =
-              find(
-                  "FPDFDest_GetDestPageIndex",
-                  FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER),
-                  true);
-          FPDFDest_GetDestPageIndex_MH = mh;
-        }
-      }
-    }
-    return mh;
+    return FPDFDest_GetDestPageIndex_V.orElseSet(
+        () ->
+            find(
+                "FPDFDest_GetDestPageIndex",
+                FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER),
+                true));
   }
 }

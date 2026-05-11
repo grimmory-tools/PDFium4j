@@ -9,6 +9,7 @@ import java.lang.invoke.MethodHandle;
 import java.util.Optional;
 
 /** FFM bindings for PDFium page thumbnail functions from {@code fpdf_thumbnail.h}. */
+@SuppressWarnings("preview")
 public final class ThumbnailBindings {
 
   private ThumbnailBindings() {}

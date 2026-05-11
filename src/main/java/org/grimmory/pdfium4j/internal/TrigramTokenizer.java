@@ -17,23 +17,13 @@ public final class TrigramTokenizer {
     if (text == null || text.length() < 3) {
       return Generators.emptyLongArray();
     }
-    int len = text.length();
-    int count = len - 2;
-    long[] hashes = new long[count];
-    for (int i = 0; i < count; i++) {
-      hashes[i] =
-          ((long) text.charAt(i) << 32) | ((long) text.charAt(i + 1) << 16) | text.charAt(i + 2);
-    }
-    Arrays.sort(hashes);
-
-    // Deduplicate in-place
-    if (hashes.length <= 1) return hashes;
-    int uniqueCount = 1;
-    for (int i = 1; i < hashes.length; i++) {
-      if (hashes[i] != hashes[i - 1]) {
-        hashes[uniqueCount++] = hashes[i];
-      }
-    }
-    return uniqueCount == hashes.length ? hashes : Arrays.copyOf(hashes, uniqueCount);
+    return text.chars()
+        .boxed()
+        .gather(java.util.stream.Gatherers.windowSliding(3))
+        .mapToLong(
+            window -> ((long) window.get(0) << 32) | ((long) window.get(1) << 16) | window.get(2))
+        .distinct()
+        .sorted()
+        .toArray();
   }
 }

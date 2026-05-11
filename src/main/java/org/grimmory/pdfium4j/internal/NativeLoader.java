@@ -6,6 +6,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.lang.foreign.Arena;
 import java.lang.foreign.SymbolLookup;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -30,46 +31,43 @@ public final class NativeLoader {
   public static final String PROP_LIBRARY_PATH_ALLOW_UNSAFE = "pdfium4j.library.path.allowUnsafe";
   private static final String SYS_PROP_OS_NAME = "os.name";
 
-  private static volatile boolean loaded = false;
+  private static final StableValue<Boolean> loaded = StableValue.of();
   private static volatile Throwable loadError = null;
-  private static volatile SymbolLookup shimLookup = null;
+  private static final StableValue<SymbolLookup> shimLookup = StableValue.of();
 
   public static SymbolLookup getShimLookup() {
-    return shimLookup;
+    return shimLookup.orElse(null);
   }
 
   private NativeLoader() {}
 
   public static void ensureLoaded() {
-    if (loaded) return;
+    if (loaded.isSet()) return;
     if (loadError != null) {
       throw new NativeLoadException("Native library failed to load previously", loadError);
     }
-    synchronized (NativeLoader.class) {
-      if (loaded) return;
-      if (loadError != null) {
-        throw new NativeLoadException("Native library failed to load previously", loadError);
-      }
-      try {
-        performLoad();
-        loaded = true;
-      } catch (NativeLoadException e) {
-        loadError = e;
-        throw e;
-      } catch (Throwable t) {
-        String msg =
-            "Failed to load native library for platform "
-                + detectPlatform()
-                + " (JVM arch: "
-                + detectArch()
-                + ")";
-        if (t.getMessage() != null) {
-          msg += ": " + t.getMessage();
-        }
-        loadError = new NativeLoadException(msg, t);
-        throw (NativeLoadException) loadError;
-      }
-    }
+    loaded.orElseSet(
+        () -> {
+          try {
+            performLoad();
+            return true;
+          } catch (NativeLoadException e) {
+            loadError = e;
+            throw e;
+          } catch (Throwable t) {
+            String msg =
+                "Failed to load native library for platform "
+                    + detectPlatform()
+                    + " (JVM arch: "
+                    + detectArch()
+                    + ")";
+            if (t.getMessage() != null) {
+              msg += ": " + t.getMessage();
+            }
+            loadError = new NativeLoadException(msg, t);
+            throw (NativeLoadException) loadError;
+          }
+        });
   }
 
   private static void performLoad() {
@@ -202,7 +200,7 @@ public final class NativeLoader {
           if (Files.exists(depPath)) {
             var lookup = loadLibraryFile(depPath);
             if (lib.contains("shim")) {
-              shimLookup = lookup;
+              shimLookup.trySet(lookup);
             }
           }
         }
@@ -212,10 +210,10 @@ public final class NativeLoader {
     }
   }
 
-  private static java.lang.foreign.SymbolLookup loadLibraryFile(Path path) {
+  private static SymbolLookup loadLibraryFile(Path path) {
     try {
       System.load(path.toAbsolutePath().toString());
-      return java.lang.foreign.SymbolLookup.libraryLookup(path, java.lang.foreign.Arena.global());
+      return SymbolLookup.libraryLookup(path, Arena.global());
     } catch (UnsatisfiedLinkError e) {
       String msg =
           "Failed to load native library: " + path.getFileName() + ". Error: " + e.getMessage();
