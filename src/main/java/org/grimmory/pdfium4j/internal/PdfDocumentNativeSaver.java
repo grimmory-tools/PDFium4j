@@ -1,7 +1,5 @@
 package org.grimmory.pdfium4j.internal;
 
-import static java.lang.foreign.ValueLayout.JAVA_INT;
-
 import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.foreign.Arena;
@@ -56,7 +54,8 @@ public final class PdfDocumentNativeSaver {
       MemorySegment fileWrite = arena.allocate(EditBindings.FPDF_FILEWRITE_LAYOUT);
       fileWrite.set(ValueLayout.JAVA_INT, 0, 1); // version
       fileWrite.set(ValueLayout.ADDRESS, 8, callback); // WriteBlock
-      fileWrite.set(ValueLayout.ADDRESS, 16, MemorySegment.ofAddress(id)); // bufferId (as pointer value)
+      fileWrite.set(
+          ValueLayout.ADDRESS, 16, MemorySegment.ofAddress(id)); // bufferId (as pointer value)
 
       int rc = (int) EditBindings.fpdfSaveAsCopy().invokeExact(docHandle, fileWrite, 0);
 
@@ -76,14 +75,20 @@ public final class PdfDocumentNativeSaver {
 
   @SuppressWarnings("unused")
   private static int writeBlock(MemorySegment pThis, MemorySegment pData, long size) {
-    WriteContext ctx = CONTEXTS.get(pThis.address());
-    if (ctx == null) return 0;
     try {
+      // pThis points to the FPDF_FILEWRITE structure itself.
+      // clientData (bufferId) is at offset 16 on 64-bit platforms.
+      MemorySegment clientData = pThis.reinterpret(24).get(ValueLayout.ADDRESS, 16);
+      WriteContext ctx = CONTEXTS.get(clientData.address());
+      if (ctx == null) return 0;
+
       if (size > 0) {
-        ctx.out.write(pData.reinterpret(size).toArray(ValueLayout.JAVA_BYTE));
+        byte[] buf = new byte[(int) size];
+        MemorySegment.copy(pData.reinterpret(size), ValueLayout.JAVA_BYTE, 0, buf, 0, (int) size);
+        ctx.out.write(buf);
       }
       return 1;
-    } catch (IOException _) {
+    } catch (IOException | RuntimeException _) {
       return 0;
     }
   }

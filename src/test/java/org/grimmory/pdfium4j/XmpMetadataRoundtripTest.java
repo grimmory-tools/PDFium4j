@@ -81,6 +81,7 @@ class XmpMetadataRoundtripTest {
 
     String xmp = writer.write(metaWithCustom);
     assertTrue(xmp.contains("xmlns:foo="), "Should contain auto-generated namespace for foo");
-    assertTrue(xmp.contains("<foo:subtitle>Test Subtitle</foo:subtitle>"), "Should contain custom field");
+    assertTrue(
+        xmp.contains("<foo:subtitle>Test Subtitle</foo:subtitle>"), "Should contain custom field");
   }
 }
