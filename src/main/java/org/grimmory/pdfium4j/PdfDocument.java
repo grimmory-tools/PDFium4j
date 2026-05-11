@@ -1199,7 +1199,7 @@ public final class PdfDocument implements AutoCloseable {
     }
   }
 
-  public void save(Path path) {
+  public void save(Path path) throws IOException {
     ensureOpen();
     if (path.equals(sourcePath)) {
       saveToSourcePath(path);
@@ -1208,7 +1208,7 @@ public final class PdfDocument implements AutoCloseable {
     }
   }
 
-  private void saveToSourcePath(Path path) {
+  private void saveToSourcePath(Path path) throws IOException {
     Path temp = null;
     boolean detachedSource = false;
     try {
@@ -1244,6 +1244,7 @@ public final class PdfDocument implements AutoCloseable {
       }
     } catch (IOException e) {
       handleSaveError(path, e, detachedSource);
+      throw e;
     } finally {
       cleanupTempFile(temp);
     }
@@ -1259,73 +1260,68 @@ public final class PdfDocument implements AutoCloseable {
         PdfiumLibrary.ignore(restoreEx);
       }
     }
-    throw new PdfiumException("Failed to save to source path: " + path, e);
   }
 
-  private void saveToNewPath(Path path) {
+  private void saveToNewPath(Path path) throws IOException {
     ensureOpen();
-    try {
-      byte[] modifiedBytes = null;
-      if (structurallyModified) {
-        modifiedBytes = saveNativeToBytes();
-      }
-
-      PdfSaver.SaveParams params =
-          new PdfSaver.SaveParams(
-              handle,
-              pendingMetadata,
-              pendingCustomMetadata,
-              nativeMetadataProvider,
-              !pendingMetadata.isEmpty() || !pendingCustomMetadata.isEmpty(),
-              pendingXmp,
-              modifiedBytes != null ? null : sourcePath,
-              path,
-              modifiedBytes != null ? modifiedBytes : sourceBytes,
-              modifiedBytes != null ? MemorySegment.NULL : sourceSegment,
-              null);
-      PdfSaver.save(params);
-      structurallyModified = false;
-    } catch (IOException e) {
-      throw new PdfiumException("Failed to save to " + path, e);
+    byte[] modifiedBytes = null;
+    if (structurallyModified) {
+      modifiedBytes = saveNativeToBytes();
     }
+
+    PdfSaver.SaveParams params =
+        new PdfSaver.SaveParams(
+            handle,
+            pendingMetadata,
+            pendingCustomMetadata,
+            nativeMetadataProvider,
+            !pendingMetadata.isEmpty() || !pendingCustomMetadata.isEmpty(),
+            pendingXmp,
+            modifiedBytes != null ? null : sourcePath,
+            path,
+            modifiedBytes != null ? modifiedBytes : sourceBytes,
+            modifiedBytes != null ? MemorySegment.NULL : sourceSegment,
+            null);
+    PdfSaver.save(params);
+    structurallyModified = false;
   }
 
-  public void save(OutputStream out) {
+  public void save(OutputStream out) throws IOException {
     save(out, null);
   }
 
-  public void save(OutputStream out, Path targetPath) {
+  public void save(OutputStream out, Path targetPath) throws IOException {
     ensureOpen();
-    try {
-      byte[] modifiedBytes = null;
-      if (structurallyModified) {
-        modifiedBytes = saveNativeToBytes();
-      }
-
-      PdfSaver.SaveParams params =
-          new PdfSaver.SaveParams(
-              handle,
-              pendingMetadata,
-              pendingCustomMetadata,
-              nativeMetadataProvider,
-              !pendingMetadata.isEmpty() || !pendingCustomMetadata.isEmpty(),
-              pendingXmp,
-              modifiedBytes != null ? null : sourcePath,
-              targetPath,
-              modifiedBytes != null ? modifiedBytes : sourceBytes,
-              modifiedBytes != null ? MemorySegment.NULL : sourceSegment,
-              out);
-      PdfSaver.save(params);
-      structurallyModified = false;
-    } catch (IOException e) {
-      throw new PdfiumException("Failed to save document", e);
+    byte[] modifiedBytes = null;
+    if (structurallyModified) {
+      modifiedBytes = saveNativeToBytes();
     }
+
+    PdfSaver.SaveParams params =
+        new PdfSaver.SaveParams(
+            handle,
+            pendingMetadata,
+            pendingCustomMetadata,
+            nativeMetadataProvider,
+            !pendingMetadata.isEmpty() || !pendingCustomMetadata.isEmpty(),
+            pendingXmp,
+            modifiedBytes != null ? null : sourcePath,
+            targetPath,
+            modifiedBytes != null ? modifiedBytes : sourceBytes,
+            modifiedBytes != null ? MemorySegment.NULL : sourceSegment,
+            out);
+    PdfSaver.save(params);
+    structurallyModified = false;
   }
 
   public byte[] saveToBytes() {
-    ByteArrayOutputStream bos = new ByteArrayOutputStream();
-    save(bos);
-    return bos.toByteArray();
+    try {
+      ByteArrayOutputStream bos = new ByteArrayOutputStream();
+      save(bos);
+      return bos.toByteArray();
+    } catch (IOException e) {
+      throw new PdfiumException("Failed to save to bytes", e);
+    }
   }
 
   private byte[] saveNativeToBytes() throws IOException {
