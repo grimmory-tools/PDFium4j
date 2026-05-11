@@ -98,7 +98,7 @@ public final class PdfDocument implements AutoCloseable {
   private final PdfProcessingPolicy policy;
   private final int sourceFileVersion;
   private final Thread ownerThread;
-  private final List<PdfPage> openPages = new ArrayList<>(8);
+  private final java.util.SequencedCollection<PdfPage> openPages = new ArrayList<>(8);
   private volatile boolean closed = false;
 
   @SuppressWarnings("PMD.UnusedPrivateField")
@@ -111,13 +111,25 @@ public final class PdfDocument implements AutoCloseable {
     return handle;
   }
 
+  /**
+   * Configures the amount of padding lines added to XMP metadata packets globally.
+   *
+   * @param lines number of padding lines (default 20)
+   */
+  public static void setGlobalXmpPadding(int lines) {
+    XMP_WRITER.setPaddingLines(lines);
+  }
+
   private volatile int cachedPageCount = -1;
 
-  /** Lazy-parsed fallback Info dict key→value map (populated at most once per document). */
-  private volatile Map<String, String> cachedFallbackMeta;
+  /** Lazy-parsed fallback Info dict key-value map (populated at most once per document). */
+  private final StableValue<Map<String, String>> cachedFallbackMeta = StableValue.of();
 
   /** Memoized XMP bytes from file-system fallback path. */
   private volatile byte[] cachedFallbackXmp;
+
+  /** Cached parsed XMP metadata. */
+  private volatile XmpMetadata cachedXmp;
 
   private final Map<MetadataTag, String> pendingMetadata = new EnumMap<>(MetadataTag.class);
   private final Map<String, String> pendingCustomMetadata =
@@ -585,10 +597,10 @@ public final class PdfDocument implements AutoCloseable {
       return results;
     }
 
-    // Use trigram index to filter candidates
+    // Use trigram index to filter candidates.
     long[] queryHashes = TrigramTokenizer.generateTrigramHashes(normalized);
     if (queryHashes.length == 0) {
-      // Query too short for trigrams, fallback to linear scan
+      // Query too short for trigrams, fallback to linear scan.
       return searchFallback(normalized);
     }
 
@@ -599,10 +611,10 @@ public final class PdfDocument implements AutoCloseable {
       candidates.add(pages);
     }
 
-    // Intersection of candidate page lists
+    // Intersection of candidate page lists.
     List<Integer> intersected = intersect(candidates);
 
-    // Final verification (exact match)
+    // Final verification (exact match).
     List<Integer> results = new ArrayList<>(intersected.size());
     for (int pageIdx : intersected) {
       try (PdfPage p = page(pageIdx)) {
@@ -630,7 +642,7 @@ public final class PdfDocument implements AutoCloseable {
   private static List<Integer> intersect(List<int[]> lists) {
     if (lists.isEmpty()) return List.of();
 
-    // Sort lists by size to optimize intersection
+    // Sort lists by size to optimize intersection.
     lists.sort(Comparator.comparingInt(a -> a.length));
 
     int[] first = lists.getFirst();
@@ -724,7 +736,7 @@ public final class PdfDocument implements AutoCloseable {
       throw new IllegalArgumentException("consumer must not be null");
     }
 
-    // Check pending metadata first
+    // Check pending metadata first.
     if (pendingMetadata.containsKey(tag)) {
       String pending = pendingMetadata.get(tag);
       if (pending == null || pending.isEmpty()) return;
@@ -807,12 +819,9 @@ public final class PdfDocument implements AutoCloseable {
    * Returns (and lazily builds) the per-document Info-dict cache. The file is mapped at most once
    * regardless of how many metadata tags are requested.
    */
-  private synchronized Map<String, String> getOrBuildFallbackMeta() {
-    if (cachedFallbackMeta != null) return cachedFallbackMeta;
-    Map<String, String> result =
-        PdfDocumentMetadata.readAllInfoDict(sourcePath, sourceBytes, sourceSegment);
-    cachedFallbackMeta = result;
-    return result;
+  private Map<String, String> getOrBuildFallbackMeta() {
+    return cachedFallbackMeta.orElseSet(
+        () -> PdfDocumentMetadata.readAllInfoDict(sourcePath, sourceBytes, sourceSegment));
   }
 
   /**
@@ -820,16 +829,16 @@ public final class PdfDocument implements AutoCloseable {
    * re-mapping and repeated Pattern.compile() calls.
    */
   public Optional<String> metadata(String customKey) {
-    // Check known enum-backed tags first
+    // Check known enum-backed tags first.
     for (MetadataTag tag : METADATA_TAGS) {
       if (tag.pdfKey().equalsIgnoreCase(customKey)) return metadata(tag);
     }
-    // Check pending custom metadata first
+    // Check pending custom metadata first.
     String pending = pendingCustomMetadata.get(customKey);
     if (pending != null) {
       return pending.isEmpty() ? Optional.empty() : Optional.of(pending);
     }
-    // Support arbitrary /Info keys (e.g. /Language) via fpdfGetMetaText
+    // Support arbitrary /Info keys (e.g. /Language) via fpdfGetMetaText.
     ensureOpen();
     Optional<String> val = tryGetMetaText(customKey);
     if (val.isPresent()) {
@@ -902,17 +911,21 @@ public final class PdfDocument implements AutoCloseable {
    * Returns high-level structured metadata for the document, combining Info dictionary and XMP
    * data.
    */
-  public BookMetadata bookMetadata() {
+  public synchronized BookMetadata bookMetadata() {
     ensureOpen();
-    XmpMetadata xmp = XmpMetadataParser.parseFrom(this);
+    if (cachedXmp == null) {
+      cachedXmp = XmpMetadataParser.parseFrom(this);
+    }
+    XmpMetadata xmp = cachedXmp;
     Map<String, String> info = metadata();
 
     return new PdfBookMetadata(
         metadata(MetadataTag.TITLE).or(xmp::title),
+        Optional.empty(),
         authors(info, xmp),
         xmp.calibreSeries().or(() -> metadata("Series")),
         xmp.calibreSeriesIndex().stream()
-            .mapToObj(d -> (float) d)
+            .map(Double::floatValue)
             .findFirst()
             .or(
                 () ->
@@ -940,7 +953,7 @@ public final class PdfDocument implements AutoCloseable {
         xmp.description().or(() -> metadata(MetadataTag.SUBJECT)),
         metadata(MetadataTag.PRODUCER).or(xmp::publisher),
         xmp,
-        info);
+        xmp.customFields());
   }
 
   private List<String> authors(Map<String, String> info, XmpMetadata xmp) {
@@ -1126,11 +1139,13 @@ public final class PdfDocument implements AutoCloseable {
   public void setXmpMetadata(String xmp) {
     ensureOpen();
     pendingXmp = (xmp == null || xmp.isBlank()) ? null : new XmpUpdate.Raw(xmp);
+    cachedXmp = null;
   }
 
   public void setXmpMetadata(XmpMetadata metadata) {
     ensureOpen();
     pendingXmp = new XmpUpdate.Structured(metadata);
+    cachedXmp = metadata;
   }
 
   public PdfPage insertBlankPage(int index, PageSize size) {

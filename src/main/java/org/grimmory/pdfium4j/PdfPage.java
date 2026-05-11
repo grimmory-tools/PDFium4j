@@ -59,7 +59,7 @@ public final class PdfPage implements AutoCloseable {
   private final Consumer<PdfPage> onClose;
   private final Runnable onModified;
 
-  @SuppressWarnings("PMD.UnusedPrivateField")
+  @SuppressWarnings("PMD.UnusedPrivateField") // accessed via VarHandle REF_COUNT
   private int refCount = 1;
 
   private volatile boolean closedByUser = false;
@@ -148,7 +148,7 @@ public final class PdfPage implements AutoCloseable {
     // NativeBitmap owns its own arena as it may be passed across threads or have a longer lifecycle
     Arena arena = Arena.ofShared();
     try {
-      long sizeBytes = Math.multiplyExact((long) stride, (long) h);
+      long sizeBytes = Math.multiplyExact(stride, (long) h);
       MemorySegment dest = arena.allocate(sizeBytes);
       renderTo(dest, w, h, stride, flags.value(), OPAQUE_WHITE);
       return new NativeBitmap(w, h, stride, dest, arena);
@@ -350,7 +350,7 @@ public final class PdfPage implements AutoCloseable {
       return new RenderResult(1, 1, new byte[4]);
     }
 
-    long requiredBytes = w * h * BYTES_PER_PIXEL;
+    long requiredBytes = (long) w * h * BYTES_PER_PIXEL;
     if (requiredBytes > maxMemoryBytes) {
       throw new PdfiumRenderException(
           "Rendering %dx%d at %d DPI requires %d bytes, which exceeds the limit of %d bytes."
