@@ -28,6 +28,7 @@ public final class NativeLoader {
   public static final String PROP_LIBRARY_PATH = "pdfium4j.library.path";
 
   public static final String PROP_LIBRARY_PATH_ALLOW_UNSAFE = "pdfium4j.library.path.allowUnsafe";
+  private static final String SYS_PROP_OS_NAME = "os.name";
 
   private static volatile boolean loaded = false;
   private static volatile Throwable loadError = null;
@@ -216,8 +217,15 @@ public final class NativeLoader {
       System.load(path.toAbsolutePath().toString());
       return java.lang.foreign.SymbolLookup.libraryLookup(path, java.lang.foreign.Arena.global());
     } catch (UnsatisfiedLinkError e) {
-      throw new NativeLoadException(
-          "Failed to load native library: " + path.getFileName() + ". Error: " + e.getMessage(), e);
+      String msg =
+          "Failed to load native library: " + path.getFileName() + ". Error: " + e.getMessage();
+      if (System.getProperty(SYS_PROP_OS_NAME).toLowerCase(Locale.ROOT).contains("linux")) {
+        msg +=
+            " (RPATH issue? Try adding "
+                + path.getParent()
+                + " to LD_LIBRARY_PATH if $ORIGIN fails)";
+      }
+      throw new NativeLoadException(msg, e);
     }
   }
 
@@ -274,7 +282,7 @@ public final class NativeLoader {
   }
 
   static String detectPlatform() {
-    String os = System.getProperty("os.name").toLowerCase(Locale.ROOT);
+    String os = System.getProperty(SYS_PROP_OS_NAME).toLowerCase(Locale.ROOT);
     String osKey;
     if (os.contains("win")) {
       osKey = "windows";
@@ -330,7 +338,7 @@ public final class NativeLoader {
   }
 
   static String nativeFilename() {
-    String os = System.getProperty("os.name").toLowerCase(Locale.ROOT);
+    String os = System.getProperty(SYS_PROP_OS_NAME).toLowerCase(Locale.ROOT);
     if (os.contains("win")) return "pdfium" + ".dll";
     if (os.contains("mac")) return "lib" + "pdfium" + ".dylib";
     return "lib" + "pdfium" + ".so";

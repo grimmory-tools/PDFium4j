@@ -149,3 +149,10 @@ set_target_properties(pdfium4j_shim PROPERTIES
     PREFIX ""
     OUTPUT_NAME "pdfium4j_shim"
 )
+
+if(UNIX AND NOT APPLE)
+    set_target_properties(pdfium4j_shim PROPERTIES
+        BUILD_RPATH "$ORIGIN"
+        INSTALL_RPATH "$ORIGIN"
+    )
+endif()
