@@ -15,7 +15,7 @@ plugins {
 
 allprojects {
     group = "org.grimmory"
-    version = "1.1.3"
+    version = "1.1.4"
 
     repositories {
         mavenCentral()
@@ -359,6 +359,9 @@ val buildShim by tasks.registering {
             val zlibRoot = System.getenv("ZLIB_ROOT")
             val jpegRoot = System.getenv("JPEG_ROOT")
             val cmakeConfigCmd = mutableListOf("cmake", "-S", shimDir.absolutePath, "-B", ".", "-DPDFIUM_ROOT=${pdfiumRoot.absolutePath}")
+            if (platform.contains("musl")) {
+                cmakeConfigCmd.add("-DSHIM_IS_MUSL=ON")
+            }
 
             if (zlibRoot != null && !zlibRoot.isBlank()) {
                 cmakeConfigCmd.add("-DZLIB_ROOT=$zlibRoot")

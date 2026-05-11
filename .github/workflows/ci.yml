@@ -83,3 +83,21 @@ jobs:
         with:
           name: test-results-${{ matrix.platform }}
           path: '**/build/reports/tests/**'
+
+  verify-musl-hardening:
+    name: Verify Linux Musl (Alpine) Hardening
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and Verify Static Linkage
+        run: |
+          docker run --rm -v "$PWD":/workspace -w /workspace \
+            gradle:9.4.1-jdk25-alpine \
+            sh -c "apk add --no-cache cmake make g++ libjpeg-turbo-dev libjpeg-turbo-static zlib-dev zlib-static && \
+                  ./gradlew buildShim -PpdfiumPlatformFilter=linux-musl-x64 && \
+                  echo '--- VERIFYING BINARY ---' && \
+                  SHIM_PATH=\$(find build/shim-build/linux-musl-x64 -name 'pdfium4j_shim.so') && \
+                  ldd \$SHIM_PATH && \
+                  ! ldd \$SHIM_PATH | grep -q 'libz.so' || (echo 'ERROR: libz.so dynamic dependency detected!' && exit 1) && \
+                  ! ldd \$SHIM_PATH | grep -q 'libjpeg.so' || (echo 'ERROR: libjpeg.so dynamic dependency detected!' && exit 1) && \
+                  echo 'Success: No dynamic dependencies for zlib/jpeg detected.'"

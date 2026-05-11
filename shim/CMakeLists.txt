@@ -101,7 +101,8 @@ set(JPEG_LIBRARY "${LIBJPEG_LIB_PATH}" CACHE FILEPATH "" FORCE)
 
 # HIJACK: Create dummy targets for 'z' and 'jpeg' to shadow the system ones.
 # This ensures that even when QPDF specifies 'z' or 'jpeg', it resolves to our static files.
-if(ZLIB_FOUND AND JPEG_FOUND)
+# We ONLY do this on MUSL/Alpine because system static libraries on Ubuntu are not -fPIC.
+if(SHIM_IS_MUSL AND ZLIB_FOUND AND JPEG_FOUND)
     if(NOT TARGET z)
         add_library(z STATIC IMPORTED GLOBAL)
         set_target_properties(z PROPERTIES IMPORTED_LOCATION "${ZLIB_LIB_PATH}")
@@ -165,12 +166,20 @@ if(NOT PDFIUM_LIB)
     message(FATAL_ERROR "Could not find pdfium library in ${PDFIUM_ROOT}")
 endif()
 
-if(ZLIB_FOUND AND JPEG_FOUND)
+if(SHIM_IS_MUSL AND ZLIB_FOUND AND JPEG_FOUND)
     # Force use of absolute paths to static archives to ensure no runtime dependencies
     target_link_libraries(pdfium4j_shim PRIVATE 
         ${PDFIUM_LIB} 
         z 
         jpeg
+        libqpdf
+    )
+elseif(ZLIB_FOUND AND JPEG_FOUND)
+    # On non-musl, link normally (likely shared) to avoid -fPIC issues with system static libs
+    target_link_libraries(pdfium4j_shim PRIVATE 
+        ${PDFIUM_LIB} 
+        "${ZLIB_LIB_PATH}" 
+        "${LIBJPEG_LIB_PATH}" 
         libqpdf
     )
 else()
