@@ -153,12 +153,13 @@ if(NOT PDFIUM_LIB)
 endif()
 
 if(ZLIB_FOUND AND JPEG_FOUND)
-    # Prefer imported targets when available; fallback to raw paths only if needed
-    if(TARGET ZLIB::ZLIB AND TARGET JPEG::JPEG)
-        target_link_libraries(pdfium4j_shim PRIVATE ${PDFIUM_LIB} ZLIB::ZLIB JPEG::JPEG libqpdf)
-    else()
-        target_link_libraries(pdfium4j_shim PRIVATE ${PDFIUM_LIB} ${ZLIB_LIB_PATH} ${LIBJPEG_LIB_PATH} libqpdf)
-    endif()
+    # Force use of absolute paths to static archives to ensure no runtime dependencies
+    target_link_libraries(pdfium4j_shim PRIVATE 
+        ${PDFIUM_LIB} 
+        "${ZLIB_LIB_PATH}" 
+        "${LIBJPEG_LIB_PATH}" 
+        libqpdf
+    )
 else()
     # Fallback for Windows if we can't find them but QPDF might find them internally
     target_link_libraries(pdfium4j_shim PRIVATE ${PDFIUM_LIB} libqpdf)
