@@ -58,7 +58,7 @@ public final class ShimBindings {
 
   private static void check(String name, MethodHandle mh) {
     if (mh == null) {
-      System.err.println("CRITICAL: Missing required PDFium shim symbol: " + name);
+      InternalLogger.error("CRITICAL: Missing required PDFium shim symbol: " + name);
       throw new RuntimeException("Missing required PDFium shim symbol: " + name);
     }
   }

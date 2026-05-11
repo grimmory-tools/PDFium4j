@@ -9,4 +9,8 @@ public final class InternalLogger {
   public static void warn(String msg) {
     LOGGER.log(System.Logger.Level.WARNING, msg);
   }
+
+  public static void error(String msg) {
+    LOGGER.log(System.Logger.Level.ERROR, msg);
+  }
 }

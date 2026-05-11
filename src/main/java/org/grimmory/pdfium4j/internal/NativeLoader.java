@@ -198,7 +198,7 @@ public final class NativeLoader {
       List<String> libs = readLibraryIndex(resourceBase + "native-libs.txt");
       for (String lib : libs) {
         if (!isAllowed(lib)) {
-          System.err.println("CRITICAL: Refusing to load untrusted native library: " + lib);
+          InternalLogger.error("CRITICAL: Refusing to load untrusted native library: " + lib);
           throw new NativeLoadException(
               "Refusing to load untrusted native library '"
                   + lib
@@ -250,6 +250,7 @@ public final class NativeLoader {
     if (lower.contains("jpeg")) return true;
     if (lower.contains("stdcpp") || lower.contains("gcc_s")) return true;
     if (lower.contains("libc.so") || lower.contains("libm.so")) return true;
+    if (lower.contains("klibc")) return true;
 
     if (ALLOWED_LIBS.contains(lib)) return true;
     String base = lib;
