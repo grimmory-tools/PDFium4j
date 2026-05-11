@@ -3,6 +3,7 @@ package org.grimmory.pdfium4j;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -10,6 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -18,6 +20,7 @@ import java.util.logging.Logger;
 import java.util.stream.Stream;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.grimmory.pdfium4j.internal.InternalLogger;
 import org.grimmory.pdfium4j.model.MetadataTag;
 import org.grimmory.pdfium4j.model.PdfProcessingPolicy;
 import org.grimmory.pdfium4j.model.XmpMetadata;
@@ -152,8 +155,8 @@ class CorpusMetadataRoundTripTest {
         assertEquals(testTitle, doc.metadata(MetadataTag.TITLE).orElse(null));
         XmpMetadata xmp = XmpMetadataParser.parseFrom(doc);
         assertNotNull(xmp, "XMP missing");
-        List<String> tags = xmp.customListFields().get("xmp:CustomKey");
-        assertNotNull(tags, "XMP missing custom key: xmp:CustomKey");
+        List<String> tags = xmp.findListField("CustomKey");
+        assertFalse(tags.isEmpty(), "XMP missing custom key: CustomKey");
         assertTrue(tags.contains(customTagValue), "Custom tag value mismatch");
       }
     } catch (Throwable t) {
@@ -165,6 +168,12 @@ class CorpusMetadataRoundTripTest {
         System.err.println("Failed to copy debug file: " + e.getMessage());
       }
       throw t;
+    } finally {
+      try (Stream<Path> walk = Files.walk(tempDir)) {
+        walk.sorted(Comparator.reverseOrder()).map(Path::toFile).forEach(File::delete);
+      } catch (IOException _) {
+        InternalLogger.warn("Cleanup of temporary directory failed (ignored)");
+      }
     }
   }
 

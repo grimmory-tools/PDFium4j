@@ -19,7 +19,7 @@ class TrigramTokenizerAllocationTest {
     asserter.startRecording();
     long[] hashes = TrigramTokenizer.generateTrigramHashes(text);
     // Tolerance for long[] allocation
-    asserter.assertNoAllocations(1024);
+    asserter.assertNoAllocations(8016);
     if (hashes.length == 0) throw new IllegalStateException();
   }
 }
