@@ -147,41 +147,40 @@ jobs:
           name: pdfium4j-jars-${{ matrix.platform }}
           path: build/libs/*.jar
 
-  verify-distribution:
-    name: Final Smoke Test (${{ matrix.os }} - ${{ matrix.arch }})
-    needs: [build, verify-musl-hardening]
+  verify-dist-glibc:
+    name: Smoke Test (Ubuntu - x64)
+    needs: [build]
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu
-            arch: x64
-            image: eclipse-temurin:25-jdk
-            proj_platform: linux-x64
-            docker_platform: linux/amd64
-          - os: alpine
-            arch: x64
-            image: eclipse-temurin:25-jdk-alpine
-            proj_platform: linux-musl-x64
-            docker_platform: linux/amd64
     steps:
       - uses: actions/checkout@v4
-      - name: Set up QEMU
-        if: matrix.arch == 'arm64'
-        uses: docker/setup-qemu-action@49b3bc8e6bdd4a60e6116a5414239cba5943d3cf # v3.3.0
       - name: Download Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: pdfium4j-jars-${{ matrix.proj_platform }}
+          name: pdfium4j-jars-linux-x64
           path: build/libs
       - name: Run Standalone Smoke Test
         run: |
-          docker run --rm --platform ${{ matrix.docker_platform }} -v "$PWD":/workspace -w /workspace ${{ matrix.image }} \
+          docker run --rm -v "$PWD":/workspace -w /workspace eclipse-temurin:25-jdk \
             sh -c "cd /workspace && \
-                  # Build a classpath including ALL downloaded jars
                   CP=\$(ls build/libs/*.jar | tr '\n' ':')src/test/java && \
-                  # Compile with Java 25 preview enabled
                   javac --enable-preview --release 25 -cp \"\$CP\" src/test/java/org/grimmory/pdfium4j/NativeSmokeTest.java && \
-                  # Run with native access and preview enabled
+                  java --enable-preview --enable-native-access=ALL-UNNAMED -cp \"\$CP\" org.grimmory.pdfium4j.NativeSmokeTest"
+
+  verify-dist-musl:
+    name: Smoke Test (Alpine - x64)
+    needs: [verify-musl-hardening]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: pdfium4j-jars-linux-musl-x64
+          path: build/libs
+      - name: Run Standalone Smoke Test
+        run: |
+          docker run --rm -v "$PWD":/workspace -w /workspace eclipse-temurin:25-jdk-alpine \
+            sh -c "cd /workspace && \
+                  CP=\$(ls build/libs/*.jar | tr '\n' ':')src/test/java && \
+                  javac --enable-preview --release 25 -cp \"\$CP\" src/test/java/org/grimmory/pdfium4j/NativeSmokeTest.java && \
                   java --enable-preview --enable-native-access=ALL-UNNAMED -cp \"\$CP\" org.grimmory.pdfium4j.NativeSmokeTest"
