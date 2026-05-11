@@ -42,21 +42,19 @@ set(ENABLE_QTC OFF)
 set(USE_IMPLICIT_CRYPTO OFF)
 set(REQUIRE_CRYPTO_NATIVE ON)
 
+# --- Save current suffixes ---
+set(_saved_find_suffixes "${CMAKE_FIND_LIBRARY_SUFFIXES}")
+if(WIN32)
+    set(CMAKE_FIND_LIBRARY_SUFFIXES .lib .a)
+else()
+    set(CMAKE_FIND_LIBRARY_SUFFIXES .a)
+endif()
+
+# --- ZLIB ---
 find_package(ZLIB QUIET)
 if(NOT ZLIB_FOUND)
     find_path(ZLIB_H_PATH zlib.h HINTS ${ZLIB_ROOT} ${ZLIB_ROOT}/include)
-    
-    # Force archive lookup to ensure static linking
-    set(_saved_find_suffixes "${CMAKE_FIND_LIBRARY_SUFFIXES}")
-    if(WIN32)
-        set(CMAKE_FIND_LIBRARY_SUFFIXES .lib .a)
-    else()
-        set(CMAKE_FIND_LIBRARY_SUFFIXES .a)
-    endif()
-    
     find_library(ZLIB_LIB_PATH NAMES zlibstatic z zlib-static libz.a zlib.lib HINTS ${ZLIB_ROOT} ${ZLIB_ROOT}/lib)
-    set(CMAKE_FIND_LIBRARY_SUFFIXES "${_saved_find_suffixes}")
-    
     if(ZLIB_H_PATH AND ZLIB_LIB_PATH)
         set(ZLIB_FOUND ON)
     endif()
@@ -65,21 +63,11 @@ else()
     set(ZLIB_LIB_PATH "${ZLIB_LIBRARY}" CACHE FILEPATH "Path to zlib library" FORCE)
 endif()
 
+# --- JPEG ---
 find_package(JPEG QUIET)
 if(NOT JPEG_FOUND)
     find_path(LIBJPEG_H_PATH jpeglib.h HINTS ${JPEG_ROOT} ${JPEG_ROOT}/include)
-    
-    # Force archive lookup to ensure static linking
-    set(_saved_find_suffixes "${CMAKE_FIND_LIBRARY_SUFFIXES}")
-    if(WIN32)
-        set(CMAKE_FIND_LIBRARY_SUFFIXES .lib .a)
-    else()
-        set(CMAKE_FIND_LIBRARY_SUFFIXES .a)
-    endif()
-    
     find_library(LIBJPEG_LIB_PATH NAMES jpeg-static jpeg libjpeg.a jpeg.lib HINTS ${JPEG_ROOT} ${JPEG_ROOT}/lib)
-    set(CMAKE_FIND_LIBRARY_SUFFIXES "${_saved_find_suffixes}")
-    
     if(LIBJPEG_H_PATH AND LIBJPEG_LIB_PATH)
         set(JPEG_FOUND ON)
     endif()
@@ -87,6 +75,8 @@ else()
     set(LIBJPEG_H_PATH "${JPEG_INCLUDE_DIR}" CACHE PATH "Path to jpeglib.h" FORCE)
     set(LIBJPEG_LIB_PATH "${JPEG_LIBRARY}" CACHE FILEPATH "Path to jpeg library" FORCE)
 endif()
+
+set(CMAKE_FIND_LIBRARY_SUFFIXES "${_saved_find_suffixes}")
 
 message(STATUS "ZLIB_FOUND: ${ZLIB_FOUND} (Path: ${ZLIB_LIB_PATH})")
 message(STATUS "JPEG_FOUND: ${JPEG_FOUND} (Path: ${LIBJPEG_LIB_PATH})")
