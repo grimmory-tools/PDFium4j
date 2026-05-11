@@ -1,16 +1,15 @@
 package org.grimmory.pdfium4j;
 
 public class NativeSmokeTest {
-    static void main() {
+    public static void main(String[] args) {
         try {
             System.out.println("Starting PDFium4j Smoke Test...");
             System.out.println("OS: " + System.getProperty("os.name"));
             System.out.println("Arch: " + System.getProperty("os.arch"));
             
-            // This will trigger native loading
-            int version = Pdfium4j.getLibraryVersion();
-            System.out.println("Successfully loaded PDFium4j!");
-            System.out.println("PDFium Version: " + version);
+            // This will trigger native loading and library initialization
+            PdfiumLibrary.initialize();
+            System.out.println("Successfully loaded and initialized PDFium4j!");
             
             System.out.println("--- SMOKE TEST PASSED ---");
         } catch (Throwable e) {
