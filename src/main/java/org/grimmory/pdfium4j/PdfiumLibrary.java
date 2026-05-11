@@ -71,6 +71,10 @@ public final class PdfiumLibrary {
         AnnotBindings.checkRequired();
         ShimBindings.checkRequired();
 
+        if (ShimBindings.pdfium4jResolveOptionalSymbols() != null) {
+          ShimBindings.pdfium4jResolveOptionalSymbols().invokeExact();
+        }
+
         // Set renderer type if supported
         if (ViewBindings.fpdfSetRendererType() != null) {
           ViewBindings.fpdfSetRendererType().invokeExact(rendererType);

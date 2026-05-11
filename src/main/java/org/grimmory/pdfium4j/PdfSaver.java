@@ -13,10 +13,8 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.nio.file.attribute.PosixFilePermissions;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import org.grimmory.pdfium4j.internal.ShimBindings;
@@ -67,37 +65,14 @@ final class PdfSaver {
   public static void save(SaveParams params) throws IOException {
     if (params.targetPath() != null) {
       // File-to-file save
-      Path source = params.sourcePath();
-      Path tempSource = null;
-      try {
-        if (source == null) {
-          tempSource = Files.createTempFile("pdfium4j-src-", ".pdf");
-          try {
-            if (tempSource.getFileSystem().supportedFileAttributeViews().contains("posix")) {
-              Files.setPosixFilePermissions(
-                  tempSource, PosixFilePermissions.fromString("rw-------"));
-            }
-          } catch (UnsupportedOperationException | IOException ignored) {
-            // Ignored if POSIX is not supported
-          }
-          if (params.sourceBytes() != null) {
-            Files.write(tempSource, params.sourceBytes());
-          } else if (params.sourceSegment() != MemorySegment.NULL) {
-            try (FileChannel fc = FileChannel.open(tempSource, StandardOpenOption.WRITE)) {
-              fc.write(params.sourceSegment().asByteBuffer());
-            }
-          }
-          source = tempSource;
-        }
-        saveNative(
-            source.toString(),
-            params.targetPath().toString(),
-            params.pendingXmp(),
-            params.pendingMetadata(),
-            params.pendingCustomMetadata());
-      } finally {
-        if (tempSource != null) Files.deleteIfExists(tempSource);
-      }
+      saveNative(
+          params.sourcePath() != null ? params.sourcePath().toString() : null,
+          params.sourceBytes(),
+          params.sourceSegment(),
+          params.targetPath().toString(),
+          params.pendingXmp(),
+          params.pendingMetadata(),
+          params.pendingCustomMetadata());
     } else if (params.out() != null) {
       // Stream-based save (no temp files if we have bytes/segment)
       if (params.sourceBytes() != null) {
@@ -172,7 +147,9 @@ final class PdfSaver {
   }
 
   private static void saveNative(
-      String src,
+      String srcPath,
+      byte[] srcBytes,
+      MemorySegment srcSeg,
       String dst,
       XmpUpdate xmp,
       Map<MetadataTag, String> metadata,
@@ -184,16 +161,45 @@ final class PdfSaver {
 
       int rc;
       try {
-        rc =
-            (int)
-                ShimBindings.pdfium4jSaveWithMetadata()
-                    .invokeExact(
-                        arena.allocateFrom(src),
-                        arena.allocateFrom(dst),
-                        xmpRes.segment(),
-                        xmpRes.length(),
-                        metaRes.segment(),
-                        metaRes.count());
+        if (srcPath != null) {
+          rc =
+              (int)
+                  ShimBindings.pdfium4jSaveWithMetadata()
+                      .invokeExact(
+                          arena.allocateFrom(srcPath),
+                          arena.allocateFrom(dst),
+                          xmpRes.segment(),
+                          xmpRes.length(),
+                          metaRes.segment(),
+                          metaRes.count());
+        } else if (srcBytes != null) {
+          MemorySegment dataSeg = arena.allocateFrom(JAVA_BYTE, srcBytes);
+          rc =
+              (int)
+                  ShimBindings.pdfium4jSaveWithMetadataMemToFile()
+                      .invokeExact(
+                          dataSeg,
+                          (long) srcBytes.length,
+                          arena.allocateFrom(dst),
+                          xmpRes.segment(),
+                          xmpRes.length(),
+                          metaRes.segment(),
+                          metaRes.count());
+        } else if (srcSeg != MemorySegment.NULL) {
+          rc =
+              (int)
+                  ShimBindings.pdfium4jSaveWithMetadataMemToFile()
+                      .invokeExact(
+                          srcSeg,
+                          srcSeg.byteSize(),
+                          arena.allocateFrom(dst),
+                          xmpRes.segment(),
+                          xmpRes.length(),
+                          metaRes.segment(),
+                          metaRes.count());
+        } else {
+          throw new IOException("No source provided for native save");
+        }
       } catch (Throwable t) {
         throw new IOException("Native save failed", t);
       }
@@ -234,12 +240,16 @@ final class PdfSaver {
     MemorySegment metaPairs = arena.allocate(ValueLayout.ADDRESS, (long) totalMetaSize * 2);
     int i = 0;
     for (Map.Entry<MetadataTag, String> entry : metadata.entrySet()) {
-      metaPairs.setAtIndex(ValueLayout.ADDRESS, i++, arena.allocateFrom(entry.getKey().pdfKey()));
-      metaPairs.setAtIndex(ValueLayout.ADDRESS, i++, arena.allocateFrom(entry.getValue()));
+      metaPairs.setAtIndex(ValueLayout.ADDRESS, i, arena.allocateFrom(entry.getKey().pdfKey()));
+      i++;
+      metaPairs.setAtIndex(ValueLayout.ADDRESS, i, arena.allocateFrom(entry.getValue()));
+      i++;
     }
     for (Map.Entry<String, String> entry : customMetadata.entrySet()) {
-      metaPairs.setAtIndex(ValueLayout.ADDRESS, i++, arena.allocateFrom(entry.getKey()));
-      metaPairs.setAtIndex(ValueLayout.ADDRESS, i++, arena.allocateFrom(entry.getValue()));
+      metaPairs.setAtIndex(ValueLayout.ADDRESS, i, arena.allocateFrom(entry.getKey()));
+      i++;
+      metaPairs.setAtIndex(ValueLayout.ADDRESS, i, arena.allocateFrom(entry.getValue()));
+      i++;
     }
     return new MetaResult(metaPairs, totalMetaSize);
   }
