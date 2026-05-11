@@ -151,8 +151,9 @@ set_target_properties(pdfium4j_shim PROPERTIES
 )
 
 if(UNIX AND NOT APPLE)
-    set_target_properties(pdfium4j_shim PROPERTIES
-        BUILD_RPATH "$ORIGIN"
-        INSTALL_RPATH "$ORIGIN"
-    )
+    target_link_options(pdfium4j_shim PRIVATE "LINKER:-rpath,$ORIGIN")
+endif()
+
+if(UNIX AND NOT APPLE)
+    target_link_options(pdfium4j_shim PRIVATE "LINKER:-rpath,$ORIGIN")
 endif()
