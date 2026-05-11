@@ -295,6 +295,9 @@ val buildShim by tasks.registering {
     doLast {
         val hostIsArm64 = hostArch == "aarch64" || hostArch == "arm64"
         val hostIsX64 = hostArch == "x86_64" || hostArch == "amd64"
+        val hostIsMusl = project.file("/lib/ld-musl-x86_64.so.1").exists() ||
+                         project.file("/lib/ld-musl-aarch64.so.1").exists() ||
+                         project.file("/usr/lib/ld-musl-x86_64.so.1").exists()
 
         activePlatforms.keys.forEach { platform ->
             val platformIsArm64 = platform.endsWith("arm64")
@@ -310,8 +313,11 @@ val buildShim by tasks.registering {
             val isHostCompatible = when {
                 platform.startsWith("darwin") && hostOs.contains("mac") ->
                     (hostIsArm64 && platformIsArm64) || (hostIsX64 && platformIsX64)
-                platform.startsWith("linux") && hostOs.contains("linux") ->
-                    (hostIsArm64 && platformIsArm64) || (hostIsX64 && platformIsX64)
+                platform.startsWith("linux") && hostOs.contains("linux") -> {
+                    val platformIsMusl = platform.contains("musl")
+                    val libcCompatible = platformIsMusl == hostIsMusl
+                    libcCompatible && ((hostIsArm64 && platformIsArm64) || (hostIsX64 && platformIsX64))
+                }
                 platform.startsWith("windows") && hostOs.contains("windows") ->
                     hostIsX64 && platformIsX64
                 else -> false
