@@ -1525,26 +1525,24 @@ class PdfDocumentTest {
     byte[] savedBytes = Files.readAllBytes(pdf);
     String savedText = new String(savedBytes, StandardCharsets.ISO_8859_1);
 
-    // Search for the Metadata object - QPDF writes /Length before /Type and /Subtype,
-    // but handle all key orderings for robustness across QPDF versions
-    Pattern pattern =
-        Pattern.compile(
-            "/Length\\s+(\\d+)\\s*/Type\\s*/Metadata\\s*/Subtype\\s*/XML"
-                + "|/Length\\s+(\\d+)\\s*/Subtype\\s*/XML\\s*/Type\\s*/Metadata"
-                + "|/Type\\s*/Metadata\\s*/Subtype\\s*/XML\\s*/Length\\s+(\\d+)"
-                + "|/Subtype\\s*/XML\\s*/Type\\s*/Metadata\\s*/Length\\s+(\\d+)");
-    Matcher matcher = pattern.matcher(savedText);
-    assertTrue(matcher.find(), "XMP metadata stream object should be present");
-    int metaIdx = matcher.start();
-    // Extract /Length from whichever group matched
-    int declaredLength = 0;
-    for (int g = 1; g <= matcher.groupCount(); g++) {
-      if (matcher.group(g) != null) {
-        declaredLength = Integer.parseInt(matcher.group(g));
-        break;
-      }
-    }
+    // Find /Type /Metadata in the PDF (QPDF may write keys in any order and add extra keys like
+    // /Filter; search for /Type /Metadata then find /Length anywhere in the enclosing dict)
+    Pattern typeMetaPattern = Pattern.compile("/Type\\s*/Metadata");
+    Matcher typeMatcher = typeMetaPattern.matcher(savedText);
+    assertTrue(typeMatcher.find(), "XMP metadata stream object should be present");
+    int typeMetaPos = typeMatcher.start();
+
+    // Find the enclosing dict start (search backward for <<)
+    int dictStart = savedText.lastIndexOf("<<", typeMetaPos);
+    assertTrue(dictStart >= 0, "XMP stream dict << should be present");
+    // Find /Length within the dict region
+    String dictRegion = savedText.substring(dictStart, typeMetaPos + 300);
+    Pattern lenPattern = Pattern.compile("/Length\\s+(\\d+)");
+    Matcher lenMatcher = lenPattern.matcher(dictRegion);
+    assertTrue(lenMatcher.find(), "XMP stream /Length should be present in dict");
+    int declaredLength = Integer.parseInt(lenMatcher.group(1));
     assertTrue(declaredLength > 0, "XMP stream /Length should be positive");
+    int metaIdx = dictStart;
 
     // Find actual stream content between "stream\n" and "\nendstream"
     int streamKeyword = savedText.indexOf("stream\n", metaIdx);
