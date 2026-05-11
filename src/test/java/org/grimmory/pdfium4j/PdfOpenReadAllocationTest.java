@@ -5,12 +5,14 @@ import static java.lang.foreign.ValueLayout.JAVA_INT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.IOException;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.grimmory.pdfium4j.internal.NoAllocationPathProbe;
+import org.grimmory.pdfium4j.util.AllocationTestUtils;
 import org.grimmory.pdfium4j.model.MetadataTag;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -112,20 +114,10 @@ class PdfOpenReadAllocationTest {
   }
 
   private static Path findCorpusPdf() {
-    Path projectRoot = Path.of("").toAbsolutePath();
-    Path corpusPdf =
-        projectRoot.resolve("corpus").resolve("gutenberg/1063_The Cask of Amontillado.pdf");
-    if (!Files.exists(corpusPdf)) {
-      // Fallback for different test execution environments
-      corpusPdf =
-          projectRoot
-              .resolve("..")
-              .resolve("corpus")
-              .resolve("gutenberg/1063_The Cask of Amontillado.pdf");
+    try {
+      return AllocationTestUtils.getTestPdf(PdfOpenReadAllocationTest.class);
+    } catch (IOException e) {
+      throw new IllegalStateException("Failed to find test PDF", e);
     }
-    if (!Files.exists(corpusPdf)) {
-      throw new IllegalStateException("Corpus PDF not found at: " + corpusPdf);
-    }
-    return corpusPdf;
   }
 }

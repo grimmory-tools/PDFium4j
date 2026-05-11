@@ -10,7 +10,6 @@ import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.grimmory.pdfium4j.internal.ScratchBuffer;
 import org.grimmory.pdfium4j.model.MetadataTag;
-import org.grimmory.pdfium4j.util.AllocationTestUtils;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -120,10 +119,12 @@ class ZeroAllocationCallbackAllocationTest {
   }
 
   private static Path findCorpusPdf() {
-    try {
-      return AllocationTestUtils.getTestPdf(ZeroAllocationCallbackAllocationTest.class);
-    } catch (IOException _) {
-      return SAMPLE_PDF;
+    Path projectRoot = Path.of("").toAbsolutePath();
+    Path corpusPdf =
+        projectRoot.resolve("corpus").resolve("gutenberg/1063_The Cask of Amontillado.pdf");
+    if (Files.exists(corpusPdf)) {
+      return corpusPdf;
     }
+    return SAMPLE_PDF;
   }
 }
