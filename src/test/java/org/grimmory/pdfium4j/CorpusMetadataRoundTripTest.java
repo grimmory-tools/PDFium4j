@@ -21,6 +21,7 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.grimmory.pdfium4j.model.MetadataTag;
 import org.grimmory.pdfium4j.model.PdfProcessingPolicy;
 import org.grimmory.pdfium4j.model.XmpMetadata;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -42,28 +43,32 @@ class CorpusMetadataRoundTripTest {
     if (!Files.exists(corpusDir)) {
       corpusDir = Path.of("..", "corpus");
     }
-    if (!Files.exists(corpusDir)) return Stream.empty();
+    if (!Files.exists(corpusDir)) return Stream.of(Path.of("__NO_CORPUS__"));
     String filter = System.getProperty("sourcePdf");
-    return Stream.of("gutenberg", "mozilla-pdfjs", "random")
-        .map(corpusDir::resolve)
-        .filter(Files::exists)
-        .flatMap(
-            dir -> {
-              try {
-                return Files.walk(dir)
-                    .filter(p -> p.toString().endsWith(".pdf"))
-                    .filter(p -> !p.toString().contains("/quarantine/"))
-                    .filter(p -> filter == null || p.toString().contains(filter));
-              } catch (IOException e) {
-                return Stream.empty();
-              }
-            })
-        .sorted();
+    List<Path> files =
+        Stream.of("gutenberg", "mozilla-pdfjs", "random")
+            .map(corpusDir::resolve)
+            .filter(Files::exists)
+            .flatMap(
+                dir -> {
+                  try {
+                    return Files.walk(dir)
+                        .filter(p -> p.toString().endsWith(".pdf"))
+                        .filter(p -> !p.toString().contains("/quarantine/"))
+                        .filter(p -> filter == null || p.toString().contains(filter));
+                  } catch (IOException e) {
+                    return Stream.empty();
+                  }
+                })
+            .sorted()
+            .toList();
+    return files.isEmpty() ? Stream.of(Path.of("__NO_CORPUS__")) : files.stream();
   }
 
   @ParameterizedTest
   @MethodSource("getCorpusFiles")
   void roundtripCorpusTest(Path sourcePdf) throws Exception {
+    Assumptions.assumeTrue(Files.exists(sourcePdf), "Corpus not available");
     Files.writeString(
         Path.of("test_progress.log"),
         "Processing: " + sourcePdf + "\n",

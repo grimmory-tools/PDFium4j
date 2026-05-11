@@ -18,6 +18,7 @@ import java.util.stream.Stream;
 import org.grimmory.pdfium4j.model.MetadataTag;
 import org.grimmory.pdfium4j.model.PdfProcessingPolicy;
 import org.grimmory.pdfium4j.model.XmpMetadata;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -43,38 +44,42 @@ class FullCorpusStressTest {
     if (!Files.exists(baseDir)) {
       baseDir = Path.of("..", "corpus");
     }
-    if (!Files.exists(baseDir)) return Stream.empty();
+    if (!Files.exists(baseDir)) return Stream.of(Path.of("__NO_CORPUS__"));
 
     String filter = System.getProperty("sourcePdf");
     String limitStr = System.getProperty("corpus.limit");
     int limit = (limitStr != null) ? Integer.parseInt(limitStr) : Integer.MAX_VALUE;
 
-    return Stream.of("gutenberg", "mozilla-pdfjs", "random")
-        .map(baseDir::resolve)
-        .filter(Files::exists)
-        .flatMap(
-            dir -> {
-              try {
-                return Files.walk(dir)
-                    .filter(p -> p.toString().endsWith(".pdf"))
-                    .filter(p -> !p.toString().contains("/quarantine/"))
-                    .filter(
-                        p ->
-                            filter == null
-                                || "all".equalsIgnoreCase(filter)
-                                || p.toString().contains(filter));
-              } catch (IOException _) {
-                return Stream.empty();
-              }
-            })
-        .sorted()
-        .limit(limit);
+    List<Path> files =
+        Stream.of("gutenberg", "mozilla-pdfjs", "random")
+            .map(baseDir::resolve)
+            .filter(Files::exists)
+            .flatMap(
+                dir -> {
+                  try {
+                    return Files.walk(dir)
+                        .filter(p -> p.toString().endsWith(".pdf"))
+                        .filter(p -> !p.toString().contains("/quarantine/"))
+                        .filter(
+                            p ->
+                                filter == null
+                                    || "all".equalsIgnoreCase(filter)
+                                    || p.toString().contains(filter));
+                  } catch (IOException _) {
+                    return Stream.empty();
+                  }
+                })
+            .sorted()
+            .limit(limit)
+            .toList();
+    return files.isEmpty() ? Stream.of(Path.of("__NO_CORPUS__")) : files.stream();
   }
 
   @ParameterizedTest(name = "{0}")
   @MethodSource("getAllCorpusFiles")
   @Timeout(value = 60, unit = TimeUnit.SECONDS)
   void roundtripStressTest(Path sourcePdf) throws Exception {
+    Assumptions.assumeTrue(Files.exists(sourcePdf), "Corpus not available");
     System.out.println("Processing: " + sourcePdf);
     Path tempDir = Files.createTempDirectory("pdfium4j-stress");
     Path modifiedPdf = tempDir.resolve(sourcePdf.getFileName());
