@@ -13,7 +13,7 @@ permissions:
 jobs:
   prepare-hardened-deps:
     name: Prepare Hardened Dependencies (${{ matrix.libc }} - ${{ matrix.arch }})
-    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     strategy:
       matrix:
         include:
@@ -34,12 +34,14 @@ jobs:
             image: alpine:latest
             docker_platform: linux/arm64
     steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.2.2
       - name: Cache Key Calculation
         id: cache-key
         run: echo "key=hardened-deps-${{ matrix.libc }}-${{ matrix.arch }}-v1.3.1-v3.1.4.1" >> $GITHUB_OUTPUT
       - name: Restore Cache
         id: cache-restore
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.2
         with:
           path: build/hardened-libs
           key: ${{ steps.cache-key.outputs.key }}
@@ -82,7 +84,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             platform: linux-x64
             arch: x64
             skipTests: false
@@ -94,21 +96,21 @@ jobs:
             platform: darwin-x64
             arch: x64
             skipTests: true
-          - os: macos-latest
+          - os: macos-15
             platform: darwin-arm64
             arch: arm64
             skipTests: false
-          - os: windows-latest
+          - os: windows-2022
             platform: windows-x64
             arch: x64
             skipTests: true
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.2.2
 
       - name: Restore Hardened Deps (Linux)
         if: runner.os == 'Linux'
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.2
         with:
           path: build/hardened-libs
           key: hardened-deps-glibc-${{ matrix.arch }}-v1.3.1-v3.1.4.1
@@ -139,16 +141,16 @@ jobs:
           echo "JPEG_ROOT=$VCPKG_INSTALLATION_ROOT/installed/x64-windows" >> $GITHUB_ENV
 
       - name: Setup Java
-        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4.5.0
         with:
           distribution: temurin
           java-version: 25
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@6f229686ee4375cc4a86b2514c89bac4930e82c4 # v5.0.0
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.3.0
 
       - name: Cache PDFium binaries
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.2
         with:
           path: build/pdfium-archives
           key: pdfium-${{ hashFiles('build.gradle.kts') }}
@@ -161,23 +163,30 @@ jobs:
         run: ./gradlew allocationTests -PpdfiumPlatformFilter=${{ matrix.platform }} --warning-mode all
 
       - name: Upload Test Results
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.0
         if: always()
         with:
           name: test-results-${{ matrix.platform }}
           path: '**/build/reports/tests/**'
 
       - name: Upload JARs
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.0
         if: success()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: pdfium4j-jars-${{ matrix.platform }}
           path: build/libs/*.jar
 
+      - name: Upload Shims (for publishing)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.0
+        if: success()
+        with:
+          name: pdfium4j-shims-${{ matrix.platform }}
+          path: build/generated-natives/natives/${{ matrix.platform }}/*
+
   verify-musl-hardening:
     name: Verify Musl Hardening (${{ matrix.arch }})
     needs: [prepare-hardened-deps]
-    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     strategy:
       matrix:
         include:
@@ -188,9 +197,9 @@ jobs:
             platform: linux-musl-arm64
             docker_platform: linux/arm64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.2.2
       - name: Restore Hardened Deps (Musl)
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.2
         with:
           path: build/hardened-libs
           key: hardened-deps-musl-${{ matrix.arch }}-v1.3.1-v3.1.4.1
@@ -204,32 +213,43 @@ jobs:
                   cp -r build/hardened-libs/include/* /usr/local/include/ && \
                   cp -r build/hardened-libs/lib/* /usr/local/lib/ && \
                   ./gradlew buildShim jar verifyNativeJars -PpdfiumPlatformFilter=${{ matrix.platform }} -DZLIB_ROOT=/usr/local -DJPEG_ROOT=/usr/local && \
-                  echo '--- VERIFYING LINKAGE ---' && \
+                  echo '--- VERIFYING SHIM LINKAGE ---' && \
                   SHIM_PATH=\$(find build/shim-build/${{ matrix.platform }} -name 'pdfium4j_shim.so') && \
                   ldd \$SHIM_PATH && \
-                  ! ldd \$SHIM_PATH | grep -q 'libz.so' || (echo 'ERROR: libz.so dynamic dependency detected!' && exit 1) && \
-                  ! ldd \$SHIM_PATH | grep -q 'libjpeg.so' || (echo 'ERROR: libjpeg.so dynamic dependency detected!' && exit 1) && \
-                  ! ldd \$SHIM_PATH | grep -q 'libstdc++.so' || (echo 'ERROR: libstdc++.so dynamic dependency detected!' && exit 1) && \
-                  echo 'Success: No dynamic dependencies for zlib/jpeg/stdc++ detected.'"
+                  ! ldd \$SHIM_PATH | grep -q 'libz.so' || (echo 'ERROR: libz.so dynamic dependency detected in shim!' && exit 1) && \
+                  ! ldd \$SHIM_PATH | grep -q 'libjpeg.so' || (echo 'ERROR: libjpeg.so dynamic dependency detected in shim!' && exit 1) && \
+                  ! ldd \$SHIM_PATH | grep -q 'libstdc++.so' || (echo 'ERROR: libstdc++.so dynamic dependency detected in shim!' && exit 1) && \
+                  echo '--- VERIFYING PDFIUM LINKAGE ---' && \
+                  PDFIUM_PATH=\$(find build/pdfium-env-${{ matrix.platform }} -name 'libpdfium.so') && \
+                  ldd \$PDFIUM_PATH && \
+                  ! ldd \$PDFIUM_PATH | grep -q 'libstdc++.so' || (echo 'WARNING: libpdfium.so has dynamic libstdc++ dependency' && exit 0) && \
+                  echo 'Success: No problematic dynamic dependencies detected.'"
 
       - name: Upload Musl JARs
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.0
         if: success()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: pdfium4j-jars-${{ matrix.platform }}
           path: build/libs/*.jar
 
+      - name: Upload Musl Shims (for publishing)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.0
+        if: success()
+        with:
+          name: pdfium4j-shims-${{ matrix.platform }}
+          path: build/generated-natives/natives/${{ matrix.platform }}/*
+
   verify-dist-glibc:
     name: Smoke Test (Ubuntu - ${{ matrix.arch }})
     needs: [build]
-    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     strategy:
       matrix:
         arch: [x64, arm64]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.2.2
       - name: Download Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.1.7
         with:
           name: pdfium4j-jars-linux-${{ matrix.arch }}
           path: build/libs
@@ -244,14 +264,14 @@ jobs:
   verify-dist-musl:
     name: Smoke Test (Alpine - ${{ matrix.arch }})
     needs: [verify-musl-hardening]
-    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     strategy:
       matrix:
         arch: [x64, arm64]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.2.2
       - name: Download Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.1.7
         with:
           name: pdfium4j-jars-linux-musl-${{ matrix.arch }}
           path: build/libs
@@ -262,3 +282,46 @@ jobs:
                   CP=\$(ls build/libs/*.jar | tr '\n' ':')src/test/java && \
                   javac --enable-preview --release 25 -cp \"\$CP\" src/test/java/org/grimmory/pdfium4j/NativeSmokeTest.java && \
                   java --enable-preview --enable-native-access=ALL-UNNAMED -cp \"\$CP\" org.grimmory.pdfium4j.NativeSmokeTest"
+
+  publish:
+    name: Publish Artifacts
+    needs: [verify-dist-glibc, verify-dist-musl]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.2.2
+      
+      - name: Download all shims
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.1.7
+        with:
+          pattern: pdfium4j-shims-*
+          path: build/prebuilt-shims
+          merge-multiple: false
+
+      - name: Reorganize shims for Gradle
+        run: |
+          # Move build/prebuilt-shims/pdfium4j-shims-PLATFORM/* to build/prebuilt-shims/PLATFORM/
+          cd build/prebuilt-shims
+          for d in pdfium4j-shims-*; do
+            platform=${d#pdfium4j-shims-}
+            mkdir -p "$platform"
+            mv "$d"/* "$platform"/
+            rmdir "$d"
+          done
+
+      - name: Setup Java
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4.5.0
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.3.0
+
+      - name: Publish to Maven Central
+        run: ./gradlew publish -PprebuiltShimsDir=build/prebuilt-shims
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingKey: ${{ secrets.GPG_PRIVATE_KEY }}
+          ORG_GRADLE_PROJECT_signingPassword: ${{ secrets.GPG_PASSPHRASE }}

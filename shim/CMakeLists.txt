@@ -130,8 +130,7 @@ add_library(pdfium4j_shim SHARED
 
 target_compile_definitions(pdfium4j_shim PRIVATE PDFIUM4J_SHIM_IMPLEMENTATION)
 
-if(SHIM_IS_MUSL)
-    # 100% Guarantee: Link C++ runtime statically so we don't depend on libstdc++.so
+if(UNIX AND NOT APPLE)
     target_link_options(pdfium4j_shim PRIVATE -static-libgcc -static-libstdc++)
 endif()
 
