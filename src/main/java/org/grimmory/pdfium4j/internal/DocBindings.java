@@ -65,7 +65,8 @@ public final class DocBindings {
 
   public static MethodHandle fpdfGetFileVersion() {
     return FPDF_GetFileVersion_V.orElseSet(
-        () -> find("FPDF_GetFileVersion", FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER), true));
+        () ->
+            find("FPDF_GetFileVersion", FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER), true));
   }
 
   private static final StableValue<MethodHandle> FPDFPage_Delete_V = StableValue.of();
