@@ -233,6 +233,30 @@ jobs:
           ORG_GRADLE_PROJECT_signingKey: ${{ secrets.GPG_PRIVATE_KEY }}
           ORG_GRADLE_PROJECT_signingPassword: ${{ secrets.GPG_PASSPHRASE }}
 
+      - name: Stage unique native release assets
+        run: |
+          set -euo pipefail
+          rm -rf build/release-natives
+          mkdir -p build/release-natives
+
+          for platform_dir in build/generated-natives/natives/*; do
+            if [[ ! -d "$platform_dir" ]]; then
+              continue
+            fi
+            platform="$(basename "$platform_dir")"
+
+            for asset in "$platform_dir"/*; do
+              if [[ ! -f "$asset" ]]; then
+                continue
+              fi
+              base="$(basename "$asset")"
+              # Only include important binaries and licenses
+              if [[ "$base" == *"pdfium"* || "$base" == *"shim"* || "$base" == *"LICENSE"* || "$base" == *"NOTICE"* || "$base" == "native-libs.txt" ]]; then
+                cp "$asset" "build/release-natives/${platform}-${base}"
+              fi
+            done
+          done
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v2.3.2
         with:
@@ -243,4 +267,4 @@ jobs:
           prerelease: false
           files: |
             build/libs/*.jar
-            build/generated-natives/natives/**/*
+            build/release-natives/*
