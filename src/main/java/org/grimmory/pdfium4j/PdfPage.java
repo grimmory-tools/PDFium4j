@@ -350,7 +350,13 @@ public final class PdfPage implements AutoCloseable {
       return new RenderResult(1, 1, new byte[4]);
     }
 
-    long requiredBytes = (long) w * h * BYTES_PER_PIXEL;
+    long requiredBytes;
+    try {
+      requiredBytes = Math.multiplyExact(Math.multiplyExact((long) w, (long) h), BYTES_PER_PIXEL);
+    } catch (ArithmeticException e) {
+      throw new PdfiumRenderException(
+          "Rendering %dx%d at %d DPI exceeds addressable memory size.".formatted(w, h, dpi), e);
+    }
     if (requiredBytes > maxMemoryBytes) {
       throw new PdfiumRenderException(
           "Rendering %dx%d at %d DPI requires %d bytes, which exceeds the limit of %d bytes."

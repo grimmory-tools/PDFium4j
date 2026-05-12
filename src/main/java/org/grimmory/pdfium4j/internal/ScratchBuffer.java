@@ -147,7 +147,7 @@ public final class ScratchBuffer {
 
   /** Returns a clamped size that fits within the maximum scratch buffer limits. */
   public static long probeSize(long size) {
-    return Math.min(Math.max(0, size), MAX_SIZE);
+    return Math.clamp(size, 0, MAX_SIZE);
   }
 
   /**
@@ -186,9 +186,8 @@ public final class ScratchBuffer {
   /** Clear all thread-local buffers and close their arenas. */
   public static void purge() {
     if (STATE.isBound()) {
-      State s = STATE.get();
-      s.useCount = 0;
-      s.close();
+      InternalLogger.warn("ScratchBuffer.purge() called inside an active scope; ignoring");
+      return;
     }
     State s = BRIDGE.get();
     if (s != null) {

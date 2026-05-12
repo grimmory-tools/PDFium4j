@@ -921,7 +921,7 @@ public final class PdfDocument implements AutoCloseable {
 
     return new PdfBookMetadata(
         metadata(MetadataTag.TITLE).or(xmp::title),
-        Optional.empty(),
+        xmp.findField("subtitle").or(() -> metadata("Subtitle")),
         authors(info, xmp),
         xmp.calibreSeries().or(() -> metadata("Series")),
         xmp.calibreSeriesIndex().stream()

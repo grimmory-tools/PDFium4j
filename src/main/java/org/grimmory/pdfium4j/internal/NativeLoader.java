@@ -51,21 +51,11 @@ public final class NativeLoader {
           try {
             performLoad();
             return true;
-          } catch (NativeLoadException e) {
-            loadError = e;
-            throw e;
-          } catch (Throwable t) {
-            String msg =
-                "Failed to load native library for platform "
-                    + detectPlatform()
-                    + " (JVM arch: "
-                    + detectArch()
-                    + ")";
-            if (t.getMessage() != null) {
-              msg += ": " + t.getMessage();
-            }
-            loadError = new NativeLoadException(msg, t);
-            throw (NativeLoadException) loadError;
+          } catch (NativeLoadException _) {
+            throw new NativeLoadException("Native library failed to load previously");
+          } catch (Throwable _) {
+            throw new NativeLoadException(
+                "Failed to load native library for platform " + detectPlatform());
           }
         });
   }

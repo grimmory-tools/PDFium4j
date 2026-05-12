@@ -40,7 +40,9 @@ public final class BitmapBindings {
 
   public static MethodHandle fpdfBitmapCreate() {
     return FPDFBitmap_Create_V.orElseSet(
-        () -> find("FPDFBitmap_Create", FunctionDescriptor.of(C_POINTER, C_INT, C_INT, C_INT), false));
+        () ->
+            find(
+                "FPDFBitmap_Create", FunctionDescriptor.of(C_POINTER, C_INT, C_INT, C_INT), false));
   }
 
   private static final StableValue<MethodHandle> FPDFBitmap_CreateEx_V = StableValue.of();

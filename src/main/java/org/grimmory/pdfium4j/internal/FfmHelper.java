@@ -42,13 +42,13 @@ public final class FfmHelper {
     return CANONICAL_LAYOUTS.orElseSet(FfmHelper::getCanonicalLayoutsSafe);
   }
 
-  public static final OfInt C_INT =
-      (OfInt) layouts().getOrDefault("int", ValueLayout.JAVA_INT);
+  public static final OfInt C_INT = (OfInt) layouts().getOrDefault("int", ValueLayout.JAVA_INT);
 
   private static final StableValue<ValueLayout> C_LONG_V = StableValue.of();
 
   public static final ValueLayout C_LONG =
-      (ValueLayout) layouts().getOrDefault("long", C_LONG_V.orElseSet(FfmHelper::detectCLongLayout));
+      (ValueLayout)
+          layouts().getOrDefault("long", C_LONG_V.orElseSet(FfmHelper::detectCLongLayout));
 
   private static ValueLayout detectCLongLayout() {
     String os = System.getProperty("os.name").toLowerCase(Locale.ROOT);
@@ -79,8 +79,7 @@ public final class FfmHelper {
   public static final ValueLayout C_SIZE_T =
       (ValueLayout) layouts().getOrDefault("size_t", ValueLayout.JAVA_LONG);
 
-  public static final OfInt C_BOOL =
-      (OfInt) layouts().getOrDefault("int", ValueLayout.JAVA_INT);
+  public static final OfInt C_BOOL = (OfInt) layouts().getOrDefault("int", ValueLayout.JAVA_INT);
 
   public static final AddressLayout C_POINTER = ValueLayout.ADDRESS;
 

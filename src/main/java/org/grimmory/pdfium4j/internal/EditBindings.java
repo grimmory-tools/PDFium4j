@@ -103,11 +103,7 @@ public final class EditBindings {
             find(
                 "FPDFPage_New",
                 FunctionDescriptor.of(
-                    C_POINTER,
-                    C_POINTER,
-                    C_INT,
-                    ValueLayout.JAVA_DOUBLE,
-                    ValueLayout.JAVA_DOUBLE),
+                    C_POINTER, C_POINTER, C_INT, ValueLayout.JAVA_DOUBLE, ValueLayout.JAVA_DOUBLE),
                 false));
   }
 

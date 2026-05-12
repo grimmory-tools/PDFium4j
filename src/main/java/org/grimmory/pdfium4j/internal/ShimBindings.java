@@ -443,8 +443,7 @@ public final class ShimBindings {
                 false));
   }
 
-  private static final StableValue<MethodHandle> pdfium4jResolveOptionalSymbolsV =
-      StableValue.of();
+  private static final StableValue<MethodHandle> pdfium4jResolveOptionalSymbolsV = StableValue.of();
 
   public static MethodHandle pdfium4jResolveOptionalSymbols() {
     return pdfium4jResolveOptionalSymbolsV.orElseSet(

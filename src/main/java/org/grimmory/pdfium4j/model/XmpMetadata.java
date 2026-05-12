@@ -219,9 +219,9 @@ public record XmpMetadata(
     private String rights;
     private final List<String> identifiers = new ArrayList<>(8);
     private String pdfaConformance;
-    private final Map<String, String> calibreFields = new LinkedHashMap<>(8);
-    private final Map<String, String> customFields = new LinkedHashMap<>(8);
-    private final Map<String, List<String>> customListFields = new LinkedHashMap<>(8);
+    private final Map<String, String> calibreFields = LinkedHashMap.newLinkedHashMap(8);
+    private final Map<String, String> customFields = LinkedHashMap.newLinkedHashMap(8);
+    private final Map<String, List<String>> customListFields = LinkedHashMap.newLinkedHashMap(8);
     private final List<QualifiedIdentifier> xmpIdentifiers = new ArrayList<>(8);
 
     public Builder title(String val) {
