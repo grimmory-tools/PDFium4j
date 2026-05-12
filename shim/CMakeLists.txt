@@ -1,5 +1,5 @@
 # PDFium4j Native Shim Build
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.20)
 project(pdfium4j_shim VERSION 1.0.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
@@ -13,6 +13,13 @@ endif()
 
 # Suppress QPDF PointerHolder transition warnings (and fix MSVC #warning error)
 add_definitions(-DPOINTERHOLDER_TRANSITION=0)
+
+if(WIN32)
+    # Prevent windows.h from defining min/max macros that collide with C++ stdlib
+    add_definitions(-DNOMINMAX)
+    # Reduce the amount of Windows header bloat
+    add_definitions(-DWIN32_LEAN_AND_MEAN)
+endif()
 
 # QPDF dependency hints
 if(DEFINED ENV{ZLIB_ROOT})

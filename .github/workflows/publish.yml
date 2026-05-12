@@ -94,7 +94,7 @@ jobs:
           - os: macos-15
             platform: darwin-arm64
             arch: arm64
-          - os: windows-2022
+          - os: windows-2025
             platform: windows-x64
             arch: x64
 
