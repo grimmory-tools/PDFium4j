@@ -100,7 +100,7 @@ jobs:
             platform: darwin-arm64
             arch: arm64
             skipTests: false
-          - os: windows-2022
+          - os: windows-2025
             platform: windows-x64
             arch: x64
             skipTests: true
