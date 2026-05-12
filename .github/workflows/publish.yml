@@ -226,10 +226,10 @@ jobs:
           echo "Publishing version: $VERSION"
 
       - name: Publish
-        run: ./gradlew publish -PprebuiltShimsDir=build/prebuilt-shims
+        run: ./gradlew publishAggregationToCentralPortal -PprebuiltShimsDir=build/prebuilt-shims
         env:
-          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
-          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
+          SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
           ORG_GRADLE_PROJECT_signingKey: ${{ secrets.GPG_PRIVATE_KEY }}
           ORG_GRADLE_PROJECT_signingPassword: ${{ secrets.GPG_PASSPHRASE }}
 
