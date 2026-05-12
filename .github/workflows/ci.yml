@@ -282,4 +282,3 @@ jobs:
                   CP=\$(ls build/libs/*.jar | tr '\n' ':')src/test/java && \
                   javac --enable-preview --release 25 -cp \"\$CP\" src/test/java/org/grimmory/pdfium4j/NativeSmokeTest.java && \
                   java --enable-preview --enable-native-access=ALL-UNNAMED -cp \"\$CP\" org.grimmory.pdfium4j.NativeSmokeTest"
-
