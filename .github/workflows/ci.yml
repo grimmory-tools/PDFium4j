@@ -163,21 +163,21 @@ jobs:
         run: ./gradlew allocationTests -PpdfiumPlatformFilter=${{ matrix.platform }} --warning-mode all
 
       - name: Upload Test Results
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.6.0
         if: always()
         with:
           name: test-results-${{ matrix.platform }}
           path: '**/build/reports/tests/**'
 
       - name: Upload JARs
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.6.0
         if: success()
         with:
           name: pdfium4j-jars-${{ matrix.platform }}
           path: build/libs/*.jar
 
       - name: Upload Shims (for publishing)
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.6.0
         if: success()
         with:
           name: pdfium4j-shims-${{ matrix.platform }}
@@ -226,14 +226,14 @@ jobs:
                   echo 'Success: No problematic dynamic dependencies detected.'"
 
       - name: Upload Musl JARs
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.6.0
         if: success()
         with:
           name: pdfium4j-jars-${{ matrix.platform }}
           path: build/libs/*.jar
 
       - name: Upload Musl Shims (for publishing)
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.6.0
         if: success()
         with:
           name: pdfium4j-shims-${{ matrix.platform }}
