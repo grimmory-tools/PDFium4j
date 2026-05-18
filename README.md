@@ -73,15 +73,19 @@ try (PdfDocument doc = PdfDocument.open(Path.of("book.pdf"), null, policy)) {
 
 ## Installation
 
-The library ships as a core API JAR plus per-platform native classifier JARs.
-Add the core dependency and the classifier matching your target platform.
+> [!NOTE]
+> **Release Distribution**: PDFium4j does not distribute binary releases or raw `.jar` files via GitHub Releases. Instead, releases are published exclusively as Maven packages directly to GitHub Packages and Maven Central.
+
+#### Maven Central (Default)
+No special repository configuration is needed if your project already uses `mavenCentral()`.
+
 
 ### Gradle (Kotlin DSL)
 
 ```kotlin
 dependencies {
-    implementation("org.grimmory:pdfium4j:0.1.0")
-    runtimeOnly("org.grimmory:pdfium4j:0.1.0:natives-linux-x64")
+    implementation("org.grimmory:pdfium4j:1.2.0")
+    runtimeOnly("org.grimmory:pdfium4j:1.2.0:natives-linux-x64")
 }
 ```
 
@@ -101,8 +105,8 @@ val pdfiumNatives = when {
 }
 
 dependencies {
-    implementation("org.grimmory:pdfium4j:0.1.0")
-    runtimeOnly("org.grimmory:pdfium4j:0.1.0:$pdfiumNatives")
+    implementation("org.grimmory:pdfium4j:1.2.0")
+    runtimeOnly("org.grimmory:pdfium4j:1.2.0:$pdfiumNatives")
 }
 ```
 
@@ -110,8 +114,8 @@ dependencies {
 
 ```groovy
 dependencies {
-    implementation 'org.grimmory:pdfium4j:0.1.0'
-    runtimeOnly 'org.grimmory:pdfium4j:0.1.0:natives-linux-x64'
+    implementation 'org.grimmory:pdfium4j:1.2.0'
+    runtimeOnly 'org.grimmory:pdfium4j:1.2.0:natives-linux-x64'
 }
 ```
 
@@ -121,12 +125,12 @@ dependencies {
 <dependency>
     <groupId>org.grimmory</groupId>
     <artifactId>pdfium4j</artifactId>
-    <version>0.1.0</version>
+    <version>1.2.0</version>
 </dependency>
 <dependency>
     <groupId>org.grimmory</groupId>
     <artifactId>pdfium4j</artifactId>
-    <version>0.1.0</version>
+    <version>1.2.0</version>
     <classifier>natives-linux-x64</classifier>
 </dependency>
 ```
@@ -187,8 +191,8 @@ pdfium4j/                     Root (Java module)
 
 To build the native shim from source, the following system dependencies are required:
 
-- **CMake** 3.15+
-- **C++17 Compiler** (Clang, GCC, or MSVC)
+- **CMake** 3.20+
+- **C++23 Compiler** (Clang, GCC, or MSVC)
 - **ZLIB** (System library)
 - **JPEG** (System library, e.g., libjpeg-turbo)
 
