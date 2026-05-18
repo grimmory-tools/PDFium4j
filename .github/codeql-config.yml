@@ -1,0 +1,4 @@
+name: "Ignore Vendored Code"
+
+paths-ignore:
+  - 'shim/vendor/**'

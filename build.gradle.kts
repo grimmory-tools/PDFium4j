@@ -740,6 +740,21 @@ publishing {
             }
         }
     }
+    repositories {
+        val repo = System.getenv("GITHUB_REPOSITORY")
+        if (repo != null) {
+            maven {
+                name = "GitHubPackages"
+                url = uri("https://maven.pkg.github.com/$repo")
+                credentials {
+                    username = System.getenv("GITHUB_ACTOR")
+                    password = System.getenv("GITHUB_TOKEN")
+                }
+            }
+        } else if (gradle.startParameter.taskNames.any { it.contains("publish", ignoreCase = true) }) {
+            throw GradleException("GITHUB_REPOSITORY must be set for GitHub Packages publishing")
+        }
+    }
 }
 
 signing {
