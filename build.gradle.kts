@@ -704,7 +704,7 @@ dependencies {
     testCompileOnly("com.github.spotbugs:spotbugs-annotations:4.9.8")
     testImplementation("org.apache.pdfbox:pdfbox:3.0.7")
     testImplementation("org.apache.pdfbox:xmpbox:3.0.7")
-    testImplementation("org.junit.jupiter:junit-jupiter:5.14.4")
+    testImplementation("org.junit.jupiter:junit-jupiter:6.0.3")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
