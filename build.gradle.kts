@@ -740,6 +740,17 @@ publishing {
             }
         }
     }
+    repositories {
+        maven {
+            name = "GitHubPackages"
+            val repo = System.getenv("GITHUB_REPOSITORY") ?: "balazs-szucs/PDFium4j"
+            url = uri("https://maven.pkg.github.com/$repo")
+            credentials {
+                username = System.getenv("GITHUB_ACTOR")
+                password = System.getenv("GITHUB_TOKEN")
+            }
+        }
+    }
 }
 
 signing {
