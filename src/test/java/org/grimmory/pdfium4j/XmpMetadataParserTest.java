@@ -24,7 +24,7 @@ class XmpMetadataParserTest {
       <dc:rights><rdf:Alt><rdf:li xml:lang="x-default">Copyright 2024</rdf:li></rdf:Alt></dc:rights>\
       <dc:identifier><rdf:Bag><rdf:li>urn:isbn:978-1234567890</rdf:li></rdf:Bag></dc:identifier>\
       </rdf:Description>\
-      <rdf:Description rdf:about="" xmlns:calibre="http://calibre-ebook.com/xmp-namespace" xmlns:calibreSI="http://calibre-ebook.com/xmp-namespace/seriesIndex">\
+      <rdf:Description rdf:about="" xmlns:calibre="http://calibre-ebook.com/xmp-namespace" xmlns:calibreSI="http://calibre-ebook.com/xmp-namespace-series-index">\
       <calibre:series>Epic Series</calibre:series>\
       <calibre:series_index><calibreSI:series_index>3.5</calibreSI:series_index></calibre:series_index>\
       <calibre:rating>8</calibre:rating>\
@@ -200,7 +200,7 @@ class XmpMetadataParserTest {
   @Test
   void parsesNestedCalibreSeriesIndex() {
     String xmp =
-        "<x:xmpmeta xmlns:x='adobe:ns:meta/'><rdf:RDF xmlns:rdf='http://www.w3.org/1999/02/22-rdf-syntax-ns#' xmlns:calibre='http://calibre-ebook.com/xmp-namespace' xmlns:calibreSI='http://calibre-ebook.com/xmp-namespace/seriesIndex'>"
+        "<x:xmpmeta xmlns:x='adobe:ns:meta/'><rdf:RDF xmlns:rdf='http://www.w3.org/1999/02/22-rdf-syntax-ns#' xmlns:calibre='http://calibre-ebook.com/xmp-namespace' xmlns:calibreSI='http://calibre-ebook.com/xmp-namespace-series-index'>"
             + "<rdf:Description rdf:about=''>"
             + "<calibre:series_index><calibreSI:series_index>12.5</calibreSI:series_index></calibre:series_index>"
             + "</rdf:Description></rdf:RDF></x:xmpmeta>";
