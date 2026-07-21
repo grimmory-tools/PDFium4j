@@ -72,7 +72,7 @@ class PdfStreamAllocationTest {
     for (int i = 0; i < 1000; i++) {
       // Warmup metadata path (includes Create, Read, Close)
       try (InputStream in = doc.metadataStream(MetadataTag.TITLE)) {
-        while (in.read(ioBuffer) != -1) {
+        while (in.readNBytes(4096).length > 0) {
           // drain stream
           continue;
         }
@@ -82,7 +82,7 @@ class PdfStreamAllocationTest {
 
       // Warmup XMP path (includes Create, Read, Close)
       try (InputStream in = doc.xmpMetadataStream()) {
-        while (in.read(ioBuffer) != -1) {
+        while (in.readNBytes(4096).length > 0) {
           // drain stream
           continue;
         }

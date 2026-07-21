@@ -296,7 +296,7 @@ public final class NativeLoader {
       Path ldMusl = Path.of("/lib");
       if (Files.exists(ldMusl)) {
         try (var files = Files.list(ldMusl)) {
-          return files.anyMatch(p -> p.getFileName().toString().startsWith("ld-musl-"));
+          return files.map(Path::getFileName).anyMatch(p -> p.startsWith("ld-musl-"));
         }
       }
     } catch (IOException e) {
