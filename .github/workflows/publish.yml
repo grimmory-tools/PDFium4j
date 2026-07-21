@@ -187,7 +187,9 @@ jobs:
           name: pdfium4j-shims-${{ matrix.platform }}
           path: build/generated-natives/natives/${{ matrix.platform }}/*
 
-  publish:
+  publish-maven:
+    # Temporarily disable while we work to resolve maven access
+    if: false
     name: Publish to Maven Central
     needs: [build-native-artifacts, build-musl-artifacts]
     runs-on: ubuntu-24.04
@@ -233,6 +235,45 @@ jobs:
           SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
           ORG_GRADLE_PROJECT_signingKey: ${{ secrets.GPG_PRIVATE_KEY }}
           ORG_GRADLE_PROJECT_signingPassword: ${{ secrets.GPG_PASSPHRASE }}
+
+  publish-github:
+    name: Publish to Github Packages
+    needs: [build-native-artifacts, build-musl-artifacts]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v4.2.2
+
+      - name: Download all shims
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4.1.7
+        with:
+          pattern: pdfium4j-shims-*
+          path: build/prebuilt-shims
+          merge-multiple: false
+
+      - name: Reorganize shims
+        run: |
+          cd build/prebuilt-shims
+          for d in pdfium4j-shims-*; do
+            platform=${d#pdfium4j-shims-}
+            mkdir -p "$platform"
+            mv "$d"/* "$platform"/
+            rmdir "$d"
+          done
+
+      - name: Setup Java
+        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v4.5.0
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v4.3.0
+
+      - name: Set version from tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          sed -i "s/version = \".*\"/version = \"$VERSION\"/" build.gradle.kts
+          echo "Publishing version: $VERSION"
 
       - name: Publish to GitHub Packages
         run: ./gradlew publishMavenJavaPublicationToGitHubPackagesRepository -PprebuiltShimsDir=build/prebuilt-shims
