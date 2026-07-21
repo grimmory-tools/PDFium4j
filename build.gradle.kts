@@ -10,7 +10,7 @@ plugins {
     checkstyle
     pmd
     id("com.diffplug.spotless") version "8.7.0"
-    id("com.github.spotbugs") version "6.5.4"
+    id("com.github.spotbugs") version "6.5.9"
 }
 
 allprojects {
