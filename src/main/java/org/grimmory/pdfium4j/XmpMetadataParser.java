@@ -44,7 +44,7 @@ public final class XmpMetadataParser {
   private static final String NS_XMP = "http://ns.adobe.com/xap/1.0/";
   private static final String NS_XMP_IDQ = "http://ns.adobe.com/xmp/Identifier/qual/1.0/";
 
-  private static final String NS_CALIBRE_SI = "http://calibre-ebook.com/xmp-namespace/seriesIndex";
+  private static final String NS_CALIBRE_SI = "http://calibre-ebook.com/xmp-namespace-series-index";
 
   private static final Set<String> CORE_NAMESPACES =
       Set.of(
