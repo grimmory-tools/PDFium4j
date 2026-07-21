@@ -68,56 +68,67 @@ public final class XmpMetadataWriter {
   private static final String RDF_SEQ_END = "    </rdf:Seq>\n";
   private static final String ATTRIBUTE_END = "\">\n";
 
+  private final Object lock = new Object(); // private final lock object
   private boolean paddingEnabled = true;
   private int paddingLines = 20;
   private final Map<String, String> customNamespaces = LinkedHashMap.newLinkedHashMap(8);
 
-  public synchronized XmpMetadataWriter setPaddingEnabled(boolean enabled) {
-    this.paddingEnabled = enabled;
-    return this;
-  }
-
-  public synchronized XmpMetadataWriter setPaddingLines(int lines) {
-    if (lines < 0) throw new IllegalArgumentException("Padding lines must be >= 0");
-    this.paddingLines = lines;
-    return this;
-  }
-
-  public synchronized XmpMetadataWriter registerNamespace(String prefix, String uri) {
-    Objects.requireNonNull(prefix, "prefix");
-    Objects.requireNonNull(uri, "uri");
-    if (prefix.isEmpty()) throw new IllegalArgumentException("Prefix must not be empty");
-    if (BUILTIN_NS_PREFIXES.containsKey(prefix.toLowerCase(Locale.ROOT))
-        || "rdf".equals(prefix)
-        || "xml".equals(prefix)) {
-      throw new IllegalArgumentException("Prefix '" + prefix + "' is reserved");
+  public XmpMetadataWriter setPaddingEnabled(boolean enabled) {
+    synchronized (lock) {
+      this.paddingEnabled = enabled;
+      return this;
     }
-    if (!isValidNcName(prefix)) throw new IllegalArgumentException("Invalid prefix: " + prefix);
-    customNamespaces.put(prefix, uri);
-    return this;
   }
 
-  public synchronized String write(XmpMetadata metadata) {
-    Objects.requireNonNull(metadata, "metadata");
-    validate(metadata);
-    StringWriter sw = new StringWriter();
-    try {
-      writeToSink(metadata, new WriterSink(sw));
-    } catch (IOException e) {
-      throw new PdfiumException("Unexpected I/O error writing to StringWriter", e);
+  public XmpMetadataWriter setPaddingLines(int lines) {
+    synchronized (lock) {
+      if (lines < 0) throw new IllegalArgumentException("Padding lines must be >= 0");
+      this.paddingLines = lines;
+      return this;
     }
-    return sw.toString();
   }
 
-  public synchronized void write(XmpMetadata metadata, OutputStream out) {
-    Objects.requireNonNull(metadata, "metadata");
-    Objects.requireNonNull(out, "out");
-    validate(metadata);
-    try {
-      writeToSink(metadata, new OutputStreamSink(out));
-      out.flush();
-    } catch (IOException e) {
-      throw new PdfiumException("I/O error writing XMP to stream", e);
+  public XmpMetadataWriter registerNamespace(String prefix, String uri) {
+    synchronized (lock) {
+      Objects.requireNonNull(prefix, "prefix");
+      Objects.requireNonNull(uri, "uri");
+      if (prefix.isEmpty()) throw new IllegalArgumentException("Prefix must not be empty");
+      if (BUILTIN_NS_PREFIXES.containsKey(prefix.toLowerCase(Locale.ROOT))
+              || "rdf".equals(prefix)
+              || "xml".equals(prefix)) {
+        throw new IllegalArgumentException("Prefix '" + prefix + "' is reserved");
+      }
+      if (!isValidNcName(prefix)) throw new IllegalArgumentException("Invalid prefix: " + prefix);
+      customNamespaces.put(prefix, uri);
+      return this;
+    }
+  }
+
+  public String write(XmpMetadata metadata) {
+    synchronized (lock) {
+      Objects.requireNonNull(metadata, "metadata");
+      validate(metadata);
+      StringWriter sw = new StringWriter();
+      try {
+        writeToSink(metadata, new WriterSink(sw));
+      } catch (IOException e) {
+        throw new PdfiumException("Unexpected I/O error writing to StringWriter", e);
+      }
+      return sw.toString();
+    }
+  }
+
+  public void write(XmpMetadata metadata, OutputStream out) {
+    synchronized (lock) {
+      Objects.requireNonNull(metadata, "metadata");
+      Objects.requireNonNull(out, "out");
+      validate(metadata);
+      try {
+        writeToSink(metadata, new OutputStreamSink(out));
+        out.flush();
+      } catch (IOException e) {
+        throw new PdfiumException("I/O error writing XMP to stream", e);
+      }
     }
   }
 
