@@ -365,13 +365,8 @@ public final class PdfDocument implements AutoCloseable {
     Arena arena = Arena.ofShared();
     boolean success = false;
     try {
-      PdfDocument document = PdfDocumentOpener.open(
-              segment,
-              null,
-              resolvePolicy(policy),
-              arena,
-              null
-      );
+      PdfDocument document =
+          PdfDocumentOpener.open(segment, null, resolvePolicy(policy), arena, null);
       success = true;
       return document;
     } finally {
@@ -420,18 +415,18 @@ public final class PdfDocument implements AutoCloseable {
 
       try {
         MemorySegment pageHandle =
-                (MemorySegment) ViewBindings.fpdfLoadPage().invokeExact(handle, index);
+            (MemorySegment) ViewBindings.fpdfLoadPage().invokeExact(handle, index);
         if (FfmHelper.isNull(pageHandle)) throwLastError("Failed to load page " + index);
         PdfPage page =
-                new PdfPage(
-                        pageHandle,
-                        ownerThread,
-                        policy.maxRenderPixels(),
-                        p -> {
-                          unregisterPage(p);
-                          pageCache.removeIf(index, p);
-                        },
-                        this::markStructurallyModified);
+            new PdfPage(
+                pageHandle,
+                ownerThread,
+                policy.maxRenderPixels(),
+                p -> {
+                  unregisterPage(p);
+                  pageCache.removeIf(index, p);
+                },
+                this::markStructurallyModified);
 
         registerPage(page);
         page.acquire(); // Cache takes a reference
@@ -477,7 +472,8 @@ public final class PdfDocument implements AutoCloseable {
       ensureOpen();
       try (var _ = ScratchBuffer.acquireScope()) {
         int needed =
-                (int) ShimBindings.pdfium4jPageLabel().invokeExact(handle, index, MemorySegment.NULL, 0);
+            (int)
+                ShimBindings.pdfium4jPageLabel().invokeExact(handle, index, MemorySegment.NULL, 0);
         if (needed <= 1) return Optional.empty();
         MemorySegment buf = ScratchBuffer.get(needed);
         int copied = (int) ShimBindings.pdfium4jPageLabel().invokeExact(handle, index, buf, needed);
@@ -523,7 +519,8 @@ public final class PdfDocument implements AutoCloseable {
         return true;
       }
       try {
-        return (int) ViewBindings.fpdfDocumentHasValidCrossReferenceTable().invokeExact(handle) != 0;
+        return (int) ViewBindings.fpdfDocumentHasValidCrossReferenceTable().invokeExact(handle)
+            != 0;
       } catch (PdfiumException e) {
         throw e;
       } catch (Throwable t) {
@@ -544,7 +541,7 @@ public final class PdfDocument implements AutoCloseable {
           long byteSize = Math.multiplyExact(capacity, JAVA_INT.byteSize());
           MemorySegment buffer = ScratchBuffer.get(byteSize);
           long written =
-                  (long) ViewBindings.fpdfGetTrailerEnds().invoke(handle, buffer, (long) capacity);
+              (long) ViewBindings.fpdfGetTrailerEnds().invoke(handle, buffer, (long) capacity);
           if (written <= 0) {
             return EMPTY_INT_ARRAY;
           }
@@ -588,12 +585,7 @@ public final class PdfDocument implements AutoCloseable {
       ensureOpen();
       PdfDocumentMetadata.ensureInitialized();
       return PdfDocumentMetadata.readMetadataString(
-              handle,
-              tag,
-              PdfDocumentMetadata.getHandle(tag),
-              pendingMetadata,
-              this::metadataFallback
-      );
+          handle, tag, PdfDocumentMetadata.getHandle(tag), pendingMetadata, this::metadataFallback);
     }
   }
 
@@ -962,40 +954,40 @@ public final class PdfDocument implements AutoCloseable {
       Map<String, String> info = metadata();
 
       return new PdfBookMetadata(
-              metadata(MetadataTag.TITLE).or(xmp::title),
-              xmp.findField("subtitle").or(() -> metadata("Subtitle")),
-              authors(info, xmp),
-              xmp.calibreSeries().or(() -> metadata("Series")),
-              xmp.calibreSeriesIndex().stream()
-                      .map(Double::floatValue)
-                      .findFirst()
-                      .or(
-                              () ->
-                                      metadata("SeriesNumber")
-                                              .flatMap(
-                                                      s -> {
-                                                        try {
-                                                          return Optional.of(Float.parseFloat(s));
-                                                        } catch (Exception _) {
-                                                          return Optional.empty();
-                                                        }
-                                                      })),
-              xmp.isbns().stream().findFirst().or(() -> metadata("ISBN")),
-              xmp.language().or(() -> metadata(MetadataTag.LANGUAGE)),
-              xmp.date()
-                      .flatMap(
-                              d -> {
+          metadata(MetadataTag.TITLE).or(xmp::title),
+          xmp.findField("subtitle").or(() -> metadata("Subtitle")),
+          authors(info, xmp),
+          xmp.calibreSeries().or(() -> metadata("Series")),
+          xmp.calibreSeriesIndex().stream()
+              .map(Double::floatValue)
+              .findFirst()
+              .or(
+                  () ->
+                      metadata("SeriesNumber")
+                          .flatMap(
+                              s -> {
                                 try {
-                                  return Optional.of(LocalDate.parse(d.substring(0, 10)));
+                                  return Optional.of(Float.parseFloat(s));
                                 } catch (Exception _) {
                                   return Optional.empty();
                                 }
-                              }),
-              xmp.subjects(),
-              xmp.description().or(() -> metadata(MetadataTag.SUBJECT)),
-              metadata(MetadataTag.PRODUCER).or(xmp::publisher),
-              xmp,
-              xmp.customFields());
+                              })),
+          xmp.isbns().stream().findFirst().or(() -> metadata("ISBN")),
+          xmp.language().or(() -> metadata(MetadataTag.LANGUAGE)),
+          xmp.date()
+              .flatMap(
+                  d -> {
+                    try {
+                      return Optional.of(LocalDate.parse(d.substring(0, 10)));
+                    } catch (Exception _) {
+                      return Optional.empty();
+                    }
+                  }),
+          xmp.subjects(),
+          xmp.description().or(() -> metadata(MetadataTag.SUBJECT)),
+          metadata(MetadataTag.PRODUCER).or(xmp::publisher),
+          xmp,
+          xmp.customFields());
     }
   }
 
@@ -1116,7 +1108,6 @@ public final class PdfDocument implements AutoCloseable {
 
   public byte[] xmpMetadata() {
     synchronized (lock) {
-
       ensureOpen();
       if (pendingXmp != null) {
         if (pendingXmp instanceof XmpUpdate.Raw(String xmp)) {
@@ -1130,7 +1121,7 @@ public final class PdfDocument implements AutoCloseable {
       }
       try (var _ = ScratchBuffer.acquireScope()) {
         int needed =
-                (int) ShimBindings.pdfium4jGetXmpMetadata().invokeExact(handle, MemorySegment.NULL, 0);
+            (int) ShimBindings.pdfium4jGetXmpMetadata().invokeExact(handle, MemorySegment.NULL, 0);
         if (needed > 0) {
           MemorySegment buf = ScratchBuffer.get(needed);
           int copied = (int) ShimBindings.pdfium4jGetXmpMetadata().invokeExact(handle, buf, needed);

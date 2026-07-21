@@ -94,8 +94,8 @@ public final class XmpMetadataWriter {
       Objects.requireNonNull(uri, "uri");
       if (prefix.isEmpty()) throw new IllegalArgumentException("Prefix must not be empty");
       if (BUILTIN_NS_PREFIXES.containsKey(prefix.toLowerCase(Locale.ROOT))
-              || "rdf".equals(prefix)
-              || "xml".equals(prefix)) {
+          || "rdf".equals(prefix)
+          || "xml".equals(prefix)) {
         throw new IllegalArgumentException("Prefix '" + prefix + "' is reserved");
       }
       if (!isValidNcName(prefix)) throw new IllegalArgumentException("Invalid prefix: " + prefix);
