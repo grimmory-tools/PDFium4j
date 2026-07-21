@@ -8,6 +8,7 @@ import static java.lang.foreign.ValueLayout.JAVA_INT;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
+import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.util.ArrayList;
@@ -371,15 +372,13 @@ public final class PdfPage implements AutoCloseable {
       throw new IllegalArgumentException("maxDimension must be positive");
     }
 
-    if (ThumbnailBindings.fpdfPageGetThumbnailAsBitmap() != null) {
-      try {
-        RenderResult nativeThumb = renderThumbnailNative();
-        if (nativeThumb != null) {
-          return nativeThumb;
-        }
-      } catch (Throwable t) {
-        PdfiumLibrary.ignore(t);
+    try {
+      RenderResult nativeThumb = renderThumbnailNative();
+      if (nativeThumb != null) {
+        return nativeThumb;
       }
+    } catch (Throwable t) {
+      PdfiumLibrary.ignore(t);
     }
 
     RenderFlags thumbnailFlags = RenderFlags.builder().annotations(false).antiAlias(true).build();
@@ -406,8 +405,12 @@ public final class PdfPage implements AutoCloseable {
   }
 
   private RenderResult renderThumbnailNative() throws Throwable {
-    MemorySegment bitmap =
-        (MemorySegment) ThumbnailBindings.fpdfPageGetThumbnailAsBitmap().invokeExact(handle);
+    MethodHandle handle = ThumbnailBindings.fpdfPageGetThumbnailAsBitmap();
+    if (handle == null) {
+      return null;
+    }
+
+    MemorySegment bitmap = (MemorySegment) handle.invokeExact(handle);
     if (FfmHelper.isNull(bitmap)) {
       return null;
     }
@@ -791,13 +794,14 @@ public final class PdfPage implements AutoCloseable {
 
   public Optional<RenderResult> getThumbnail() {
     ensureOpen();
-    if (ThumbnailBindings.fpdfPageGetThumbnailAsBitmap() == null) {
+    MethodHandle handle = ThumbnailBindings.fpdfPageGetThumbnailAsBitmap();
+    if (handle == null) {
       return Optional.empty();
     }
 
     MemorySegment bitmap = MemorySegment.NULL;
     try {
-      bitmap = (MemorySegment) ThumbnailBindings.fpdfPageGetThumbnailAsBitmap().invokeExact(handle);
+      bitmap = (MemorySegment) handle.invokeExact(handle);
       if (FfmHelper.isNull(bitmap)) {
         return Optional.empty();
       }
