@@ -134,7 +134,7 @@ jobs:
           echo "JPEG_ROOT=$VCPKG_INSTALLATION_ROOT/installed/x64-windows" >> $GITHUB_ENV
 
       - name: Setup Java
-        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v4.5.0
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v4.5.0
         with:
           distribution: temurin
           java-version: 25
@@ -212,7 +212,7 @@ jobs:
           done
 
       - name: Setup Java
-        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v4.5.0
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v4.5.0
         with:
           distribution: temurin
           java-version: 25
@@ -259,7 +259,7 @@ jobs:
           done
 
       - name: Setup Java
-        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v4.5.0
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v4.5.0
         with:
           distribution: temurin
           java-version: 25
