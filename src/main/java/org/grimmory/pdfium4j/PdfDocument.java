@@ -1570,14 +1570,6 @@ public final class PdfDocument implements AutoCloseable {
     }
   }
 
-  public static Optional<String> koReaderPartialMd5(byte[] data) {
-    return KoReaderChecksum.calculate(data);
-  }
-
-  public static Optional<String> koReaderPartialMd5(Path path) {
-    return KoReaderChecksum.calculate(path);
-  }
-
   public static PdfiumException mapOpenError(String ctx, int code) {
     PdfErrorCode ec = PdfErrorCode.fromCode(code);
     return switch (ec) {

@@ -12,7 +12,6 @@ Compact Java PDF engine on top of Java 25 FFM.
 - Read page size, page count, labels, rotation, permissions, encryption state
 - Read and write metadata from Info dictionary
 - Extract raw XMP and parse structured XMP metadata
-- Generate KOReader-compatible partial MD5 checksums for lightweight file identity
 - Read bookmarks and links
 - Read page annotations
 - Delete pages, insert blank pages, import pages, save documents
@@ -65,7 +64,6 @@ try (PdfDocument doc = PdfDocument.open(Path.of("book.pdf"), null, policy)) {
   }
 
   var diagnostics = PdfDocument.diagnose(Path.of("book.pdf"));
-  var checksum = PdfDocument.koReaderPartialMd5(Path.of("book.pdf"));
   var xmp = doc.xmpMetadataString();
   doc.save(Path.of("output.pdf"));
 }
