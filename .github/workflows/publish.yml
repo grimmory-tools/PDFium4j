@@ -188,8 +188,6 @@ jobs:
           path: build/generated-natives/natives/${{ matrix.platform }}/*
 
   publish-maven:
-    # Temporarily disable while we work to resolve maven access
-    if: false
     name: Publish to Maven Central
     needs: [build-native-artifacts, build-musl-artifacts]
     runs-on: ubuntu-24.04
