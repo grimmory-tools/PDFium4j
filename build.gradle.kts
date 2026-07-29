@@ -702,8 +702,8 @@ tasks.register<JavaExec>("runCorpusMetadataStress") {
 dependencies {
     compileOnly("com.github.spotbugs:spotbugs-annotations:4.10.3")
     testCompileOnly("com.github.spotbugs:spotbugs-annotations:4.10.3")
-    testImplementation("org.apache.pdfbox:pdfbox:3.0.7")
-    testImplementation("org.apache.pdfbox:xmpbox:3.0.7")
+    testImplementation("org.apache.pdfbox:pdfbox:3.0.8")
+    testImplementation("org.apache.pdfbox:xmpbox:3.0.8")
     testImplementation("org.junit.jupiter:junit-jupiter:6.1.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
