@@ -140,7 +140,7 @@ jobs:
           java-version: 25
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v4.3.0
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v4.3.0
 
       - name: Build shim
         run: ./gradlew buildShim jar verifyNativeJars -PpdfiumPlatformFilter=${{ matrix.platform }} --warning-mode all
@@ -218,7 +218,7 @@ jobs:
           java-version: 25
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v4.3.0
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v4.3.0
 
       - name: Set version from tag
         run: |
@@ -265,7 +265,7 @@ jobs:
           java-version: 25
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v4.3.0
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v4.3.0
 
       - name: Set version from tag
         run: |
